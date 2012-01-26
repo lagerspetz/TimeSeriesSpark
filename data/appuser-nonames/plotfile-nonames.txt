@@ -1,0 +1,40 @@
+set term postscript eps enhanced color 'Helvetica' 24
+    set parametric
+    set trange [0:105]
+    #set logscale x
+#    set logscale y
+    set boxwidth 0.75 absolute
+    set xdata time
+    set timefmt "%H:%M:%S"
+    set style fill solid 1.00 border -1
+    set key samplen 4 spacing 1 width 0 height 0 left bottom Left reverse
+    set xtics nomirror rotate by 90
+    set xtics out
+    set size 1.93,1.1
+    # offset 0, -2.0
+    set format x "%H:%M"
+    #set datafile separator ","
+    set ytics mirror
+    set yrange [40:105]
+    #set bmargin 4
+    #set grid x y
+    set xlabel "Time (HH:MM)"
+    set ylabel "Battery level (% of 1250 mAh)"
+    set output "appuser-nonames.eps"
+    #set label "1" at 34980-200,108
+    #set label "2" at 36780-200,108
+    #set label "3" at 38580-200,108
+    #set label "4" at 40380-200,108
+    #set label "5" at 41280-200,108
+    #set label "6" at 43080-200,108
+    #set label "7" at 43980-200,108
+    #set label "8" at 45780-200,108
+    #set label "9" at 47580-300,108
+    #set label "10" at 47880-150,108
+    #set label "11" at 48780-100,108 
+plot  "appuser.csv-temp.csv" using 1:2 with linespoints lt rgb "#f3b14d" lw 2 pt 1 title "On-Screen Battery Indicator", "appuser-powermon.csv-temp.csv" using 1:2 with lines lt rgb "#007777" lw 2 title "Power Monitor (Ground Truth)"
+#34980,t notitle, \
+#36780,t notitle, \
+#38580,t notitle, 40380,t notitle, 41280,t notitle, \
+#43080,t notitle, 43980,t notitle, 45780,t notitle, \
+#47580,t notitle, 47880,t notitle, 48780,t notitle

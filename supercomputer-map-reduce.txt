@@ -1,0 +1,45 @@
+import spark._
+import spark.SparkContext._
+import spark.timeseries._
+import spark.timeseries.examples._
+//import java.text.SimpleDateFormat
+
+def keyMapper(line:String) = {
+    //- 1131524107 2005.11.09 tbird-admin1 Nov 10 00:15:07 local@tbird-admin1 
+    val fmt = "yyyy.MM.dd HH" // mm:ss
+    val arr = line.split(" ", 8)
+    val date = arr(2)
+    val time = arr(6) take 2
+    //(new SimpleDateFormat(fmt).parse(date+" "+time), line)
+    // date, time, node as key
+    (date+" "+time+" "+arr(3), line)
+}
+
+val hdfsDir = "../energy-spark/data/"
+val filename = "tbird-somehours.txt"
+
+val file = sc.textFile(hdfsDir+filename)
+val mapped = file.map(keyMapper)
+val grouped = mapped.groupByKey().collect()
+
+//for (k <- grouped)
+//  println(k._1 + " " + k._2.mkString("\n"))
+  
+var set = new scala.collection.mutable.HashSet[String]
+
+for (k <- grouped) set+=k._1.split(" ").last
+  
+for (src <- set){
+  var sum=0
+  for (k <- grouped)
+    if (k._1.split(" ").last == src)
+      sum+=1
+  if (sum > 2)
+    println(src+" " + sum)
+}
+
+
+for (k <- grouped)
+  if (k._1.split(" ").last == "dn987")
+    println(k._1 + "\n" + k._2.mkString("\n"))
+

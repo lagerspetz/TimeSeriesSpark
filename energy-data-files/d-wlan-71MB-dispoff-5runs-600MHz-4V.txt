@@ -1,0 +1,10 @@
+File read finished, closing out
+Elapsed time: 586.67
+File read finished, closing out
+Elapsed time: 588.438
+File read finished, closing out
+Elapsed time: 454.78
+File read finished, closing out
+Elapsed time: 509.151
+File read finished, closing out
+Elapsed time: 604.189

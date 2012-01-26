@@ -1,0 +1,68 @@
+/*
+  SuperComputerAlerts
+  Data file: text of supercomputer log data:
+  30G     tbird-tagged
+  Using 2 slave nodes, both with 8 cores and 28 GB memory
+  Spark configured to use 25GB memory per node
+  
+  950 partitions
+  slows down around 344
+  Hangs for minutes around 650
+  Gets too slow to complete
+  Why does this never complete? Too much data?
+  -Hostname problem on some nodes. Fixed now.
+  
+   - searching for messages within a particular time window or from a
+particular source
+ - looking for time buckets with abnormally large numbers of messages
+ - alert detection
+ - alert prediction (are there patterns of non-alert messages that
+tend to precede alerts?)
+
+  
+  Panics only completes in 400sec.
+*/
+
+import spark._
+import spark.SparkContext._
+import spark.timeseries._
+
+//val sc = TimeSeriesSpark.init("mesos://master@86.50.22.12:5050", "default")
+
+def alerts(sc: SparkContext, fileName: String) = {
+    val file = sc.textFile(fileName)
+    val mapped = file.map(x => {
+      // max no. fields
+      val arr = x.split(" ", 8)
+      new Message(arr(0), arr(1) toLong,arr(2),arr(3),arr(4),arr(5) toInt, arr(6),arr(7))
+    })
+}
+
+def bucketMessages(sc: SparkContext, fileName: String){
+    val messages = alerts(sc,fileName)
+    messages.map(x => {
+        var list = new ArrayBuffer[Message]
+    })
+}
+
+val hdfsDir = "hdfs://server.com:54310/user/username/"
+val filename = "tbird-tagged"
+
+val splitAlerts = alerts(sc, hdfsDir+filename)
+
+val all = splitAlerts.count()
+
+val panics = splitAlerts.filter(_.msg.toUpperCase().contains("PANIC"))
+
+// Here, it fails with an exception:
+val cc = panics.collect()
+
+//val panics = splitAlerts.count()
+// up to this point, with panics only, completes in 400 sec.
+
+// After caching the 16 messages with panic, the following is fast:
+//val msgs = splitAlerts.collect()
+
+//for (k <- msgs)
+//    println(k(7))
+

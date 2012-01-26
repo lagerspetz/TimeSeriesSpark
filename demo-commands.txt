@@ -1,0 +1,18 @@
+// Spark SHELL commands for demo:
+
+val title = "d-wlan-71MB-dispoff-5runs-600MHz-4V.csv"
+val (sc, mapped) = spark.timeseries.TimeSeriesSpark.init("local[2]", "../energy-data-files/d-wlan-71MB-dispoff-5runs-600MHz-4V.csv", false)
+
+var det = new spark.timeseries.IdleEnergyArrayDetector(250, 2500)
+val runs = new spark.timeseries.RunRDD(mapped, det)
+runs.cache()
+
+val thing = new spark.timeseries.PlotData("TimeSeriesSpark: " + title)
+
+spark.timeseries.EnergyPlot.makePlot(runs, thing, "TimeSeriesSpark: " + title, 500)
+
+spark.timeseries.EnergyPlot.makePlot(runs, thing, "TimeSeriesSpark: " + title, 5)
+
+
+//thing.pack()
+//thing.setVisible(true)

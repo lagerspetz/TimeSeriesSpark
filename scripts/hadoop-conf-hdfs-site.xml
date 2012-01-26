@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+<property>
+  <name>fs.default.name</name>
+  <value>hdfs://cloudtech11.hpc.cs.helsinki.fi:54310</value>
+</property>
+
+<property>
+  <name>mapred.job.tracker</name>
+  <value>hdfs://cloudtech11.hpc.cs.helsinki.fi:54311</value>
+</property>
+
+<property>
+  <name>hadoop.tmp.dir</name>
+    <value>/tmp/hadoop-${user.name}</value>
+</property>
+
+<property>
+  <name>dfs.name.dir</name>
+  <value>/home/${user.name}/hdfs/name</value>
+</property>
+
+<property>
+  <name>dfs.data.dir</name>
+  <value>/home/${user.name}/hdfs/data</value>
+</property>
+
+<property>
+  <name>dfs.client.buffer.dir</name>
+  <value>/home/${user.name}/hdfs/buffer</value>
+</property>
+
+<!-- our cluster is too small, so use 1 -->
+<property>
+  <name>dfs.replication</name>
+  <value>3</value>
+</property>
+
+</configuration>
