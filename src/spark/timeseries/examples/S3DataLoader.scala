@@ -29,7 +29,7 @@ object S3DataLoader {
    */
   def main(args: Array[String]) {
     loadData()
-    exit(0)
+    sys.exit(0)
   }
 
   def loadData() {

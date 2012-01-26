@@ -1,25 +1,13 @@
 package spark.timeseries.examples
 
-import com.amazonaws.auth.BasicAWSCredentials
-import java.io.File
-import java.io.FileOutputStream
-import java.io.ObjectOutputStream
-import java.io.ObjectInputStream
-import com.amazonaws.services.dynamodb.AmazonDynamoDBClient
-import com.amazonaws.services.dynamodb.model.CreateTableRequest
-import com.amazonaws.services.dynamodb.model.DescribeTableRequest
-import com.amazonaws.services.dynamodb.model.KeySchemaElement
-import com.amazonaws.services.dynamodb.model.ScalarAttributeType
-import com.amazonaws.services.dynamodb.model.KeySchema
-import com.amazonaws.services.dynamodb.model.ProvisionedThroughput
-import com.amazonaws.services.dynamodb.model.PutItemRequest
 import com.amazonaws.services.dynamodb.model.AttributeValue
-import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.GetItemRequest
 import com.amazonaws.services.dynamodb.model.Key
-import com.amazonaws.services.dynamodb.model.DeleteTableRequest
 import com.amazonaws.services.dynamodb.model.ScanRequest
 import com.amazonaws.services.dynamodb.model.QueryRequest
+import collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.immutable.HashMap
 
 object DynamoDbDecoder {
 
@@ -32,42 +20,72 @@ object DynamoDbDecoder {
     }
   }
   
-  def getAllItems(table:String):(Key, Seq[java.util.Map[String, AttributeValue]]) = {
+  def getAllItems(table:String) = {
     val s = new ScanRequest(table)
     val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
   
   def getAllItems(table:String, firstKey:Key) = {
     val s = new ScanRequest(table)
     s.setExclusiveStartKey(firstKey)
     val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
 
   def getItems(table: String, keyPart: String) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart))
     val sr = DynamoDbEncoder.dd.query(q)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
 
   def getItems(table: String, keyPart: String, lastKey: Key) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart)).withExclusiveStartKey(lastKey)
     val sr = DynamoDbEncoder.dd.query(q)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
   
   
   def getItem(table:String, keyPart:String) = {
     val key = new Key().withHashKeyElement(new AttributeValue(keyPart))
     val g = new GetItemRequest(table, key)
-    DynamoDbEncoder.dd.getItem(g).getItem()
+    getVals(DynamoDbEncoder.dd.getItem(g).getItem())
   }
   
   def getItem(table:String, keyParts:(String, String)) = {
     val key = new Key().withHashKeyElement(new AttributeValue(keyParts._1))
     .withRangeKeyElement(new AttributeValue(keyParts._2))
     val g = new GetItemRequest(table, key)
-    DynamoDbEncoder.dd.getItem(g).getItem()
+    getVals(DynamoDbEncoder.dd.getItem(g).getItem())
+  }
+  
+   def getVals(map: java.util.Map[String, AttributeValue]) = {
+     var stuff:Map[String, Any] = new HashMap[String, Any]()
+    for (k <- map) {
+      var num = k._2.getN()
+      val nums = k._2.getNS()
+      if (num != null) {
+        if (num.indexOf('.') >= 0 || num.indexOf(',') >= 0)
+          stuff += ((k._1, k._2.getN().toDouble))
+        else
+          stuff += ((k._1, k._2.getN().toLong))
+      } else if (k._2.getS() != null) {
+        stuff += ((k._1, k._2.getS()))
+      } else if (nums != null) {
+        if (nums.length > 0) {
+          num = nums.get(0)
+          if (num != null) {
+            if (num.indexOf('.') >= 0 || num.indexOf(',') >= 0)
+              stuff += ((k._1, nums.map(_.toDouble)))
+            else
+              stuff += ((k._1, nums.map(_.toLong)))
+          }
+        } else
+          stuff += ((k._1, nums.map(_.toLong)))
+      } else if (k._2.getSS() != null) {
+        stuff += ((k._1, k._2.getSS()))
+      }
+    }
+    stuff
   }
 }

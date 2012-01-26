@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.ObjectOutputStream
 import java.io.ObjectInputStream
+import collection.JavaConversions._
 
 object S3Decoder {
 
@@ -53,10 +54,8 @@ object S3Decoder {
     }
   }
 
-  def printList(list: java.util.List[_ <: Any]) {
-    val it = list.iterator()
-    while (it.hasNext) {
-      var item = it.next
+  def printList(list: Seq[_ <: Any]) {
+    for (item <- list) {
       println(item)
     }
   }

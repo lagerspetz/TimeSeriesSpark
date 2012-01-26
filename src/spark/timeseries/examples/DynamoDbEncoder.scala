@@ -1,22 +1,15 @@
 package spark.timeseries.examples
 
-import java.io.File
-import java.io.FileOutputStream
-import java.io.ObjectOutputStream
-import java.io.ObjectInputStream
 import com.amazonaws.services.dynamodb.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodb.model.CreateTableRequest
 import com.amazonaws.services.dynamodb.model.DescribeTableRequest
 import com.amazonaws.services.dynamodb.model.KeySchemaElement
-import com.amazonaws.services.dynamodb.model.ScalarAttributeType
 import com.amazonaws.services.dynamodb.model.KeySchema
 import com.amazonaws.services.dynamodb.model.ProvisionedThroughput
 import com.amazonaws.services.dynamodb.model.PutItemRequest
 import com.amazonaws.services.dynamodb.model.AttributeValue
-import collection.JavaConversions._
-import com.amazonaws.services.dynamodb.model.GetItemRequest
-import com.amazonaws.services.dynamodb.model.Key
 import com.amazonaws.services.dynamodb.model.DeleteTableRequest
+import collection.JavaConversions._
 
 object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
@@ -60,37 +53,62 @@ object DynamoDbEncoder {
   val probNeg = "probNeg"
   val xmax = "xmax"
   val distanceField = "distance"
-  
-  def put(table: String, keyName: String, keyValue:String,
-      //xrange1: Seq[Double],
-      maxX: Double,
-      prob1: Seq[(Int, Double)],prob2: Seq[(Int, Double)],
-      /*probc1: Seq[(Double, Double)],probc2: Seq[(Double, Double)],*/
-      distance:Double) {
-    val map = new java.util.HashMap[String, AttributeValue]()
-    map.put(keyName, new AttributeValue(keyValue))
-    map.put(xmax, new AttributeValue().withN(maxX + ""))
-    map.put(prob, new AttributeValue().withSS(prob1.map(x => {x._1 + ";" + x._2})))
-    map.put(probNeg, new AttributeValue().withSS(prob2.map(x => {x._1 + ";" + x._2})))
-    map.put(distanceField, new AttributeValue().withN(distance.toString()))
-    println("Going to put: " + map.mkString("\n"))
+
+  /**
+   * Put a new entry into a table that uses only a HashKey.
+   * For `bugsTable`, use `putBug()`.
+   */
+  def put(table: String, keyName: String, keyValue: String,
+    maxX: Double,
+    prob1: Seq[(Int, Double)], prob2: Seq[(Int, Double)],
+    distance: Double) {
+    put(table, (keyName, keyValue), (xmax, maxX),
+      (prob, prob1.map(x => { x._1 + ";" + x._2 })),
+      (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
+      (distanceField, distance))
+  }
+
+  /**
+   * Function that makes it easy to use the ridiculous DynamoDB put API.
+   */
+  def put(table:String, vals: (String, Any)*) = {
+    val map = getMap(vals: _*)
+    println("Going to put into "+table+":\n" + map.mkString("\n"))
     val putReq = new PutItemRequest(table, map)
     dd.putItem(putReq)
   }
-  
-  def putBug(table: String, keyNames: (String, String), keyValues:(String, String),
-      maxX: Double, prob1: Seq[(Int, Double)],prob2: Seq[(Int, Double)],
-      distance:Double) {
+
+  /**
+   * Helper function used by put(table, vals).
+   * Constructs Maps to be put into a table from a variable number of (String, Any) - pairs. 
+   */
+  def getMap(vals: (String, Any)*) = {
     val map = new java.util.HashMap[String, AttributeValue]()
-    map.put(keyNames._1, new AttributeValue(keyValues._1))
-    map.put(keyNames._2, new AttributeValue(keyValues._2))
-    map.put(xmax, new AttributeValue().withN(maxX + ""))
-    map.put(prob, new AttributeValue().withSS(prob1.map(x => {x._1 + ";" + x._2})))
-    map.put(probNeg, new AttributeValue().withSS(prob2.map(x => {x._1 + ";" + x._2})))
-    map.put(distanceField, new AttributeValue().withN(distance.toString()))
-    println("Going to put: " + map.mkString("\n"))
-    val putReq = new PutItemRequest(table, map)
-    dd.putItem(putReq)
+    for (k <- vals) {
+      if (k._2.isInstanceOf[Double]
+        || k._2.isInstanceOf[Int]
+        || k._2.isInstanceOf[Long]
+        || k._2.isInstanceOf[Float]
+        || k._2.isInstanceOf[Short])
+        map.put(k._1, new AttributeValue().withN(k._2 + ""))
+      else if (k._2.isInstanceOf[Seq[String]])
+        map.put(k._1, new AttributeValue().withSS(k._2.asInstanceOf[Seq[String]]))
+      else
+        map.put(k._1, new AttributeValue(k._2 + ""))
+    }
+    map
+  }
+
+  /**
+   * Put a new entry into `bugsTable`.
+   */
+  def putBug(table: String, keyNames: (String, String), keyValues: (String, String),
+    maxX: Double, prob1: Seq[(Int, Double)], prob2: Seq[(Int, Double)],
+    distance: Double) {
+    put(table, (keyNames._1, keyValues._1), (keyNames._2, keyValues._2), (xmax, maxX),
+      (prob, prob1.map(x => { x._1 + ";" + x._2 })),
+      (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
+      (distanceField, distance))
   }
 
   def main(args: Array[String]) {

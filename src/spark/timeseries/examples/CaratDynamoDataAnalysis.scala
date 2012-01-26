@@ -4,17 +4,10 @@ import spark._
 import spark.SparkContext._
 import spark.timeseries._
 import scala.collection.mutable.ArrayBuffer
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.io.FileWriter
 import scala.collection.Seq
 import scala.collection.mutable.Set
 import scala.collection.mutable.HashSet
 import scala.collection.immutable.TreeMap
-import scala.collection.immutable.SortedMap
-import java.io.ObjectOutputStream
-import com.amazonaws.services.dynamodb.model.AttributeValue
-import com.amazonaws.services.dynamodb.model.Key
 import collection.JavaConversions._
 
 /**
@@ -54,7 +47,7 @@ object CaratDynamoDataAnalysis {
   def main(args: Array[String]) {
     val sc = new SparkContext(args(0), "CaratDataAnalysis")
     analyzeData(sc)
-    exit(0)
+    sys.exit(0)
   }
 
   /**
@@ -96,7 +89,7 @@ object CaratDynamoDataAnalysis {
       var finished = false
 
       var (key, regs) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable)
-      result ++= regs.map(_.get(DynamoDbEncoder.regsUuid).getS())
+      result ++= regs.map(_.get(DynamoDbEncoder.regsUuid).getOrElse("").toString())
       if (key == null)
         finished = true
       while (!finished) {
@@ -105,7 +98,7 @@ object CaratDynamoDataAnalysis {
         regs = regs2
         key = key2
         println("Got: " + regs.size + " registrations.")
-        result ++= regs.map(_.get("uuid").getS())
+        result ++= regs.map(_.get(DynamoDbEncoder.regsUuid).getOrElse("").toString())
         if (key == null)
           finished = true
       }
@@ -135,7 +128,7 @@ object CaratDynamoDataAnalysis {
       analyzeRateData(allData)
   }
 
-  def handleRegs(sc: SparkContext, regs: Seq[java.util.Map[String, com.amazonaws.services.dynamodb.model.AttributeValue]], allUuids: Set[String]) = {
+  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], allUuids: Set[String]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
      */
@@ -149,9 +142,9 @@ object CaratDynamoDataAnalysis {
        * Data format guess:
        * Registration(uuId:0FC81205-55D0-46E5-8C80-5B96F17B5E7B, platformId:iPhone Simulator, systemVersion:5.0)
        */
-      val uuid = x.get(DynamoDbEncoder.regsUuid).getS()
-      val model = x.get(DynamoDbEncoder.regsModel).getS()
-      val os = x.get(DynamoDbEncoder.regsOs).getS()
+      val uuid = x.get(DynamoDbEncoder.regsUuid).getOrElse("").toString()
+      val model = x.get(DynamoDbEncoder.regsModel).getOrElse("").toString()
+      val os = x.get(DynamoDbEncoder.regsOs).getOrElse("").toString()
 
       /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
@@ -184,7 +177,7 @@ object CaratDynamoDataAnalysis {
     result
   }
 
-  def handleSamples(sc: SparkContext, samples: Seq[java.util.Map[java.lang.String, com.amazonaws.services.dynamodb.model.AttributeValue]], os: String, model: String, rates: RDD[CaratRate] = null) = {
+  def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate] = null) = {
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(x => {
       /*
@@ -212,8 +205,8 @@ object CaratDynamoDataAnalysis {
        * triggeredBy:applicationDidBecomeActive)
        */
         
-        val uuid = x.get(DynamoDbEncoder.sampleKey).getS()
-        val apps = x.get(DynamoDbEncoder.sampleProcesses).getSS().map(x => {
+        val uuid = x.get(DynamoDbEncoder.sampleKey).getOrElse("").toString()
+        val apps = x.get(DynamoDbEncoder.sampleProcesses).getOrElse(Seq[String]()).asInstanceOf[Seq[String]].map(x => {
           if (x == null)
             ""
           else {
@@ -224,10 +217,11 @@ object CaratDynamoDataAnalysis {
               ""
           }
         })
-        val time = x.get(DynamoDbEncoder.sampleTime).getS()
-        val batteryState = x.get(DynamoDbEncoder.sampleBatteryState).getS()
-        val batteryLevel = x.get(DynamoDbEncoder.sampleBatteryLevel).getN()
-        val event = x.get(DynamoDbEncoder.sampleEvent).getS()
+        
+        val time = x.get(DynamoDbEncoder.sampleTime).getOrElse("").toString()
+        val batteryState = x.get(DynamoDbEncoder.sampleBatteryState).getOrElse("").toString()
+        val batteryLevel = x.get(DynamoDbEncoder.sampleBatteryLevel).getOrElse("").toString()
+        val event = x.get(DynamoDbEncoder.sampleEvent).getOrElse("").toString()
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       rateMapper(os, model, mapped)
@@ -515,7 +509,7 @@ object CaratDynamoDataAnalysis {
     val bucketed = new ArrayBuffer[(Int, Double)]
     val bucketedNeg = new ArrayBuffer[(Int, Double)]
 
-    val maxX = Math.max(values.last._1, others.last._1)
+    val maxX = math.max(values.last._1, others.last._1)
     // TODO: Bucket x ranges here
     var valueIndex = 0
     var othersIndex = 0
@@ -554,7 +548,7 @@ object CaratDynamoDataAnalysis {
     var mul = 1
     for (k <- 0 until DECIMALS)
       mul *= 10
-    result = Math.round(result * mul)
+    result = math.round(result * mul)
     result / mul
   }
 
@@ -570,7 +564,7 @@ object CaratDynamoDataAnalysis {
 
     /* Swap if the above assignment was not the right guess: */
     if (one.size > 0 && two.size > 0) {
-      if (one.first._1 < two.first._1) {
+      if (one.head._1 < two.head._1) {
         smaller = two
         bigger = one
       }
