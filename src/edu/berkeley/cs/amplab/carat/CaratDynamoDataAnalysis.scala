@@ -138,15 +138,24 @@ object CaratDynamoDataAnalysis {
     //val parallel = sc.parallelize[java.util.Map[String, com.amazonaws.services.dynamodb.model.AttributeValue]](regs)
     //parallel.foreach(x => {
     
+    // Remove duplicates caused by re-registrations:
+    val regSet:Set[(String, String, String)] = new HashSet[(String, String, String)]
+    regSet ++= regs.map(x => {
+      val uuid = x.get(regsUuid).getOrElse("").toString()
+      val model = x.get(regsModel).getOrElse("").toString()
+      val os = x.get(regsOs).getOrElse("").toString()
+      (uuid, model, os)
+    })
+    
     var dist: spark.RDD[CaratRate] = null
-    for (x <- regs) {
+    for (x <- regSet) {
       /*
        * Data format guess:
        * Registration(uuId:0FC81205-55D0-46E5-8C80-5B96F17B5E7B, platformId:iPhone Simulator, systemVersion:5.0)
        */
-      val uuid = x.get(regsUuid).getOrElse("").toString()
-      val model = x.get(regsModel).getOrElse("").toString()
-      val os = x.get(regsOs).getOrElse("").toString()
+      val uuid = x._1
+      val model = x._2
+      val os = x._3
 
       /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples

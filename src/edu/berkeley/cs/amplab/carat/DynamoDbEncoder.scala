@@ -10,6 +10,7 @@ import com.amazonaws.services.dynamodb.model.PutItemRequest
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import com.amazonaws.services.dynamodb.model.DeleteTableRequest
 import collection.JavaConversions._
+import com.amazonaws.services.dynamodb.model.UpdateTableRequest
 
 object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
@@ -90,6 +91,8 @@ object DynamoDbEncoder {
       //val item = dd.getItem(new GetItemRequest("carat.latestbugs", new Key(new AttributeValue("85")))).getItem()
       //println("Item: " + item.mkString("\n"))
     }
+    val k = new UpdateTableRequest().withTableName(samplesTable).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(30))
+    dd.updateTable(k)
   }
   
   def clearTables(){
