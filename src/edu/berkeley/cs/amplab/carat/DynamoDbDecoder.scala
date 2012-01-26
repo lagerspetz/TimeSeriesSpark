@@ -75,14 +75,14 @@ object DynamoDbDecoder {
           num = nums.get(0)
           if (num != null) {
             if (num.indexOf('.') >= 0 || num.indexOf(',') >= 0)
-              stuff += ((k._1, nums.map(_.toDouble)))
+              stuff += ((k._1, nums.map(_.toDouble).toSeq))
             else
-              stuff += ((k._1, nums.map(_.toLong)))
+              stuff += ((k._1, nums.map(_.toLong).toSeq))
           }
         } else
-          stuff += ((k._1, nums.map(_.toLong)))
+          stuff += ((k._1, nums.map(_.toLong).toSeq))
       } else if (k._2.getSS() != null) {
-        stuff += ((k._1, k._2.getSS()))
+        stuff += ((k._1, k._2.getSS().toSeq))
       }
     }
     stuff
