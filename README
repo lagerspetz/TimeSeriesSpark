@@ -1,0 +1,6 @@
+This is the home of TimeSeriesSpark,
+a time series and energy data analysis API for Spark,
+the cluster computing framework http://www.cs.berkeley.edu/~matei/spark/ .
+The API is described at http://www.cs.helsinki.fi/u/lagerspe/timeseries-spark-api-0.3/ .
+However, for the latest and greatest version, check out the code.
+
