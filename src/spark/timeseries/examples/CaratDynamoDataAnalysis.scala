@@ -44,35 +44,7 @@ import collection.JavaConversions._
 
 object CaratDynamoDataAnalysis {
 
-  // For getting data
-  val registrationTable = "carat.registrations"
-  val samplesTable = "carat.samples"
-
-  val uuidKey = "uuId"
-    
-  val regsUuid = uuidKey
-  val regsModel = "platformId"
-  val regsOs = "systemVersion"
-
-  val sampleKey = uuidKey
-  val sampleTime = "timestamp"
-  val sampleProcesses = "piList"
-  val sampleBatteryState = "batteryState"
-  val sampleBatteryLevel = "batteryLevel"
-  val sampleEvent = "triggeredBy"
-
-  // For putting data
-
-  val results = "carat.latestresults"
-  val bugs = "carat.latestbugs"
-  val appsTable = "carat.latestapps"
-  val modelsTable = "carat.latestmodels"
-  val osTable = "carat.latestos"
-
-  val appKey = "appName"
-  val osKey = "os"
-  val modelKey = "model"
-
+  // Bucketing and decimal constants
   val buckets = 100
   val DECIMALS = 3
 
@@ -123,13 +95,13 @@ object CaratDynamoDataAnalysis {
       val result = new HashSet[String]
       var finished = false
 
-      var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
-      result ++= regs.map(_.get(regsUuid).getS())
+      var (key, regs) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable)
+      result ++= regs.map(_.get(DynamoDbEncoder.regsUuid).getS())
       if (key == null)
         finished = true
       while (!finished) {
         println("Continuing from key=" + key)
-        var (key2, regs2) = DynamoDbDecoder.getAllItems(registrationTable, key)
+        var (key2, regs2) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable, key)
         regs = regs2
         key = key2
         println("Got: " + regs.size + " registrations.")
@@ -143,14 +115,14 @@ object CaratDynamoDataAnalysis {
     var allData:spark.RDD[(String, Seq[spark.timeseries.examples.CaratRate])] = null
     
     var finished = false
-    var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
+    var (key, regs) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable)
     println("Got: " + regs.size + " registrations.")
     allData = handleRegs(sc, regs, allUuids)
     if (key == null)
       finished = true
     while (!finished) {
       println("Continuing from key=" + key)
-      var (key2, regs2) = DynamoDbDecoder.getAllItems(registrationTable, key)
+      var (key2, regs2) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable, key)
       regs = regs2
       key = key2
       println("Got: " + regs.size + " registrations.")
@@ -177,23 +149,23 @@ object CaratDynamoDataAnalysis {
        * Data format guess:
        * Registration(uuId:0FC81205-55D0-46E5-8C80-5B96F17B5E7B, platformId:iPhone Simulator, systemVersion:5.0)
        */
-      val uuid = x.get(regsUuid).getS()
-      val model = x.get(regsModel).getS()
-      val os = x.get(regsOs).getS()
+      val uuid = x.get(DynamoDbEncoder.regsUuid).getS()
+      val model = x.get(DynamoDbEncoder.regsModel).getS()
+      val os = x.get(DynamoDbEncoder.regsOs).getS()
 
       /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
        * (as many as have a zero battery drain) should be re-used in the next batch. 
        */
       var finished = false
-      var (key, samples) = DynamoDbDecoder.getItems(samplesTable, uuid)
+      var (key, samples) = DynamoDbDecoder.getItems(DynamoDbEncoder.samplesTable, uuid)
       println("Got: " + samples.size + " samples.")
       dist = handleSamples(sc, samples, os, model)
       if (key == null)
         finished = true
       while (!finished) {
         println("Continuing samples from key=" + key)
-        var (key2, samples2) = DynamoDbDecoder.getItems(samplesTable, uuid, key)
+        var (key2, samples2) = DynamoDbDecoder.getItems(DynamoDbEncoder.samplesTable, uuid, key)
         samples = samples2
         key = key2
         println("Got: " + samples.size + " samples.")
@@ -240,8 +212,8 @@ object CaratDynamoDataAnalysis {
        * triggeredBy:applicationDidBecomeActive)
        */
         
-        val uuid = x.get(sampleKey).getS()
-        val apps = x.get(sampleProcesses).getSS().map(x => {
+        val uuid = x.get(DynamoDbEncoder.sampleKey).getS()
+        val apps = x.get(DynamoDbEncoder.sampleProcesses).getSS().map(x => {
           if (x == null)
             ""
           else {
@@ -252,10 +224,10 @@ object CaratDynamoDataAnalysis {
               ""
           }
         })
-        val time = x.get(sampleTime).getS()
-        val batteryState = x.get(sampleBatteryState).getS()
-        val batteryLevel = x.get(sampleBatteryLevel).getN()
-        val event = x.get(sampleEvent).getS()
+        val time = x.get(DynamoDbEncoder.sampleTime).getS()
+        val batteryState = x.get(DynamoDbEncoder.sampleBatteryState).getS()
+        val batteryLevel = x.get(DynamoDbEncoder.sampleBatteryLevel).getN()
+        val event = x.get(DynamoDbEncoder.sampleEvent).getS()
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       rateMapper(os, model, mapped)
@@ -403,7 +375,7 @@ object CaratDynamoDataAnalysis {
       val fromOs = rateData.map(distributionFilter(_, _.os == os))
       val notFromOs = rateData.map(distributionFilter(_, _.os != os))
 
-      writeTriplet(fromOs, notFromOs, osTable, osKey, os)
+      writeTriplet(fromOs, notFromOs, DynamoDbEncoder.osTable, DynamoDbEncoder.osKey, os)
     }
 
     val models = rateData.map(x => {
@@ -420,7 +392,7 @@ object CaratDynamoDataAnalysis {
       val fromModel = rateData.map(distributionFilter(_, _.model == model))
       val notFromModel = rateData.map(distributionFilter(_, _.model != model))
 
-      writeTriplet(fromModel, notFromModel, modelsTable, modelKey, model)
+      writeTriplet(fromModel, notFromModel, DynamoDbEncoder.modelsTable, DynamoDbEncoder.modelKey, model)
     }
 
     val uuids = rateData.map(_._1).collect()
@@ -432,19 +404,19 @@ object CaratDynamoDataAnalysis {
       val fromUuid = rateData.filter(_._1 == uuid)
       val notFromUuid = rateData.filter(_._1 != uuid)
 
-      writeTriplet(fromUuid, notFromUuid, results, uuidKey, uuid + "")
+      writeTriplet(fromUuid, notFromUuid, DynamoDbEncoder.resultsTable, DynamoDbEncoder.resultKey, uuid + "")
 
       for (app <- allApps) {
         val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
         val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
-        writeTriplet(appFromUuid, appNotFromUuid, bugs, (uuidKey, appKey), (uuid + "", app))
+        writeTriplet(appFromUuid, appNotFromUuid, DynamoDbEncoder.bugsTable, (DynamoDbEncoder.resultKey, DynamoDbEncoder.appKey), (uuid + "", app))
       }
     }
 
     for (app <- allApps) {
       val filtered = rateData.map(distributionFilter(_, appFilter(_, app)))
       val filteredNeg = rateData.map(distributionFilter(_, negativeAppFilter(_, app)))
-      writeTriplet(filtered, filteredNeg, appsTable, appKey, app)
+      writeTriplet(filtered, filteredNeg, DynamoDbEncoder.appsTable, DynamoDbEncoder.appKey, app)
     }
   }
 

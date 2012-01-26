@@ -21,12 +21,43 @@ import com.amazonaws.services.dynamodb.model.DeleteTableRequest
 object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
 
+  // For putting data:
+  
+  val uuId = "uuId"
+  
+  val resultsTable = "carat.latestresults"
+  val resultKey = uuId
+    
+  val appsTable = "carat.latestapps"  
+  val appKey = "appName"
+    
+  val bugsTable = "carat.latestbugs"
+    
+  val modelsTable = "carat.latestmodels"
+  val modelKey = "model"
+  
+  val osTable = "carat.latestos"
+  val osKey = "os"
+    
+  // For getting data:
+  val registrationTable = "carat.registrations"
+  val samplesTable = "carat.samples"
+    
+  val regsUuid = DynamoDbEncoder.uuId
+  val regsModel = "platformId"
+  val regsOs = "systemVersion"
+
+  val sampleKey = DynamoDbEncoder.uuId
+  val sampleTime = "timestamp"
+  val sampleProcesses = "piList"
+  val sampleBatteryState = "batteryState"
+  val sampleBatteryLevel = "batteryLevel"
+  val sampleEvent = "triggeredBy"
+
+  
   val xrange = "xrange"
   val prob = "prob"
   val probNeg = "probNeg"
-  //The Cumulative distributions are not required. 
-  //val probc = "probc"
-  //val probcNeg = "probcNeg"
   val xmax = "xmax"
   val distanceField = "distance"
   
@@ -90,30 +121,30 @@ object DynamoDbEncoder {
   
   def createResultsTable(){
     val getKey = new KeySchemaElement()
-    val ks = getKey.withAttributeName("uuid")
+    val ks = getKey.withAttributeName(resultKey)
     ks.setAttributeType("S")
     // will only have current
-    val req = new CreateTableRequest("carat.latestresults", new KeySchema(ks))
+    val req = new CreateTableRequest(resultsTable, new KeySchema(ks))
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
   
   def createOSTable(){
     val getKey = new KeySchemaElement()
-    val ks = getKey.withAttributeName("os")
+    val ks = getKey.withAttributeName(osKey)
     ks.setAttributeType("S")
     // will only have current
-    val req = new CreateTableRequest("carat.latestos", new KeySchema(ks))
+    val req = new CreateTableRequest(osTable, new KeySchema(ks))
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
   
   def createModelTable(){
     val getKey = new KeySchemaElement()
-    val ks = getKey.withAttributeName("model")
+    val ks = getKey.withAttributeName(modelKey)
     ks.setAttributeType("S")
     // will only have current
-    val req = new CreateTableRequest("carat.latestmodels", new KeySchema(ks))
+    val req = new CreateTableRequest(modelsTable, new KeySchema(ks))
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
@@ -122,23 +153,23 @@ object DynamoDbEncoder {
     //val del = new DeleteTableRequest("carat.latestbugs")
     //dd.deleteTable(del)
     var getKey = new KeySchemaElement()
-    val ks = getKey.withAttributeName("uuid")
+    val ks = getKey.withAttributeName(resultKey)
     ks.setAttributeType("S")
     getKey = new KeySchemaElement()
-    val rk = getKey.withAttributeName("appname")
+    val rk = getKey.withAttributeName(appKey)
     rk.setAttributeType("S")
     // will only have current
-    val req = new CreateTableRequest("carat.latestbugs", new KeySchema(ks).withRangeKeyElement(rk))
+    val req = new CreateTableRequest(bugsTable, new KeySchema(ks).withRangeKeyElement(rk))
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
   
   def createAppsTable(){
     val getKey = new KeySchemaElement()
-    val ks = getKey.withAttributeName("appname")
+    val ks = getKey.withAttributeName(appKey)
     ks.setAttributeType("S")
     // will only have current
-    val req = new CreateTableRequest("carat.latestapps", new KeySchema(ks))
+    val req = new CreateTableRequest(appsTable, new KeySchema(ks))
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
