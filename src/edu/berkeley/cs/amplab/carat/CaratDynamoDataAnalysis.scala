@@ -104,6 +104,8 @@ object CaratDynamoDataAnalysis {
       }
       result
     }
+    
+    println("All uuIds: " + allUuids.mkString(", "))
 
     var allData:spark.RDD[(String, Seq[CaratRate])] = null
     
@@ -157,6 +159,8 @@ object CaratDynamoDataAnalysis {
       if (key == null)
         finished = true
       while (!finished) {
+        // avoid overloading "provisionedThroughput"
+        Thread.sleep(1) 
         println("Continuing samples from key=" + key)
         var (key2, samples2) = DynamoDbDecoder.getItems(samplesTable, uuid, key)
         samples = samples2
@@ -426,7 +430,7 @@ object CaratDynamoDataAnalysis {
     val values = flatten(probOne)
     val others = flatten(probTwo)
 
-    println("prob.size=" + values.size + " prob2.size=" + others.size + " " + keyNames + "-" + keyValues)
+    println("prob1.size=" + values.size + " prob2.size=" + others.size + " " + keyNames + "-" + keyValues)
     if (values.size > 0 && others.size > 0) {
 
       val distance = {
