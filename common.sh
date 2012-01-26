@@ -32,11 +32,10 @@ export SPARK_LIBRARY_PATH=$HOME/mesos/lib/java:$HOME/mesos/lib
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\
 $HOME/mesos/lib/java:$HOME/mesos/lib
 
-#slaves="cloudtech07 cloudtech08 cloudtech12 cloudtech13"
-slaves="cloudtech07 cloudtech08 cloudtech12 cloudtech13 cloudtech14 cloudtech15"
-#slaves="cloudtech14 cloudtech15"
+#slaves="cloudtech07 cloudtech08 cloudtech12 cloudtech13 cloudtech14 cloudtech15"
+slaves="localhost"
 
-master_mesos='mesos://master@86.50.22.12:5050'
+master_mesos='mesos://master@localhost:5050'
 master_local='local[8]'
 
 datafile=data/d-2g-elisa-tktl-71MB-dispoff-5runs-600MHz-4V.csv
