@@ -4,3 +4,10 @@ the cluster computing framework http://www.cs.berkeley.edu/~matei/spark/ .
 The API is described at http://www.cs.helsinki.fi/u/lagerspe/timeseries-spark-api-0.3/ .
 However, for the latest and greatest version, check out the code.
 
+The project is distributed under the GPLv3 license.
+The energy-data-processing/pt4processor.cs is copyright to Monsoon Inc,
+and can be found in the end of the Monsoon Power Monitor manual, Online at
+http://msoon.com/register/download/
+
+Its Scala variant, src/spark/timeseries/examples/Pt4Processor.scala
+is written by Eemil Lagerspetz and is licensed under the GPLv3.
