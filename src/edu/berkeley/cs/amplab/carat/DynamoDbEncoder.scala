@@ -16,7 +16,6 @@ object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
 
   // For putting data:
-  val xrange = "xrange"
   val prob = "prob"
   val probNeg = "probNeg"
   val xmax = "xmax"
@@ -79,6 +78,10 @@ object DynamoDbEncoder {
       (distanceField, distance))
   }
 
+  /**
+   * Test program. describes tables.
+   * 
+   */
   def main(args: Array[String]) {
     val tables = dd.listTables().getTableNames()
     S3Decoder.printList(tables)
@@ -95,6 +98,9 @@ object DynamoDbEncoder {
     dd.updateTable(k)
   }
   
+  /**
+   * Dangerous. Destroys and recreates tables.
+   */
   def clearTables(){
     var del = new DeleteTableRequest(resultsTable)
     dd.deleteTable(del)

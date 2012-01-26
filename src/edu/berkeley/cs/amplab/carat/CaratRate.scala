@@ -1,6 +1,9 @@
 package edu.berkeley.cs.amplab.carat
 import scala.collection.mutable.HashSet
 
+/**
+ * Represents a rate measurement of Carat.
+ */
 class CaratRate(var uuid:String, val os:String, val model:String,
     val timeDiff:Long, val batteryDiff:Double,
     val events1:Seq[String], val events2:Seq[String],

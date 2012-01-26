@@ -84,12 +84,19 @@ object CaratDynamoDataAnalysis {
      * request them again each time we need to get other devices' samples. 
      */
 
-    val allUuids: Set[String] = {
-      val result = new HashSet[String]
+    val (allUuids, allOses, allModels) = {
+      val resultUuids = new HashSet[String]
+      val resultModels = new HashSet[String]
+      val resultOses = new HashSet[String]
       var finished = false
 
       var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
-      result ++= regs.map(_.get(regsUuid).getOrElse("").toString())
+      for (k <- regs){
+        resultUuids += k.get(regsUuid).getOrElse("").toString()
+        resultModels += k.get(regsModel).getOrElse("").toString()
+        resultOses += k.get(regsOs).getOrElse("").toString()
+      }
+      
       if (key == null)
         finished = true
       while (!finished) {
@@ -98,11 +105,15 @@ object CaratDynamoDataAnalysis {
         regs = regs2
         key = key2
         println("Got: " + regs.size + " registrations.")
-        result ++= regs.map(_.get(regsUuid).getOrElse("").toString())
+        for (k <- regs) {
+          resultUuids += k.get(regsUuid).getOrElse("").toString()
+          resultModels += k.get(regsModel).getOrElse("").toString()
+          resultOses += k.get(regsOs).getOrElse("").toString()
+        }
         if (key == null)
           finished = true
       }
-      result
+      (resultUuids, resultOses, resultModels)
     }
     
     println("All uuIds: " + allUuids.mkString(", "))
@@ -127,7 +138,7 @@ object CaratDynamoDataAnalysis {
         finished = true
     }
     if (allData != null)
-      analyzeRateData(allData)
+      analyzeRateData(allData, allUuids, allOses, allModels)
   }
 
   def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], allUuids: Set[String]) = {
@@ -356,7 +367,7 @@ object CaratDynamoDataAnalysis {
     })
   }
 
-  def analyzeRateData(rateData: RDD[(String, Seq[CaratRate])]) {
+  def analyzeRateData(rateData: RDD[(String, Seq[CaratRate])],  uuids: Set[String], oses: Set[String], models: Set[String]) {
     val apps = rateData.map(x => {
       var buf = new HashSet[String]
       for (k <- x._2) {
@@ -368,41 +379,22 @@ object CaratDynamoDataAnalysis {
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
+  
 
-    val oses = rateData.map(x => {
-      var buf = new HashSet[String]
-      buf ++= x._2.map(_.os)
-      buf
-    }).collect()
-    var allOses = new HashSet[String]
-    for (k <- oses)
-      allOses ++= k
-
-    for (os <- allOses) {
+    for (os <- oses) {
       val fromOs = rateData.map(distributionFilter(_, _.os == os))
       val notFromOs = rateData.map(distributionFilter(_, _.os != os))
 
       writeTriplet(fromOs, notFromOs, osTable, osKey, os)
     }
 
-    val models = rateData.map(x => {
-      var buf = new HashSet[String]
-      buf ++= x._2.map(_.model)
-      buf
-    }).collect()
-
-    var allModels = new HashSet[String]
-    for (k <- models)
-      allModels ++= k
-
-    for (model <- allModels) {
+    for (model <- models) {
       val fromModel = rateData.map(distributionFilter(_, _.model == model))
       val notFromModel = rateData.map(distributionFilter(_, _.model != model))
 
       writeTriplet(fromModel, notFromModel, modelsTable, modelKey, model)
     }
-
-    val uuids = rateData.map(_._1).collect()
+    
     for (uuid <- uuids) {
 
       /*

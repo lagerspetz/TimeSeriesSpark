@@ -10,7 +10,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.immutable.HashMap
 
 object DynamoDbDecoder {
-
+/**
+ * Test program. Lists contents of tables.
+ */
   def main(args: Array[String]) {
     val tables = DynamoDbEncoder.dd.listTables().getTableNames()
     S3Decoder.printList(tables)
