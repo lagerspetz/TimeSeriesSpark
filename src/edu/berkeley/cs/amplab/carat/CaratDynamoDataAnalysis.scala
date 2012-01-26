@@ -175,7 +175,7 @@ object CaratDynamoDataAnalysis {
       var finished = false
       var (key, samples) = DynamoDbDecoder.getItems(samplesTable, uuid)
       println("Got: " + samples.size + " samples.")
-      dist = handleSamples(sc, samples, os, model)
+      dist = handleSamples(sc, samples, os, model, dist)
       if (key == null)
         finished = true
       while (!finished) {
