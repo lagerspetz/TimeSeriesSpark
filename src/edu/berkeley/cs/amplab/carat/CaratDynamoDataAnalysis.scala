@@ -369,7 +369,7 @@ object CaratDynamoDataAnalysis {
       val fromOs = rateData.map(distributionFilter(_, _.os == os))
       val notFromOs = rateData.map(distributionFilter(_, _.os != os))
 
-      writeTriplet(fromOs, notFromOs, DynamoDbEncoder.osTable, DynamoDbEncoder.osKey, os)
+      writeTriplet(fromOs, notFromOs, osTable, osKey, os)
     }
 
     val models = rateData.map(x => {
@@ -386,7 +386,7 @@ object CaratDynamoDataAnalysis {
       val fromModel = rateData.map(distributionFilter(_, _.model == model))
       val notFromModel = rateData.map(distributionFilter(_, _.model != model))
 
-      writeTriplet(fromModel, notFromModel, DynamoDbEncoder.modelsTable, DynamoDbEncoder.modelKey, model)
+      writeTriplet(fromModel, notFromModel, modelsTable, modelKey, model)
     }
 
     val uuids = rateData.map(_._1).collect()
@@ -398,19 +398,19 @@ object CaratDynamoDataAnalysis {
       val fromUuid = rateData.filter(_._1 == uuid)
       val notFromUuid = rateData.filter(_._1 != uuid)
 
-      writeTriplet(fromUuid, notFromUuid, DynamoDbEncoder.resultsTable, DynamoDbEncoder.resultKey, uuid + "")
+      writeTriplet(fromUuid, notFromUuid, resultsTable, resultKey, uuid + "")
 
       for (app <- allApps) {
         val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
         val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
-        writeTriplet(appFromUuid, appNotFromUuid, DynamoDbEncoder.bugsTable, (DynamoDbEncoder.resultKey, DynamoDbEncoder.appKey), (uuid + "", app))
+        writeTriplet(appFromUuid, appNotFromUuid, bugsTable, (resultKey, appKey), (uuid + "", app))
       }
     }
 
     for (app <- allApps) {
       val filtered = rateData.map(distributionFilter(_, appFilter(_, app)))
       val filteredNeg = rateData.map(distributionFilter(_, negativeAppFilter(_, app)))
-      writeTriplet(filtered, filteredNeg, DynamoDbEncoder.appsTable, DynamoDbEncoder.appKey, app)
+      writeTriplet(filtered, filteredNeg, appsTable, appKey, app)
     }
   }
 
@@ -598,15 +598,5 @@ object CaratDynamoDataAnalysis {
         maxDistance = distance
     }
     maxDistance
-  }
-
-  def flatten(filtered: RDD[(String, TreeMap[Double, Double])]) = {
-    // there are x treemaps. We need to flatten them but include the uuid.
-    filtered.flatMap(x => {
-      var result = new TreeMap[Double, Double]
-      for (k <- x._2)
-        result += ((k._1, k._2))
-      result
-    }).collect()
   }
 }

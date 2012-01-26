@@ -15,23 +15,6 @@ object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
 
   // For putting data:
-  
-  val uuId = "uuId"
-  
-  val resultsTable = "carat.latestresults"
-  val resultKey = uuId
-    
-  val appsTable = "carat.latestapps"  
-  val appKey = "appName"
-    
-  val bugsTable = "carat.latestbugs"
-    
-  val modelsTable = "carat.latestmodels"
-  val modelKey = "model"
-  
-  val osTable = "carat.latestos"
-  val osKey = "os"
-  
   val xrange = "xrange"
   val prob = "prob"
   val probNeg = "probNeg"
