@@ -30,6 +30,8 @@ object EnergyOps {
    * Calculate total energy of an entire measurement file using the deprecated tuple-based
    * MeasurementRunRDD class.
    */
+  
+  @deprecated("Use Array functions instead", "TimeSeriesSpark 0.3")
   def totalEnergy(sc: SparkContext, mapped: spark.RDD[(Double, Double, Double)]){
     val start = System.currentTimeMillis()
     var energy = sc.accumulator(0.0)
@@ -45,8 +47,7 @@ object EnergyOps {
       " processing time: " + (end-start) + " ms")
   } 
   
-  
-
+  @deprecated("Use Array functions instead", "TimeSeriesSpark 0.3")
   def RunMapper(x: Array[(Double, Double, Double)]) = {
     var energy=0.0
     var last=0.0
@@ -94,6 +95,7 @@ object EnergyOps {
     (start, last, duration, energy / 1000.0 / 3600.0)
   }
 
+  @deprecated("Use Array functions instead", "TimeSeriesSpark 0.3")
   def tupleTest(sc: SparkContext, fileName: String, idleThresh: String) = {
 
     val file = sc.textFile(fileName)

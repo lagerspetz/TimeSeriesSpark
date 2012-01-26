@@ -164,7 +164,7 @@ object Pt4Processor {
             headSize, name, batterySize, captureDate,
             serialNumber, captureDataMask, sampleCount, missingCount, cdmPos);
 
-    val count = Math.max(1, sampleCount -
+    val count = math.max(1, sampleCount -
       missingCount)
 
     // convert sums to averages 
@@ -330,7 +330,7 @@ object Pt4Processor {
 
   def SamplePosition(secondsOrig: Double,
     captureDataMask: Int, statusPacket: StatusPacket) = {
-    val seconds = Math.max(0, secondsOrig)
+    val seconds = math.max(0, secondsOrig)
 
     val bytesPerSampleV = bytesPerSample(captureDataMask)
     val freq = 1000 * statusPacket.sampleRate

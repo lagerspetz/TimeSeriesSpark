@@ -61,7 +61,7 @@ detector.update(k)
 
 */
 
-@deprecated
+@deprecated("Use HourBucketDetector instead.", "TimeSeriesSpark 0.3")
 class TimeBucketDetector() extends RunDetector[String] {
   var qs = new Queue[Queue[Array[String]]]()
   var q = new Queue[Array[String]]()

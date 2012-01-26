@@ -61,7 +61,7 @@ trait MeasurementRunDetector[T] extends Serializable{
   TODO: Is there a synchronization problem since we only have one RunDetector?
   FIXME: Possible issue with runs being skipped.
 */
-@deprecated
+@deprecated("Use RunRDD instead.", "TimeSeriesSpark 0.3")
 class MeasurementRunRDD[T: ClassManifest]
 (prev: RDD[T], detector: MeasurementRunDetector[T])
 extends RDD[Array[T]](prev.context) {

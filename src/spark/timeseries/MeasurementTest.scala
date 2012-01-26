@@ -6,6 +6,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
 object MeasurementTest {
+  
+  @deprecated("Use Array functions instead", "TimeSeriesSpark 0.3")
   def old(sc: SparkContext){
     println("old method")
     val data = sc.parallelize(
@@ -124,7 +126,7 @@ object MeasurementTest {
   
   def main(args: Array[String]) {
     val sc = new SparkContext("local", "MeasurementTest")
-    old(sc)
+    //old(sc)
     runs(sc)
   }
 }

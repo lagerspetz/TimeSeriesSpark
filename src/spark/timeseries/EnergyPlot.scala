@@ -40,6 +40,8 @@ Mike Franklin the professor has a company that deals with stream processing
 
 */
 
+
+@deprecated("Use XscalaWTEnergyPlot instead", "TimeSeriesSpark 0.3")
 object EnergyPlot {
   
   def plotMapper(x: Array[(Double, Double, Double)], averageLength: Int): TimeSeriesCollection = {

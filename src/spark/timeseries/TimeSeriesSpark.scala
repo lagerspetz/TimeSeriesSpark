@@ -117,7 +117,7 @@ object TimeSeriesSpark {
    * 
    * 
    */
-  @deprecated
+  @deprecated("Use Array functions instead.", "TimeSeriesSpark 0.3")
   def tuple3Mapper(s: String): (/*Int,*/ Double, Double, Double) = {
     val x = s.split(",")
     try{
@@ -141,7 +141,7 @@ object TimeSeriesSpark {
    * @param volt the voltage, in volts
    * @return amp*volt
    */
-  @deprecated
+  @deprecated("Use Array functions instead.", "TimeSeriesSpark 0.3")
   def energymapper(time:Double, amp:Double, volt:Double): Double = {
     return amp*volt
   }
@@ -155,7 +155,7 @@ object TimeSeriesSpark {
    *   @param idle_thresh The power threshold above which values are considered activity.
    *   @param windowLength The number of tuples that averages are calculated over, and compared to <code>idle_thresh</code>.
    */
-  @deprecated
+  @deprecated("Use IdleEnergyArrayDetector class instead.", "TimeSeriesSpark 0.3")
   class IdleEnergyTupleDetector(idle_thresh: Double, windowLength: Int) extends MeasurementRunDetector[(Double, Double, Double)] {
     var q = new Queue[(Double, Double, Double)]()
     var sum = 0.0

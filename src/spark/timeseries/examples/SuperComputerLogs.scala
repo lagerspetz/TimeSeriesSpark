@@ -67,13 +67,13 @@ object SuperComputerLogs {
     var largest = new ArrayBuffer[Int]
 
     for (i <- sizes) {
-      if (largest.isEmpty || i >= (largest sorted).first)
+      if (largest.isEmpty || i >= (largest sorted).head)
         largest += i
       if (largest.length > howmany)
         largest = (largest sorted) drop 1
     }
 
-    val threshold = (largest sorted).first
+    val threshold = (largest sorted).head
 
     // Take the large buckets only
     buckets.filter(_.length >= threshold)
@@ -124,13 +124,13 @@ object SuperComputerLogs {
     var largest = new ArrayBuffer[Int]
 
     for (i <- sizes) {
-      if (largest.isEmpty || i >= (largest sorted).first)
+      if (largest.isEmpty || i >= (largest sorted).head)
         largest += i
       if (largest.length > howmany)
         largest = (largest sorted) drop 1
     }
 
-    val threshold = (largest sorted).first
+    val threshold = (largest sorted).head
 
     // Take the large buckets only
     buckets.filter(_._2.length >= threshold)

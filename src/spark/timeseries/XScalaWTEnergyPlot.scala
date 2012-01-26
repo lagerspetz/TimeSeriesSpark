@@ -50,7 +50,7 @@ Mike Franklin the professor has a company that deals with stream processing
 
 object XScalaWTEnergyPlot {
   
-  def plotMapper(x: Array[(Double, Double, Double)], averageLength: Int): TimeSeriesCollection = {
+  def plotMapper(x: Run[Double], averageLength: Int): TimeSeriesCollection = {
       var ms = System.currentTimeMillis()
       var energy=0.0
       var last=0.0
@@ -62,20 +62,20 @@ object XScalaWTEnergyPlot {
       var avgCount = 0
       var localTimeSeries = new TimeSeries("run " + new Date(ms))
       
-      for (k <- x){
+      for (k <- x.list){
         if (last == 0){
-          last=k._1
+          last=k(0)
           start = last
 
         } else {
-          var step = k._1 - last
+          var step = k(0) - last
           if (step > 0.000201 || step < 0.000199){
-            println("weird step from " + last + " to " + k._1 +": " + step)
+            println("weird step from " + last + " to " + k(0) +": " + step)
           }
           else {
             count += 1
             avgCount += 1
-            sum += k._2*k._3
+            sum += k(1)*k(2)
             if (avgCount == averageLength){
               localTimeSeries.add(new Millisecond(new Date(ms+count/5)), sum/averageLength)
               //println((ms+count/5) + ", " + (sum/averageLength))
@@ -84,9 +84,9 @@ object XScalaWTEnergyPlot {
             }
 
             duration += 0.0002
-            energy+=0.0002*k._2*k._3
+            energy+=0.0002*k(1)*k(2)
           }
-          last = k._1
+          last = k(0)
         }
       }
       
@@ -106,13 +106,12 @@ object XScalaWTEnergyPlot {
     println("init")
     val sc = TimeSeriesSpark.init(args(0), "default")
     val file = sc.textFile(args(1))
-    val mapped = file.map(TimeSeriesSpark.tuple3Mapper)
+    val mapped = file.map(TimeSeriesSpark.genericMapper(_, ","))
     
     /* Using cache() here allows completing the entire
      * run detection using < 10G memory when without it,
      * more than 26G is used and the task does not complete.
      */
-     
      
     //mapped.cache()    
     //println("mapped cached")
@@ -121,14 +120,14 @@ object XScalaWTEnergyPlot {
     val title = "TimeSeriesSpark: "+args(1)
 //    p.createTestData()
 
-    var det = new TimeSeriesSpark.IdleEnergyTupleDetector(args(2).toDouble, 2500)
+    var det = new IdleEnergyArrayDetector(args(2).toDouble, 2500)
 
     /* mapped as data, det as detector,
        half a second averages (2500 samples)
      */
-    val runs = new MeasurementRunRDD(mapped, det)
+    val runs = new RunRDD(mapped, det)
     runs.cache()
-    println("MRRDD created")
+    println("RRDD created")
 
     //p.createTestData()    
     /* Generate a plot live */
