@@ -108,15 +108,24 @@ object DynamoDbEncoder {
   }
   
   def clearTables(){
-    /*var del = new DeleteTableRequest("carat.latestbugs")
+    var del = new DeleteTableRequest(resultsTable)
     dd.deleteTable(del)
-    del = new DeleteTableRequest("carat.latestapps")
+    del = new DeleteTableRequest(osTable)
     dd.deleteTable(del)
-    del = new DeleteTableRequest("carat.latestresults")
-    dd.deleteTable(del)*/
-    //createResultsTable()
-    //createBugsTable()
-    //createAppsTable()
+    del = new DeleteTableRequest(modelsTable)
+    dd.deleteTable(del)
+    del = new DeleteTableRequest(appsTable)
+    dd.deleteTable(del)
+    del = new DeleteTableRequest(bugsTable)
+    dd.deleteTable(del)
+    
+    Thread.sleep(5)
+    
+    createResultsTable()
+    createOsTable()
+    createModelsTable()
+    createAppsTable()
+    createBugsTable()
   }
   
   def createResultsTable(){
@@ -129,7 +138,7 @@ object DynamoDbEncoder {
     dd.createTable(req)
   }
   
-  def createOSTable(){
+  def createOsTable(){
     val getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(osKey)
     ks.setAttributeType("S")
@@ -139,7 +148,7 @@ object DynamoDbEncoder {
     dd.createTable(req)
   }
   
-  def createModelTable(){
+  def createModelsTable(){
     val getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(modelKey)
     ks.setAttributeType("S")
@@ -150,8 +159,6 @@ object DynamoDbEncoder {
   }
   
   def createBugsTable(){
-    //val del = new DeleteTableRequest("carat.latestbugs")
-    //dd.deleteTable(del)
     var getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(resultKey)
     ks.setAttributeType("S")
