@@ -1,4 +1,4 @@
-package spark.timeseries.examples
+package edu.berkeley.cs.amplab.carat
 
 import com.amazonaws.services.s3.AmazonS3
 import com.amazonaws.services.s3.AmazonS3Client

@@ -1,4 +1,4 @@
-package spark.timeseries.examples
+package edu.berkeley.cs.amplab.carat
 import scala.collection.mutable.HashSet
 
 class CaratRate(var uuid:String, val os:String, val model:String,

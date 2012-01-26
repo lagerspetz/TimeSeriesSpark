@@ -1,4 +1,4 @@
-package spark.timeseries.examples
+package edu.berkeley.cs.amplab.carat
 
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import com.amazonaws.services.dynamodb.model.GetItemRequest
@@ -44,7 +44,6 @@ object DynamoDbDecoder {
     val sr = DynamoDbEncoder.dd.query(q)
     (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
-  
   
   def getItem(table:String, keyPart:String) = {
     val key = new Key().withHashKeyElement(new AttributeValue(keyPart))

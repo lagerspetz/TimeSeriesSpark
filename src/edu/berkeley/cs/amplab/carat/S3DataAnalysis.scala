@@ -1,4 +1,4 @@
-package spark.timeseries.examples
+package edu.berkeley.cs.amplab.carat
 
 import spark._
 import spark.SparkContext._
@@ -38,21 +38,7 @@ import java.io.ObjectOutputStream
  * The results will be called dumpsys-script-data.txt and powermon-file-data.txt.
  */
 
-object DDDataAnalysis {
-
-  val results = "carat.latestresults"
-  val bugs = "carat.latestbugs"
-  val appsTable = "carat.latestapps"
-  val modelsTable = "carat.latestmodels"
-  val osTable = "carat.latestos"
-
-  val uuidKey = "uuId"
-  val appKey = "appName"
-    val osKey = "os"
-      val modelKey = "model"
-    
-  val buckets = 100
-  val DECIMALS = 3
+object S3DataAnalysis {
 
   def uidMapper(x: String) = {
     val arr = x.trim().split(",[ ]*")
@@ -68,8 +54,8 @@ object DDDataAnalysis {
   def rateMapper(observations: Seq[(Long, Array[String])]) = {
     var prevD = 0L
     var prevBatt = 0.0
-    var prevEvents = new HashSet[String]
-    var prevApps = new HashSet[String]
+    var prevEvents = new HashSet[String]()
+    var prevApps = new HashSet[String]()
 
     var rates = new ArrayBuffer[CaratRate]
 
@@ -102,17 +88,7 @@ object DDDataAnalysis {
         if (!pluggedIn) {
           // take periods where battery life has changed
           if (batt - prevBatt >= 1 || prevBatt - batt >= 1) {
-            // TODO: these should come from the reg msg.
-            val (os, model) = {
-            if (k._2(0) == "85")
-              ("5.0.1", "iPhone 4S")
-            if (k._2(0) == "46")
-              ("7.0.1RC1", "LG Optimus 2X") 
-            else
-              ("5.0.1", "iPhone")
-            }
-              
-            rates += new CaratRate(k._2(0), os, model, prevD, d, prevBatt, batt,
+            rates += new CaratRate(k._2(0), "1.0", "FakeFone", prevD, d, prevBatt, batt,
               prevEvents.toArray, events, prevApps.toArray, apps)
             prevD = d
             prevBatt = batt
@@ -129,16 +105,7 @@ object DDDataAnalysis {
        */
         if ((k == observations.last && !pluggedIn) || (!pluggedIn && events.contains("pluggedin"))) {
           if (prevD != d) {
-            val (os, model) = {
-              val k = observations.last
-            if (k._2(0) == "85")
-              ("5.0.1", "iPhone 4S")
-            if (k._2(0) == "46")
-              ("7.0.1RC1", "LG Optimus 2X") 
-            else
-              ("5.0.1", "iPhone")
-            }
-            rates += new CaratRate(observations.last._2(0), os, model, prevD, d, prevBatt, batt,
+            rates += new CaratRate(observations.last._2(0), "1.0", "FakeFone", prevD, d, prevBatt, batt,
               prevEvents.toArray, events, prevApps.toArray, apps)
           }
         }
@@ -252,42 +219,10 @@ object DDDataAnalysis {
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
-      
-    val oses = rateData.map(x => {
-      var buf = new HashSet[String]
-      buf ++= x._2.map(_.os)
-      buf
-    }).collect()
-    var allOses = new HashSet[String]
-    for (k <- oses)
-      allOses ++= k
 
-    for (os <- allOses) {
-      val fromOs = rateData.map(distributionFilter(_, _.os == os))
-      val notFromOs = rateData.map(distributionFilter(_, _.os != os))
-
-      writeTriplet(fromOs, notFromOs, osTable, osKey, os)
-    }
-
-    val models = rateData.map(x => {
-      var buf = new HashSet[String]
-      buf ++= x._2.map(_.model)
-      buf
-    }).collect()
-    
-    var allModels = new HashSet[String]
-    for (k <- models)
-      allModels ++= k
-    
-    for (model <- allModels) {
-      val fromModel = rateData.map(distributionFilter(_, _.model == model))
-      val notFromModel = rateData.map(distributionFilter(_, _.model != model))
-
-      writeTriplet(fromModel, notFromModel, modelsTable, modelKey, model)
-    }
-   
     val uuids = rateData.map(_._1).collect()
     for (uuid <- uuids) {
+      val key = uuid + "-current.txt"
 
       /*
        * TODO: if there are other combinations with uuid, they go into this loop
@@ -295,24 +230,29 @@ object DDDataAnalysis {
       val fromUuid = rateData.filter(_._1 == uuid)
       val notFromUuid = rateData.filter(_._1 != uuid)
 
-      writeTriplet(fromUuid, notFromUuid, results, uuidKey, uuid + "")
+      writeTriplet(fromUuid, notFromUuid, "-uuid=" + uuid, "-not-uuid=" + uuid)
 
       for (app <- allApps) {
         val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
         val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
-        writeTriplet(appFromUuid, appNotFromUuid, bugs, (uuidKey, appKey), (uuid + "", app))
+        writeTriplet(appFromUuid, appNotFromUuid, "-bug-uuid=" + uuid + "-app=" + app, "-bug-not-uuid=" + uuid + "-app=" + app)
       }
+      S3Encoder.put(key)
     }
 
     for (app <- allApps) {
+      val key = app + "-current.txt"
       val filtered = rateData.map(distributionFilter(_, appFilter(_, app)))
       val filteredNeg = rateData.map(distributionFilter(_, negativeAppFilter(_, app)))
-      writeTriplet(filtered, filteredNeg, appsTable, appKey, app)
+      writeTriplet(filtered, filteredNeg, "-app=" + app, "-not-app=" + app)
+      S3Encoder.put(key)
     }
   }
 
-  def writeTriplet(one: RDD[(Int, Seq[CaratRate])], two: RDD[(Int, Seq[CaratRate])], table: String, keyNames: (String, String), keyValues: (String, String)) {
+  def writeTriplet(one: RDD[(Int, Seq[CaratRate])], two: RDD[(Int, Seq[CaratRate])], name1: String, name2: String) {
     // probability distribution: r, count/sumCount
+
+    // cumulative distribution: r, Sum(count(0) to count(k))/sumCount
 
     /* TODO: Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
@@ -320,154 +260,70 @@ object DDDataAnalysis {
     val probOne = prob(one)
     val probTwo = prob(two)
 
-    val values = flatten(probOne)
-    val others = flatten(probTwo)
+    writeProbs(probOne, name1)
+    writeProbs(probTwo, name2)
 
-    println("prob.size=" + values.size + " prob2.size=" + others.size + " " + keyNames + "-" + keyValues)
-    if (values.size > 0 && others.size > 0) {
-
-      val distance = {
-        val cumulative = flatten(probOne.mapValues(x => {
-          var sum = 0.0
-          var buf = new TreeMap[Double, Double]
-          for (d <- x) {
-            sum += d._2
-            buf += ((d._1, sum))
-          }
-          buf
-        }))
-
-        val cumulativeNeg = flatten(probTwo.mapValues(x => {
-          var sum = 0.0
-          var buf = new TreeMap[Double, Double]
-          for (d <- x) {
-            sum += d._2
-            buf += ((d._1, sum))
-          }
-          buf
-        }))
-        getDistance(cumulative, cumulativeNeg)
+    val cumulative = probOne.mapValues(x => {
+      var sum = 0.0
+      var buf = new TreeMap[Double, Double]
+      for (d <- x) {
+        sum += d._2
+        buf += ((d._1, sum))
       }
+      buf
+    })
 
-      // TODO: Normalize x range here
-      val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
-
-      DynamoDbEncoder.putBug(table, keyNames, keyValues, maxX, bucketed, bucketedNeg, distance)
-    }
-  }
-
-  def writeTriplet(one: RDD[(Int, Seq[CaratRate])], two: RDD[(Int, Seq[CaratRate])], table: String, keyName: String, keyValue: String) {
-    // probability distribution: r, count/sumCount
-
-    /* TODO: Figure out max x value (maximum rate) and bucket y values of 
-       * both distributions into n buckets, averaging inside a bucket
-       */
-    val probOne = prob(one)
-    val probTwo = prob(two)
-
-    val values = flatten(probOne)
-    val others = flatten(probTwo)
-
-    println("prob.size=" + values.size + " prob2.size=" + others.size + " " + keyName + "-" + keyValue)
-    if (values.size > 0 && others.size > 0) {
-      val distance = {
-        val cumulative = flatten(probOne.mapValues(x => {
-          var sum = 0.0
-          var buf = new TreeMap[Double, Double]
-          for (d <- x) {
-            sum += d._2
-            buf += ((d._1, sum))
-          }
-          buf
-        }))
-
-        val cumulativeNeg = flatten(probTwo.mapValues(x => {
-          var sum = 0.0
-          var buf = new TreeMap[Double, Double]
-          for (d <- x) {
-            sum += d._2
-            buf += ((d._1, sum))
-          }
-          buf
-        }))
-        getDistance(cumulative, cumulativeNeg)
+    val cumulativeNeg = probTwo.mapValues(x => {
+      var sum = 0.0
+      var buf = new TreeMap[Double, Double]
+      for (d <- x) {
+        sum += d._2
+        buf += ((d._1, sum))
       }
-      
-      val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+      buf
+    })
 
-      DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance)
-    }
-  }
-  
-  def bucketDistributions(values: Array[(Double, Double)], others: Array[(Double, Double)]) = {
-    /*maxX defines the buckets. Each bucket is
-     * k /100 * maxX to k+1 / 100 * maxX.
-     * Therefore, do not store the bucket starts and ends, only bucket numbers from 0 to 99.*/
-    val bucketed = new ArrayBuffer[(Int, Double)]
-      val bucketedNeg = new ArrayBuffer[(Int, Double)]
-      
-      val maxX = math.max(values.last._1, others.last._1)
-      // TODO: Bucket x ranges here
-      var valueIndex = 0
-      var othersIndex = 0
-      for (k <- 0 until buckets){
-        val start = maxX / buckets * k
-        val end = maxX / buckets * (k+1)
-        var sumV = 0.0
-        var sumO = 0.0
-        var countV = valueIndex
-        var countO = valueIndex
-        while (valueIndex < values.size && values(valueIndex)._1 >= start && values(valueIndex)._1 < end){
-          sumV += values(valueIndex)._2
-          valueIndex+=1
-        }
-        countV = valueIndex - countV
-        while (othersIndex < others.size && others(othersIndex)._1 >= start && others(othersIndex)._1 < end){
-          sumO += others(othersIndex)._2
-          othersIndex+=1
-        }
-        countO = othersIndex - countO
-        if (countV > 0){
-          bucketed += ((k, nDecimal(sumV / countV)))
-      }else
-          bucketed += ((k, 0.0))
-        if (countO > 0){
-          bucketedNeg += ((k, nDecimal(sumO / countO)))
-  } else
-          bucketedNeg += ((k, 0.0))
-      }
-    
-    (maxX, bucketed, bucketedNeg)
-  }
-  
-  def nDecimal(orig:Double) = {
-    var result = orig
-    var mul = 1
-    for (k <- 0 until DECIMALS)
-      mul *= 10
-    result = math.round(result*mul)
-    result/mul
+    writeProbs(cumulative, "cumulative " + name1)
+    writeProbs(cumulativeNeg, "cumulative " + name2)
+    println("cumulative1.size=" + cumulative.count() + " two.size=" + cumulativeNeg.count() + " " + name1 + "-" + name2)
+
+    val distance = getDistance(cumulative, cumulativeNeg, name1 + " " + name2)
+    writeDistance(distance, "distance " + name1 + " " + name2)
   }
 
-  def getDistance(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
+  def getDistance(one: RDD[(Int, TreeMap[Double, Double])], two: RDD[(Int, TreeMap[Double, Double])], debug: String) = {
     // FIXME: use of collect may cause memory issues.
+    var oneFlat = one.flatMap(x => {
+      var result = new TreeMap[Double, Double]
+      for (k <- x._2)
+        result += ((k._1, k._2))
+      result
+    }).collect()
+
+    var twoFlat = two.flatMap(x => {
+      var result = new TreeMap[Double, Double]
+      for (k <- x._2)
+        result += ((k._1, k._2))
+      result
+    }).collect()
+
     var maxDistance = -2.0
     var prevOne = (-2.0, 0.0)
     var prevTwo = (-2.0, 0.0)
     var nextTwo = prevTwo
 
-    var smaller = one
-    var bigger = two
+    var smaller = oneFlat
+    var bigger = twoFlat
 
     /* Swap if the above assignment was not the right guess: */
-    if (one.size > 0 && two.size > 0) {
-      if (one.head._1 < two.head._1) {
-        smaller = two
-        bigger = one
+    if (oneFlat.size > 0 && twoFlat.size > 0) {
+      if (oneFlat.head._1 < twoFlat.head._1) {
+        smaller = twoFlat
+        bigger = oneFlat
       }
     }
 
-    //println("one.size=" + one.size + " two.size=" + two.size)
+    println("one.size=" + oneFlat.size + " two.size=" + twoFlat.size + " " + debug)
 
     var smallIter = smaller.iterator
     for (k <- bigger) {
@@ -475,7 +331,7 @@ object DDDataAnalysis {
 
       while (smallIter.hasNext && nextTwo._1 < k._1) {
         nextTwo = smallIter.next
-        //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
+        println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
         if (nextTwo._1 < k._1)
           prevTwo = nextTwo
       }
@@ -497,13 +353,26 @@ object DDDataAnalysis {
     maxDistance
   }
 
-  def flatten(filtered: RDD[(Int, TreeMap[Double, Double])]) = {
+  def writeProbs(filtered: RDD[(Int, TreeMap[Double, Double])], app: String) {
     // there are x treemaps. We need to flatten them but include the uuid.
-    filtered.flatMap(x => {
-      var result = new TreeMap[Double, Double]
+    val values = filtered.flatMap(x => {
+      var result = new TreeMap[Double, (Double, Int)]
       for (k <- x._2)
-        result += ((k._1, k._2))
+        result += ((k._1, (k._2, x._1)))
       result
     }).collect()
+
+    for (k <- values) {
+      //println("uuid=" + k._2._2 + ", OS=" + "iOS" + ", model=" + "4S" + ", " + k._1 + ", " + k._2._1)
+      S3Encoder.write(k._2._2)
+      S3Encoder.write(k._1)
+      S3Encoder.write(k._2._1)
+    }
+    S3Encoder.write(app)
+  }
+
+  def writeDistance(distance: Double, app: String) {
+    S3Encoder.write(distance)
+    S3Encoder.write(app)
   }
 }

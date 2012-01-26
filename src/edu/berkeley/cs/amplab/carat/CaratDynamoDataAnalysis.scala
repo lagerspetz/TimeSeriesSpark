@@ -1,4 +1,4 @@
-package spark.timeseries.examples
+package edu.berkeley.cs.amplab.carat
 
 import spark._
 import spark.SparkContext._
@@ -88,34 +88,34 @@ object CaratDynamoDataAnalysis {
       val result = new HashSet[String]
       var finished = false
 
-      var (key, regs) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable)
-      result ++= regs.map(_.get(DynamoDbEncoder.regsUuid).getOrElse("").toString())
+      var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
+      result ++= regs.map(_.get(regsUuid).getOrElse("").toString())
       if (key == null)
         finished = true
       while (!finished) {
         println("Continuing from key=" + key)
-        var (key2, regs2) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable, key)
+        var (key2, regs2) = DynamoDbDecoder.getAllItems(registrationTable, key)
         regs = regs2
         key = key2
         println("Got: " + regs.size + " registrations.")
-        result ++= regs.map(_.get(DynamoDbEncoder.regsUuid).getOrElse("").toString())
+        result ++= regs.map(_.get(regsUuid).getOrElse("").toString())
         if (key == null)
           finished = true
       }
       result
     }
 
-    var allData:spark.RDD[(String, Seq[spark.timeseries.examples.CaratRate])] = null
+    var allData:spark.RDD[(String, Seq[CaratRate])] = null
     
     var finished = false
-    var (key, regs) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable)
+    var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
     println("Got: " + regs.size + " registrations.")
     allData = handleRegs(sc, regs, allUuids)
     if (key == null)
       finished = true
     while (!finished) {
       println("Continuing from key=" + key)
-      var (key2, regs2) = DynamoDbDecoder.getAllItems(DynamoDbEncoder.registrationTable, key)
+      var (key2, regs2) = DynamoDbDecoder.getAllItems(registrationTable, key)
       regs = regs2
       key = key2
       println("Got: " + regs.size + " registrations.")
@@ -136,29 +136,29 @@ object CaratDynamoDataAnalysis {
     //val parallel = sc.parallelize[java.util.Map[String, com.amazonaws.services.dynamodb.model.AttributeValue]](regs)
     //parallel.foreach(x => {
     
-    var dist: spark.RDD[spark.timeseries.examples.CaratRate] = null
+    var dist: spark.RDD[CaratRate] = null
     for (x <- regs) {
       /*
        * Data format guess:
        * Registration(uuId:0FC81205-55D0-46E5-8C80-5B96F17B5E7B, platformId:iPhone Simulator, systemVersion:5.0)
        */
-      val uuid = x.get(DynamoDbEncoder.regsUuid).getOrElse("").toString()
-      val model = x.get(DynamoDbEncoder.regsModel).getOrElse("").toString()
-      val os = x.get(DynamoDbEncoder.regsOs).getOrElse("").toString()
+      val uuid = x.get(regsUuid).getOrElse("").toString()
+      val model = x.get(regsModel).getOrElse("").toString()
+      val os = x.get(regsOs).getOrElse("").toString()
 
       /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
        * (as many as have a zero battery drain) should be re-used in the next batch. 
        */
       var finished = false
-      var (key, samples) = DynamoDbDecoder.getItems(DynamoDbEncoder.samplesTable, uuid)
+      var (key, samples) = DynamoDbDecoder.getItems(samplesTable, uuid)
       println("Got: " + samples.size + " samples.")
       dist = handleSamples(sc, samples, os, model)
       if (key == null)
         finished = true
       while (!finished) {
         println("Continuing samples from key=" + key)
-        var (key2, samples2) = DynamoDbDecoder.getItems(DynamoDbEncoder.samplesTable, uuid, key)
+        var (key2, samples2) = DynamoDbDecoder.getItems(samplesTable, uuid, key)
         samples = samples2
         key = key2
         println("Got: " + samples.size + " samples.")
@@ -167,7 +167,7 @@ object CaratDynamoDataAnalysis {
           finished = true
       }
     }
-    var result:spark.RDD[(String, Seq[spark.timeseries.examples.CaratRate])] = null
+    var result:spark.RDD[(String, Seq[CaratRate])] = null
     if (dist != null) {
       result = dist.map(x => {
         (x.uuid, x)
@@ -205,8 +205,8 @@ object CaratDynamoDataAnalysis {
        * triggeredBy:applicationDidBecomeActive)
        */
         
-        val uuid = x.get(DynamoDbEncoder.sampleKey).getOrElse("").toString()
-        val apps = x.get(DynamoDbEncoder.sampleProcesses).getOrElse(Seq[String]()).asInstanceOf[Seq[String]].map(x => {
+        val uuid = x.get(sampleKey).getOrElse("").toString()
+        val apps = x.get(sampleProcesses).getOrElse(Seq[String]()).asInstanceOf[Seq[String]].map(x => {
           if (x == null)
             ""
           else {
@@ -218,10 +218,10 @@ object CaratDynamoDataAnalysis {
           }
         })
         
-        val time = x.get(DynamoDbEncoder.sampleTime).getOrElse("").toString()
-        val batteryState = x.get(DynamoDbEncoder.sampleBatteryState).getOrElse("").toString()
-        val batteryLevel = x.get(DynamoDbEncoder.sampleBatteryLevel).getOrElse("").toString()
-        val event = x.get(DynamoDbEncoder.sampleEvent).getOrElse("").toString()
+        val time = x.get(sampleTime).getOrElse("").toString()
+        val batteryState = x.get(sampleBatteryState).getOrElse("").toString()
+        val batteryLevel = x.get(sampleBatteryLevel).getOrElse("").toString()
+        val event = x.get(sampleEvent).getOrElse("").toString()
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       rateMapper(os, model, mapped)

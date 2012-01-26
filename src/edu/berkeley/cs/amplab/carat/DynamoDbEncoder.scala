@@ -1,4 +1,4 @@
-package spark.timeseries.examples
+package edu.berkeley.cs.amplab.carat
 
 import com.amazonaws.services.dynamodb.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodb.model.CreateTableRequest
@@ -31,22 +31,6 @@ object DynamoDbEncoder {
   
   val osTable = "carat.latestos"
   val osKey = "os"
-    
-  // For getting data:
-  val registrationTable = "carat.registrations"
-  val samplesTable = "carat.samples"
-    
-  val regsUuid = DynamoDbEncoder.uuId
-  val regsModel = "platformId"
-  val regsOs = "systemVersion"
-
-  val sampleKey = DynamoDbEncoder.uuId
-  val sampleTime = "timestamp"
-  val sampleProcesses = "piList"
-  val sampleBatteryState = "batteryState"
-  val sampleBatteryLevel = "batteryLevel"
-  val sampleEvent = "triggeredBy"
-
   
   val xrange = "xrange"
   val prob = "prob"
