@@ -23,12 +23,14 @@ object DynamoDbDecoder {
   }
   
   def getAllItems(table:String) = {
+    println("Getting all items from table " + table)
     val s = new ScanRequest(table)
     val sr = DynamoDbEncoder.dd.scan(s)
     (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
   
   def getAllItems(table:String, firstKey:Key) = {
+    println("Getting all items from table " + table + " starting with " + firstKey)
     val s = new ScanRequest(table)
     s.setExclusiveStartKey(firstKey)
     val sr = DynamoDbEncoder.dd.scan(s)
