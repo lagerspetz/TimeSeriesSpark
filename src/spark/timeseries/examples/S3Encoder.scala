@@ -8,7 +8,6 @@ import java.io.FileOutputStream
 import java.io.ObjectOutputStream
 import java.io.ObjectInputStream
 
-
 object S3Encoder {
   val cred = new PropertiesCredentials(S3Encoder.getClass().getResourceAsStream("/AwsCredentials.properties"))
   val s3 = new AmazonS3Client(cred)
