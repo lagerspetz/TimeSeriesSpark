@@ -191,6 +191,7 @@ object CaratDynamoDataAnalysis {
           finished = true
       }
     }
+    
     var result:spark.RDD[(String, Seq[CaratRate])] = null
     if (dist != null) {
       result = dist.map(x => {
@@ -251,7 +252,7 @@ object CaratDynamoDataAnalysis {
       rateMapper(os, model, mapped)
     })
     if (rates != null)
-      rateRdd = rates.union(rateRdd)
+      rateRdd = rateRdd.union(rates)
     rateRdd
   }
 
@@ -379,8 +380,10 @@ object CaratDynamoDataAnalysis {
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
-  
-
+  // debug
+    val coll = rateData.collect()
+    for (k <- coll)
+      println("Rate: " + k._1 + " -> "+ k._2)
     for (os <- oses) {
       val fromOs = rateData.map(distributionFilter(_, _.os == os))
       val notFromOs = rateData.map(distributionFilter(_, _.os != os))
@@ -403,12 +406,12 @@ object CaratDynamoDataAnalysis {
       val fromUuid = rateData.filter(_._1 == uuid)
       val notFromUuid = rateData.filter(_._1 != uuid)
 
-      writeTriplet(fromUuid, notFromUuid, resultsTable, resultKey, uuid + "")
+      writeTriplet(fromUuid, notFromUuid, resultsTable, resultKey, uuid)
 
       for (app <- allApps) {
         val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
         val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
-        writeTriplet(appFromUuid, appNotFromUuid, bugsTable, (resultKey, appKey), (uuid + "", app))
+        writeTriplet(appFromUuid, appNotFromUuid, bugsTable, (resultKey, appKey), (uuid, app))
       }
     }
 
