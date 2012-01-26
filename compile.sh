@@ -1,5 +1,7 @@
 #!/bin/bash
 cd $( dirname "$0" )
+./get-jackson.sh
+./get-jfreechart.sh
 cp=""
 first="1"
 for k in jar/* jfreechart-1.0.13/lib/*.jar; do
