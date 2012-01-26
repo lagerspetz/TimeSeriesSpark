@@ -48,11 +48,13 @@ object CaratDynamoDataAnalysis {
   val registrationTable = "carat.registrations"
   val samplesTable = "carat.samples"
 
-  val regsUuid = "uuId"
-  val regsModel = "platformid"
-  val regsOs = "systemversion"
+  val uuidKey = "uuId"
+    
+  val regsUuid = uuidKey
+  val regsModel = "platformId"
+  val regsOs = "systemVersion"
 
-  val sampleKey = "uuId"
+  val sampleKey = uuidKey
   val sampleTime = "timestamp"
   val sampleProcesses = "piList"
   val sampleBatteryState = "batteryState"
@@ -67,8 +69,7 @@ object CaratDynamoDataAnalysis {
   val modelsTable = "carat.latestmodels"
   val osTable = "carat.latestos"
 
-  val uuidKey = "uuid"
-  val appKey = "appname"
+  val appKey = "appName"
   val osKey = "os"
   val modelKey = "model"
 
@@ -240,7 +241,17 @@ object CaratDynamoDataAnalysis {
        */
         
         val uuid = x.get(sampleKey).getS()
-        val apps = x.get(sampleProcesses).getSS()
+        val apps = x.get(sampleProcesses).getSS().map(x => {
+          if (x == null)
+            ""
+          else {
+            val s = x.split(";")
+            if (s.size > 1)
+              s(1)
+            else
+              ""
+          }
+        })
         val time = x.get(sampleTime).getS()
         val batteryState = x.get(sampleBatteryState).getS()
         val batteryLevel = x.get(sampleBatteryLevel).getN()
@@ -254,7 +265,7 @@ object CaratDynamoDataAnalysis {
     rateRdd
   }
 
-  def rateMapper(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.util.List[java.lang.String])]) = {
+  def rateMapper(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
     // (uuid, time, batteryLevel, event, batteryState, apps)
     var prevD = 0L
     var prevBatt = 0.0
@@ -268,7 +279,7 @@ object CaratDynamoDataAnalysis {
 
     var d = 0L
     var events = ArrayBuffer[String]()
-    var apps = Array[String]()
+    var apps:Seq[String] = Array[String]()
     var batt = 0.0
     var unplugged = false
     var pluggedIn = false
@@ -279,7 +290,7 @@ object CaratDynamoDataAnalysis {
       events = new ArrayBuffer[String]
       events ++= k._4.trim().toLowerCase().split(" ")
       events += k._5
-      apps = k._6.toArray[String](apps)
+      apps = k._6
 
       if (events.contains(discharge)) {
         unplugged = true

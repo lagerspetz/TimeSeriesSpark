@@ -46,8 +46,8 @@ object DDDataAnalysis {
   val modelsTable = "carat.latestmodels"
   val osTable = "carat.latestos"
 
-  val uuidKey = "uuid"
-  val appKey = "appname"
+  val uuidKey = "uuId"
+  val appKey = "appName"
     val osKey = "os"
       val modelKey = "model"
     
@@ -68,8 +68,8 @@ object DDDataAnalysis {
   def rateMapper(observations: Seq[(Long, Array[String])]) = {
     var prevD = 0L
     var prevBatt = 0.0
-    var prevEvents = new HashSet[String]()
-    var prevApps = new HashSet[String]()
+    var prevEvents = new HashSet[String]
+    var prevApps = new HashSet[String]
 
     var rates = new ArrayBuffer[CaratRate]
 
