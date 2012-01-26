@@ -26,10 +26,11 @@ package object carat {
     
   val regsUuid = "uuid"
   val regsModel = "platformId"
+    val regsTimestamp = "timestamp"
   val regsOs = "systemVersion"
 
   val sampleKey = regsUuid
-  val sampleTime = "timestamp"
+  val sampleTime = regsTimestamp
   val sampleProcesses = "piList"
   val sampleBatteryState = "batteryState"
   val sampleBatteryLevel = "batteryLevel"

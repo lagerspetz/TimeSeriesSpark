@@ -34,10 +34,12 @@ object PowerMonToDynamoSamples {
   def registerFakeUuids() {
     DynamoDbEncoder.put(registrationTable,
       (regsUuid, "85"),
+      (regsTimestamp,System.currentTimeMillis()),
       (regsOs, "5.0.1"),
       (regsModel, "iPhone 4S"))
     DynamoDbEncoder.put(registrationTable,
       (regsUuid, "46"),
+      (regsTimestamp,System.currentTimeMillis()),
       (regsOs, "7.0.1RC1"),
       (regsModel, "LG Optimus 2X"))
   }
