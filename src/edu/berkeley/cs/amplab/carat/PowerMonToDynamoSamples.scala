@@ -71,6 +71,6 @@ object PowerMonToDynamoSamples {
     "batteryLevel" = Number
     "triggeredBy" = String
     */
-    ((sampleKey, uuId), (sampleTime, timestamp), (sampleProcesses, apps), (sampleBatteryState, batteryState),(sampleBatteryLevel, batteryLevel), (sampleEvent, triggeredBy))
+    ((sampleKey, uuId), (sampleTime, timestamp), (sampleProcesses, apps.toSeq), (sampleBatteryState, batteryState),(sampleBatteryLevel, batteryLevel), (sampleEvent, triggeredBy))
   }
 }
