@@ -188,7 +188,7 @@ still providing a number that means something.
     val caratFreq = caratDataFile.substring(0,dot)+"-frequency"
     
     analyzeRateData(getRates(sc, caratDataFile), caratFreq)
-    exit(0)
+    sys.exit(0)
   }
   
   def prob(rates: RDD[(Int, Seq[CaratRate])]) = {
@@ -347,7 +347,7 @@ still providing a number that means something.
 
       /* Swap if the above assignment was not the right guess: */
       if (oneFlat.size > 0 && twoFlat.size > 0) {
-        if (oneFlat.first._1 < twoFlat.first._1) {
+        if (oneFlat.head._1 < twoFlat.head._1) {
           smaller = twoFlat
           bigger = oneFlat
         }

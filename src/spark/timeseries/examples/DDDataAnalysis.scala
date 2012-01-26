@@ -220,7 +220,7 @@ object DDDataAnalysis {
     val caratFreq = caratDataFile.substring(0, dot) + "-frequency"
 
     analyzeRateData(getRates(sc, caratDataFile), caratFreq)
-    exit(0)
+    sys.exit(0)
   }
 
   def prob(rates: RDD[(Int, Seq[CaratRate])]) = {
@@ -406,7 +406,7 @@ object DDDataAnalysis {
     val bucketed = new ArrayBuffer[(Int, Double)]
       val bucketedNeg = new ArrayBuffer[(Int, Double)]
       
-      val maxX = Math.max(values.last._1, others.last._1)
+      val maxX = math.max(values.last._1, others.last._1)
       // TODO: Bucket x ranges here
       var valueIndex = 0
       var othersIndex = 0
@@ -445,7 +445,7 @@ object DDDataAnalysis {
     var mul = 1
     for (k <- 0 until DECIMALS)
       mul *= 10
-    result = Math.round(result*mul)
+    result = math.round(result*mul)
     result/mul
   }
 
@@ -461,7 +461,7 @@ object DDDataAnalysis {
 
     /* Swap if the above assignment was not the right guess: */
     if (one.size > 0 && two.size > 0) {
-      if (one.first._1 < two.first._1) {
+      if (one.head._1 < two.head._1) {
         smaller = two
         bigger = one
       }

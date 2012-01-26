@@ -188,7 +188,7 @@ still providing a number that means something.
     val caratFreq = caratDataFile.substring(0,dot)+"-frequency"
     
     analyzeRateData(getRates(sc, caratDataFile), caratFreq)
-    exit(0)
+    sys.exit(0)
   }
   
   
