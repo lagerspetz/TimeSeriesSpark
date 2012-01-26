@@ -1,6 +1,5 @@
 package spark.timeseries.examples
 
-import com.amazonaws.auth.BasicAWSCredentials
 import java.io.File
 import java.io.FileOutputStream
 import java.io.ObjectOutputStream
@@ -22,7 +21,6 @@ import com.amazonaws.services.dynamodb.model.DeleteTableRequest
 object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
 
-  
   val xrange = "xrange"
   val prob = "prob"
   val probNeg = "probNeg"
@@ -31,9 +29,6 @@ object DynamoDbEncoder {
   //val probcNeg = "probcNeg"
   val xmax = "xmax"
   val distanceField = "distance"
-    
-  
-  
   
   def put(table: String, keyName: String, keyValue:String,
       //xrange1: Seq[Double],

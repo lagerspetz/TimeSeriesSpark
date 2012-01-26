@@ -1,16 +1,16 @@
 package spark.timeseries.examples
 
+import com.amazonaws.auth.PropertiesCredentials
 import com.amazonaws.services.s3.AmazonS3
 import com.amazonaws.services.s3.AmazonS3Client
-import com.amazonaws.auth.BasicAWSCredentials
 import java.io.File
 import java.io.FileOutputStream
 import java.io.ObjectOutputStream
 import java.io.ObjectInputStream
-import com.amazonaws.auth.PropertiesCredentials
+
 
 object S3Encoder {
-  val cred = new PropertiesCredentials(S3Encoder.getClass().getResourceAsStream("AwsCredentials.properties"))
+  val cred = new PropertiesCredentials(S3Encoder.getClass().getResourceAsStream("/AwsCredentials.properties"))
   val s3 = new AmazonS3Client(cred)
   val bucket = "carat.results"
   var tempFile = File.createTempFile("aws-java-sdk-", ".bin")
