@@ -490,7 +490,7 @@ object CaratDynamoDataAnalysis {
     }
   }
 
-   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyName: String, keyValue: String, uuidApps: Set[String] = null) {
+   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyName: String, keyValue: String, uuidApps: Set[String] = new HashSet[String]) {
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
@@ -528,7 +528,6 @@ object CaratDynamoDataAnalysis {
       }
 
       val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
-
       DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance, uuidApps.toSeq)
     }
   }
