@@ -31,7 +31,7 @@ package object carat {
 
   val sampleKey = regsUuid
   val sampleTime = regsTimestamp
-  val sampleProcesses = "piList"
+  val sampleProcesses = "processList"
   val sampleBatteryState = "batteryState"
   val sampleBatteryLevel = "batteryLevel"
   val sampleEvent = "triggeredBy"
