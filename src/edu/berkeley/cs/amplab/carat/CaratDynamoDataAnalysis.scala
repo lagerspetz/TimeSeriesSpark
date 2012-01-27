@@ -143,6 +143,9 @@ object CaratDynamoDataAnalysis {
       analyzeRateData(allData, allUuids, allOses, allModels)
   }
 
+  /**
+   * 
+   */
   def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], allUuids: Set[String]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
@@ -204,6 +207,10 @@ object CaratDynamoDataAnalysis {
     result
   }
 
+  /**
+   * Process a bunch of samples, assumed to be in order by uuid and timestamp.
+   * will return an RDD of CaratRates. Samples need not be from the same uuid.
+   */
   def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate] = null) = {
     if (samples.size < 100){
       for (x <- samples)
@@ -216,31 +223,7 @@ object CaratDynamoDataAnalysis {
     }
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(x => {
-      /*
-       * Data format guess:
-       * 
-       * Sample(uuId:0ACCBB95-06DC-4C06-9B96-2D1BF8E8576E, timestamp:1.327476628456556E9,
-       * piList:[ProcessInfo(pId:3030160, pName:lockdownd), ProcessInfo(pId:3029824, pName:imagent), ProcessInfo(pId:3031904, pName:aggregated),
-       * ProcessInfo(pId:3032048, pName:absinthed.N88), ProcessInfo(pId:3032432, pName:notifyd), ProcessInfo(pId:3032608, pName:lsd),
-       * ProcessInfo(pId:3032784, pName:fseventsd), ProcessInfo(pId:3032960, pName:Music~iphone), ProcessInfo(pId:2480128, pName:kernel_task),
-       * ProcessInfo(pId:3032944, pName:Carat), ProcessInfo(pId:3033488, pName:aosnotifyd), ProcessInfo(pId:3033664, pName:configd),
-       * ProcessInfo(pId:3033840, pName:syslogd), ProcessInfo(pId:3034016, pName:networkd), ProcessInfo(pId:3034192, pName:pasteboardd),
-       * ProcessInfo(pId:3034368, pName:fairplayd.N88), ProcessInfo(pId:3034544, pName:sandboxd), ProcessInfo(pId:3034768, pName:lockbot),
-       * ProcessInfo(pId:3034928, pName:Dusk), ProcessInfo(pId:3035104, pName:CommCenterClassi), ProcessInfo(pId:3035248, pName:MobileMail),
-       * ProcessInfo(pId:3035408, pName:powerd), ProcessInfo(pId:3035568, pName:amfid), ProcessInfo(pId:3035744, pName:SpringBoard),
-       * ProcessInfo(pId:3035904, pName:iapd), ProcessInfo(pId:3036080, pName:notification_pro), ProcessInfo(pId:2455168, pName:launchd),
-       * ProcessInfo(pId:3036416, pName:mediaremoted), ProcessInfo(pId:3036576, pName:wifid), ProcessInfo(pId:3036944, pName:dataaccessd),
-       * ProcessInfo(pId:3030608, pName:locationd), ProcessInfo(pId:3037184, pName:springboardservi), ProcessInfo(pId:3037360, pName:vampires),
-       * ProcessInfo(pId:3037536, pName:debugserver), ProcessInfo(pId:3037712, pName:librariand), ProcessInfo(pId:3037888, pName:installd),
-       * ProcessInfo(pId:2831616, pName:UserEventAgent), ProcessInfo(pId:3038224, pName:Pandora), ProcessInfo(pId:3038400, pName:syslog_relay),
-       * ProcessInfo(pId:3038560, pName:awdd), ProcessInfo(pId:3038736, pName:mediaserverd), ProcessInfo(pId:3038912, pName:mDNSResponder),
-       * ProcessInfo(pId:3039088, pName:BTServer), ProcessInfo(pId:3039264, pName:notification_pro), ProcessInfo(pId:3039424, pName:apsd),
-       * ProcessInfo(pId:3039584, pName:ptpd), ProcessInfo(pId:3039760, pName:MobilePhone), ProcessInfo(pId:3039920, pName:ubd)],
-       * batteryState:Charging, batteryLevel:0.800000011920929,
-       * memoryWired:3003104, memoryActive:2870928, memoryInactive:2808624, memoryFree:2769920, memoryUser:2875632,
-       * triggeredBy:applicationDidBecomeActive)
-       */
-        
+        /* See properties in package.scala for data keys. */
         val uuid = x.get(sampleKey).getOrElse("").toString()
         val apps = x.get(sampleProcesses).getOrElse(Seq[String]()).asInstanceOf[Seq[String]].map(x => {
           if (x == null)
@@ -391,10 +374,11 @@ object CaratDynamoDataAnalysis {
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
-  // debug
+  /* debug
     val coll = rateData.collect()
     for (k <- coll)
       println("Rate: " + k._1 + " -> "+ k._2)
+      */
     for (os <- oses) {
       val fromOs = rateData.map(distributionFilter(_, _.os == os))
       val notFromOs = rateData.map(distributionFilter(_, _.os != os))
@@ -410,7 +394,6 @@ object CaratDynamoDataAnalysis {
     }
     
     for (uuid <- uuids) {
-
       /*
        * TODO: if there are other combinations with uuid, they go into this loop
        */
