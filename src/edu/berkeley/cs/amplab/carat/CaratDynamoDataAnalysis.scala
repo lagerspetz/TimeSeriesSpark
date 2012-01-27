@@ -260,7 +260,7 @@ object CaratDynamoDataAnalysis {
 
   def rateMapper(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
     // (uuid, time, batteryLevel, event, batteryState, apps)
-    var prevD = 0L
+    var prevD = 0.0
     var prevBatt = 0.0
     var prevEvents = new HashSet[String]()
     var prevApps = new HashSet[String]()
@@ -270,7 +270,7 @@ object CaratDynamoDataAnalysis {
 
     var rates = new ArrayBuffer[CaratRate]
 
-    var d = 0L
+    var d = 0.0
     var events = ArrayBuffer[String]()
     var apps:Seq[String] = Array[String]()
     var batt = 0.0
@@ -278,7 +278,7 @@ object CaratDynamoDataAnalysis {
     var pluggedIn = false
 
     for (k <- observations) {
-      d = k._2.toLong
+      d = k._2.toDouble
       batt = k._3.toDouble
       events = new ArrayBuffer[String]
       events ++= k._4.trim().toLowerCase().split(" ")

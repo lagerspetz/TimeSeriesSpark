@@ -5,7 +5,7 @@ import scala.collection.mutable.HashSet
  * Represents a rate measurement of Carat.
  */
 class CaratRate(var uuid:String, val os:String, val model:String,
-    val timeDiff:Long, val batteryDiff:Double,
+    val timeDiff:Double, val batteryDiff:Double,
     val events1:Seq[String], val events2:Seq[String],
     val apps1:Seq[String], val apps2:Seq[String]) extends Ordered[CaratRate] with Serializable{
   
@@ -14,6 +14,10 @@ class CaratRate(var uuid:String, val os:String, val model:String,
   }
   
   def this(uuid: String, os:String, model:String, time1: Long, time2:Long, battery1:Double, battery2:Double, events1:Seq[String], events2: Seq[String], apps1:Seq[String], apps2:Seq[String]){
+    this(uuid, os, model, time2-time1, battery2-battery1, events1, events2, apps1, apps2)
+  }
+  
+  def this(uuid: String, os:String, model:String, time1: Double, time2:Double, battery1:Double, battery2:Double, events1:Seq[String], events2: Seq[String], apps1:Seq[String], apps2:Seq[String]){
     this(uuid, os, model, time2-time1, battery2-battery1, events1, events2, apps1, apps2)
   }
   
