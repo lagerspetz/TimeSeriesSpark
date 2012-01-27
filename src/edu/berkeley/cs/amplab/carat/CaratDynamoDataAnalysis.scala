@@ -420,6 +420,7 @@ object CaratDynamoDataAnalysis {
         val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
         writeTriplet(appFromUuid, appNotFromUuid, bugsTable, (resultKey, appKey), (uuid, app))
       }
+      similarApps(fromUuid, notFromUuid, uuid, uuidApps)
     }
 
     for (app <- allApps) {
@@ -427,6 +428,12 @@ object CaratDynamoDataAnalysis {
       val filteredNeg = rateData.map(distributionFilter(_, negativeAppFilter(_, app)))
       writeTriplet(filtered, filteredNeg, appsTable, appKey, app)
     }
+  }
+  
+  def similarApps(mine: RDD[(String, Seq[CaratRate])], others: RDD[(String, Seq[CaratRate])], uuid: String, uuidApps: Set[String]) {
+    val sCount = similarityCount(uuidApps.size)
+    val similarOthers = others.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size >= sCount))
+     writeTriplet(mine, similarOthers, similarsTable, similarKey, uuid)
   }
 
   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyNames: (String, String), keyValues: (String, String)) {

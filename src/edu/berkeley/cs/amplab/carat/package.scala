@@ -3,27 +3,30 @@ package edu.berkeley.cs.amplab
 import spark.RDD
 import scala.collection.immutable.TreeMap
 package object carat {
-    
+
   val UUIDString = "uuId"
-  
+
   val resultsTable = "carat.latestresults"
   val resultKey = UUIDString
-    
-  val appsTable = "carat.latestapps"  
+  
+  val similarsTable = "carat.similarusers"
+  val similarKey = UUIDString
+  
+  val appsTable = "carat.latestapps"
   val appKey = "appName"
-    
+
   val bugsTable = "carat.latestbugs"
-    
+
   val modelsTable = "carat.latestmodels"
   val modelKey = "model"
-  
+
   val osTable = "carat.latestos"
   val osKey = "os"
-    
+
   // For getting data:
   val registrationTable = "carat.registrations"
   val samplesTable = "carat.samples"
-    
+
   val regsUuid = UUIDString
   val regsModel = "platformId"
   val regsTimestamp = "timestamp"
@@ -35,6 +38,8 @@ package object carat {
   val sampleBatteryState = "batteryState"
   val sampleBatteryLevel = "batteryLevel"
   val sampleEvent = "triggeredBy"
+
+  def similarityCount(numberOfApps: Double) = math.log(numberOfApps)
 
   def flatten(filtered: RDD[(String, TreeMap[Double, Double])]) = {
     // there are x treemaps. We need to flatten them but include the uuid.

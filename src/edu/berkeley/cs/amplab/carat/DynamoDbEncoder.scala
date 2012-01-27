@@ -115,8 +115,10 @@ object DynamoDbEncoder {
       //val item = dd.getItem(new GetItemRequest("carat.latestbugs", new Key(new AttributeValue("85")))).getItem()
       //println("Item: " + item.mkString("\n"))
     }
-    val k = new UpdateTableRequest().withTableName(samplesTable).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(30))
-    dd.updateTable(k)
+//    val k = new UpdateTableRequest().withTableName(samplesTable).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(30))
+//    dd.updateTable(k)
+    
+    createSimilarsTable()
   }
 
   /**
@@ -149,6 +151,16 @@ object DynamoDbEncoder {
     ks.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(resultsTable, new KeySchema(ks))
+    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
+    dd.createTable(req)
+  }
+  
+   def createSimilarsTable() {
+    val getKey = new KeySchemaElement()
+    val ks = getKey.withAttributeName(similarKey)
+    ks.setAttributeType("S")
+    // will only have current
+    val req = new CreateTableRequest(similarsTable, new KeySchema(ks))
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
