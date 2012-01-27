@@ -11,6 +11,7 @@ import com.amazonaws.services.dynamodb.model.AttributeValue
 import com.amazonaws.services.dynamodb.model.DeleteTableRequest
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.UpdateTableRequest
+import java.util.HashSet
 
 object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
@@ -29,7 +30,7 @@ object DynamoDbEncoder {
   def put(table: String, keyName: String, keyValue: String,
     maxX: Double,
     prob1: Seq[(Int, Double)], prob2: Seq[(Int, Double)],
-    distance: Double, uuidApps: Seq[String] = null) {
+    distance: Double, uuidApps: Seq[String] = new HashSet[String].toSeq) {
     if (uuidApps.size > 0)
       put(table, (keyName, keyValue), (xmax, maxX),
         (prob, prob1.map(x => { x._1 + ";" + x._2 })),
