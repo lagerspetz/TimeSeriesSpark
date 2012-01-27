@@ -26,7 +26,7 @@ package object carat {
     
   val regsUuid = UUIDString
   val regsModel = "platformId"
-    val regsTimestamp = "timestamp"
+  val regsTimestamp = "timestamp"
   val regsOs = "osVersion"
 
   val sampleKey = regsUuid

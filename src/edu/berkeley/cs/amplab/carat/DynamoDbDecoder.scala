@@ -27,8 +27,8 @@ object DynamoDbDecoder {
   }
   
   def debug_deleteSystemVersion(){
-    deleteItems(registrationTable, regsUuid, ("systemVersion", "5.0.1"))
-    deleteItems(registrationTable, regsUuid, ("systemVersion", "7.0.1RC1"))
+    deleteItems(registrationTable, regsUuid, regsTimestamp, ("systemVersion", "5.0.1"))
+    deleteItems(registrationTable, regsUuid, regsTimestamp, ("systemVersion", "7.0.1RC1"))
   }
   
   def deleteItems(table:String, keyName:String, vals: (String, Any)*){
@@ -38,6 +38,18 @@ object DynamoDbDecoder {
       if (key != ""){
         println("Going to delete " +keyName +" = " + key + ": " + k + " from " + table)
         //deleteItem(key)
+      }
+    }
+  }
+  
+  def deleteItems(table:String, hashKeyName:String, rangeKeyName:String, vals: (String, Any)*){
+    val items = filterItems(table, vals: _*)
+    for (k <- items._2){
+      val hkey = k.get(hashKeyName).getOrElse("").toString()
+      val rkey = k.get(rangeKeyName).getOrElse("").toString()
+      if (hkey != null && rkey != ""){
+        println("Going to delete " +hashKeyName +" = " + hkey +", " +rangeKeyName +" = " + rkey + ": " + k + " from " + table)
+        deleteItem(hkey, rkey)
       }
     }
   }
