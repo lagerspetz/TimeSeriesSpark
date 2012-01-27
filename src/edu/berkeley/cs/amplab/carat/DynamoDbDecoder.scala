@@ -22,6 +22,13 @@ object DynamoDbDecoder {
     while (it.hasNext) {
       S3Decoder.printList(getAllItems(it.next)._2)
     }
+    
+    debug_deleteSystemVersion()
+  }
+  
+  def debug_deleteSystemVersion(){
+    deleteItems(registrationTable, regsUuid, ("systemVersion", "5.0.1"))
+    deleteItems(registrationTable, regsUuid, ("systemVersion", "7.0.1RC1"))
   }
   
   def deleteItems(table:String, keyName:String, vals: (String, Any)*){
