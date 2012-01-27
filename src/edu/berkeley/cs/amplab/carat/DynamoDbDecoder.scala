@@ -46,7 +46,7 @@ object DynamoDbDecoder {
     val items = filterItems(table, vals: _*)
     for (k <- items._2){
       val hkey = k.get(hashKeyName).getOrElse("").toString()
-      val rkey = k.get(rangeKeyName).getOrElse("").toString()
+      val rkey = k.get(rangeKeyName).get
       if (hkey != null && rkey != ""){
         println("Going to delete " +hashKeyName +" = " + hkey +", " +rangeKeyName +" = " + rkey + ": " + k + " from " + table)
         deleteItem(table, hkey, rkey)
