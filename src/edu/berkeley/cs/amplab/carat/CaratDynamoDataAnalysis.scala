@@ -415,9 +415,22 @@ object CaratDynamoDataAnalysis {
        * TODO: if there are other combinations with uuid, they go into this loop
        */
       val fromUuid = rateData.filter(_._1 == uuid)
+      
+      val tempApps = fromUuid.map(x => {
+      var buf = new HashSet[String]
+      for (k <- x._2) {
+        buf ++= k.getAllApps()
+      }
+      buf
+    }).collect()
+
+    var uuidApps = new HashSet[String]
+    for (k <- tempApps)
+      uuidApps ++= k
+      
       val notFromUuid = rateData.filter(_._1 != uuid)
 
-      writeTriplet(fromUuid, notFromUuid, resultsTable, resultKey, uuid)
+      writeTriplet(fromUuid, notFromUuid, resultsTable, resultKey, uuid, uuidApps)
 
       for (app <- allApps) {
         val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
@@ -477,7 +490,7 @@ object CaratDynamoDataAnalysis {
     }
   }
 
-  def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyName: String, keyValue: String) {
+   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyName: String, keyValue: String, uuidApps: Set[String] = null) {
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
@@ -516,7 +529,7 @@ object CaratDynamoDataAnalysis {
 
       val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
 
-      DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance)
+      DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance, uuidApps.toSeq)
     }
   }
 

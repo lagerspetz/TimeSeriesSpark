@@ -20,6 +20,7 @@ object DynamoDbEncoder {
   val probNeg = "probNeg"
   val xmax = "xmax"
   val distanceField = "distance"
+  val apps = "reportedApps"
 
   /**
    * Put a new entry into a table that uses only a HashKey.
@@ -28,26 +29,33 @@ object DynamoDbEncoder {
   def put(table: String, keyName: String, keyValue: String,
     maxX: Double,
     prob1: Seq[(Int, Double)], prob2: Seq[(Int, Double)],
-    distance: Double) {
-    put(table, (keyName, keyValue), (xmax, maxX),
-      (prob, prob1.map(x => { x._1 + ";" + x._2 })),
-      (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
-      (distanceField, distance))
+    distance: Double, uuidApps: Seq[String] = null) {
+    if (uuidApps != null)
+      put(table, (keyName, keyValue), (xmax, maxX),
+        (prob, prob1.map(x => { x._1 + ";" + x._2 })),
+        (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
+        (distanceField, distance),
+        (apps, uuidApps))
+    else
+      put(table, (keyName, keyValue), (xmax, maxX),
+        (prob, prob1.map(x => { x._1 + ";" + x._2 })),
+        (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
+        (distanceField, distance))
   }
 
   /**
    * Function that makes it easy to use the ridiculous DynamoDB put API.
    */
-  def put(table:String, vals: (String, Any)*) = {
+  def put(table: String, vals: (String, Any)*) = {
     val map = getMap(vals: _*)
-    println("Going to put into "+table+":\n" + map.mkString("\n"))
+    println("Going to put into " + table + ":\n" + map.mkString("\n"))
     val putReq = new PutItemRequest(table, map)
     dd.putItem(putReq)
   }
 
   /**
    * Helper function used by put(table, vals).
-   * Constructs Maps to be put into a table from a variable number of (String, Any) - pairs. 
+   * Constructs Maps to be put into a table from a variable number of (String, Any) - pairs.
    */
   def getMap(vals: (String, Any)*) = {
     val map = new java.util.HashMap[String, AttributeValue]()
@@ -80,7 +88,7 @@ object DynamoDbEncoder {
 
   /**
    * Test program. describes tables.
-   * 
+   *
    */
   def main(args: Array[String]) {
     val tables = dd.listTables().getTableNames()
@@ -97,11 +105,11 @@ object DynamoDbEncoder {
     val k = new UpdateTableRequest().withTableName(samplesTable).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(30))
     dd.updateTable(k)
   }
-  
+
   /**
    * Dangerous. Destroys and recreates tables.
    */
-  def clearTables(){
+  def clearTables() {
     var del = new DeleteTableRequest(resultsTable)
     dd.deleteTable(del)
     del = new DeleteTableRequest(osTable)
@@ -112,17 +120,17 @@ object DynamoDbEncoder {
     dd.deleteTable(del)
     del = new DeleteTableRequest(bugsTable)
     dd.deleteTable(del)
-    
+
     Thread.sleep(5)
-    
+
     createResultsTable()
     createOsTable()
     createModelsTable()
     createAppsTable()
     createBugsTable()
   }
-  
-  def createResultsTable(){
+
+  def createResultsTable() {
     val getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(resultKey)
     ks.setAttributeType("S")
@@ -131,8 +139,8 @@ object DynamoDbEncoder {
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
-  
-  def createOsTable(){
+
+  def createOsTable() {
     val getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(osKey)
     ks.setAttributeType("S")
@@ -141,8 +149,8 @@ object DynamoDbEncoder {
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
-  
-  def createModelsTable(){
+
+  def createModelsTable() {
     val getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(modelKey)
     ks.setAttributeType("S")
@@ -151,8 +159,8 @@ object DynamoDbEncoder {
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
-  
-  def createBugsTable(){
+
+  def createBugsTable() {
     var getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(resultKey)
     ks.setAttributeType("S")
@@ -164,8 +172,8 @@ object DynamoDbEncoder {
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
     dd.createTable(req)
   }
-  
-  def createAppsTable(){
+
+  def createAppsTable() {
     val getKey = new KeySchemaElement()
     val ks = getKey.withAttributeName(appKey)
     ks.setAttributeType("S")
