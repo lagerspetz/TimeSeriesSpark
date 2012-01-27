@@ -49,25 +49,23 @@ object DynamoDbDecoder {
       val rkey = k.get(rangeKeyName).getOrElse("").toString()
       if (hkey != null && rkey != ""){
         println("Going to delete " +hashKeyName +" = " + hkey +", " +rangeKeyName +" = " + rkey + ": " + k + " from " + table)
-        deleteItem(hkey, rkey)
+        deleteItem(table, hkey, rkey)
       }
     }
   }
   
-  def deleteItem(keyPart:String) {
-    val d = new DeleteItemRequest()
+  def deleteItem(tableName:String, keyPart:String) {
     val getKey = new Key()
     val ks = getKey.withHashKeyElement(new AttributeValue(keyPart))
-    d.setKey(ks)
+    val d = new DeleteItemRequest(tableName, ks)
     DynamoDbEncoder.dd.deleteItem(d)
   }
 
-  def deleteItem(keyPart: String, rangeKeyPart: String) {
-    val d = new DeleteItemRequest()
+  def deleteItem(tableName:String, keyPart: String, rangeKeyPart: String) {
     val getKey = new Key()
     val ks = getKey.withHashKeyElement(new AttributeValue(keyPart))
       .withRangeKeyElement(new AttributeValue(rangeKeyPart))
-    d.setKey(ks)
+    val d = new DeleteItemRequest(tableName, ks)
     DynamoDbEncoder.dd.deleteItem(d)
   }
   
