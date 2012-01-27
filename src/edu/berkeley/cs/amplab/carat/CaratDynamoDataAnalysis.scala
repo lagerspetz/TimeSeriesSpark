@@ -205,6 +205,10 @@ object CaratDynamoDataAnalysis {
   }
 
   def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate] = null) = {
+    if (samples.size < 100){
+      for (x <- samples)
+        println(x.mkString("\n"))
+    }
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(x => {
       /*
