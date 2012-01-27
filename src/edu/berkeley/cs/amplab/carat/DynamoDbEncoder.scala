@@ -9,8 +9,8 @@ import com.amazonaws.services.dynamodb.model.ProvisionedThroughput
 import com.amazonaws.services.dynamodb.model.PutItemRequest
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import com.amazonaws.services.dynamodb.model.DeleteTableRequest
-import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.UpdateTableRequest
+import collection.JavaConversions._
 import java.util.HashSet
 
 object DynamoDbEncoder {
@@ -59,7 +59,7 @@ object DynamoDbEncoder {
    * Constructs Maps to be put into a table from a variable number of (String, Any) - pairs.
    */
   def getMap(vals: (String, Any)*) = {
-    val map = new java.util.HashMap[String, AttributeValue]()
+    val map:java.util.Map[String, AttributeValue] = new java.util.HashMap[String, AttributeValue]()
     for (k <- vals) {
       if (k._2.isInstanceOf[Double]
         || k._2.isInstanceOf[Int]
@@ -72,6 +72,14 @@ object DynamoDbEncoder {
       else
         map.put(k._1, new AttributeValue(k._2 + ""))
     }
+    map
+  }
+  
+  def convertToMap[T](vals: Seq[(String, T)]) = {
+    val map:java.util.Map[String, T] = new java.util.HashMap[String, T]()
+     for (k <- vals) {
+       map.put(k._1, k._2)
+     }
     map
   }
 

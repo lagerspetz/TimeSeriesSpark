@@ -8,6 +8,8 @@ import com.amazonaws.services.dynamodb.model.QueryRequest
 import collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.immutable.HashMap
+import com.amazonaws.services.dynamodb.model.DeleteItemRequest
+import com.amazonaws.services.dynamodb.model.Condition
 
 object DynamoDbDecoder {
 /**
@@ -21,6 +23,45 @@ object DynamoDbDecoder {
       S3Decoder.printList(getAllItems(it.next)._2)
     }
   }
+  
+  def deleteItems(table:String, keyName:String, vals: (String, Any)*){
+    val items = filterItems(table, vals: _*)
+    for (k <- items._2){
+      val key = k.get(keyName).getOrElse("").toString()
+      if (key != ""){
+        println("Going to delete " +keyName +" = " + key + ": " + k + " from " + table)
+        //deleteItem(key)
+      }
+    }
+  }
+  
+  def deleteItem(keyPart:String) {
+    val d = new DeleteItemRequest()
+    val getKey = new Key()
+    val ks = getKey.withHashKeyElement(new AttributeValue(keyPart))
+    d.setKey(ks)
+    DynamoDbEncoder.dd.deleteItem(d)
+  }
+
+  def deleteItem(keyPart: String, rangeKeyPart: String) {
+    val d = new DeleteItemRequest()
+    val getKey = new Key()
+    val ks = getKey.withHashKeyElement(new AttributeValue(keyPart))
+      .withRangeKeyElement(new AttributeValue(rangeKeyPart))
+    d.setKey(ks)
+    DynamoDbEncoder.dd.deleteItem(d)
+  }
+  
+  def filterItems(table:String, vals: (String, Any)*) = {
+    val s = new ScanRequest(table)
+    val conds = DynamoDbEncoder.convertToMap[Condition](vals.map(x => {
+      (x._1, new Condition().withComparisonOperator("EQ").withAttributeValueList(new AttributeValue(x._2.toString())))
+    }))
+    s.setScanFilter(conds)
+    val sr = DynamoDbEncoder.dd.scan(s)
+    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
+  }
+  
   
   def getAllItems(table:String) = {
     println("Getting all items from table " + table)
