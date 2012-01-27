@@ -30,7 +30,7 @@ object DynamoDbEncoder {
     maxX: Double,
     prob1: Seq[(Int, Double)], prob2: Seq[(Int, Double)],
     distance: Double, uuidApps: Seq[String] = null) {
-    if (uuidApps != null)
+    if (uuidApps.size > 0)
       put(table, (keyName, keyValue), (xmax, maxX),
         (prob, prob1.map(x => { x._1 + ";" + x._2 })),
         (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
