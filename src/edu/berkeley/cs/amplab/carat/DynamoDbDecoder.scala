@@ -61,10 +61,9 @@ object DynamoDbDecoder {
     DynamoDbEncoder.dd.deleteItem(d)
   }
 
-  def deleteItem(tableName:String, keyPart: String, rangeKeyPart: String) {
-    val getKey = new Key()
-    val ks = getKey.withHashKeyElement(new AttributeValue(keyPart))
-      .withRangeKeyElement(new AttributeValue(rangeKeyPart))
+  def deleteItem(tableName:String, keyPart: String, rangeKeyPart: Any) {
+    val ks = new Key().withHashKeyElement(new AttributeValue(keyPart))
+    .withRangeKeyElement(DynamoDbEncoder.toAttributeValue(rangeKeyPart))
     val d = new DeleteItemRequest(tableName, ks)
     DynamoDbEncoder.dd.deleteItem(d)
   }

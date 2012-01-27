@@ -61,18 +61,22 @@ object DynamoDbEncoder {
   def getMap(vals: (String, Any)*) = {
     val map:java.util.Map[String, AttributeValue] = new java.util.HashMap[String, AttributeValue]()
     for (k <- vals) {
-      if (k._2.isInstanceOf[Double]
-        || k._2.isInstanceOf[Int]
-        || k._2.isInstanceOf[Long]
-        || k._2.isInstanceOf[Float]
-        || k._2.isInstanceOf[Short])
-        map.put(k._1, new AttributeValue().withN(k._2 + ""))
-      else if (k._2.isInstanceOf[Seq[String]])
-        map.put(k._1, new AttributeValue().withSS(k._2.asInstanceOf[Seq[String]]))
-      else
-        map.put(k._1, new AttributeValue(k._2 + ""))
+        map.put(k._1, toAttributeValue(k._2))
     }
     map
+  }
+
+  def toAttributeValue(thing: Any) = {
+    if (thing.isInstanceOf[Double]
+      || thing.isInstanceOf[Int]
+      || thing.isInstanceOf[Long]
+      || thing.isInstanceOf[Float]
+      || thing.isInstanceOf[Short])
+      new AttributeValue().withN(thing + "")
+    else if (thing.isInstanceOf[Seq[String]])
+      new AttributeValue().withSS(thing.asInstanceOf[Seq[String]])
+    else
+      new AttributeValue(thing + "")
   }
   
   def convertToMap[T](vals: Seq[(String, T)]) = {
