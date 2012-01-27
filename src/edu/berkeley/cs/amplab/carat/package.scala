@@ -24,7 +24,7 @@ package object carat {
   val registrationTable = "carat.registrations"
   val samplesTable = "carat.samples"
     
-  val regsUuid = "uuid"
+  val regsUuid = UUIDString
   val regsModel = "platformId"
     val regsTimestamp = "timestamp"
   val regsOs = "systemVersion"

@@ -117,6 +117,8 @@ object CaratDynamoDataAnalysis {
     }
     
     println("All uuIds: " + allUuids.mkString(", "))
+    println("All oses: " + allOses.mkString(", "))
+    println("All models: " + allModels.mkString(", "))
 
     var allData:spark.RDD[(String, Seq[CaratRate])] = null
     
@@ -167,7 +169,7 @@ object CaratDynamoDataAnalysis {
       val uuid = x._1
       val model = x._2
       val os = x._3
-
+      println("Handling reg:" + x)
       /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
        * (as many as have a zero battery drain) should be re-used in the next batch. 
@@ -425,7 +427,7 @@ object CaratDynamoDataAnalysis {
   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyNames: (String, String), keyValues: (String, String)) {
     // probability distribution: r, count/sumCount
 
-    /* TODO: Figure out max x value (maximum rate) and bucket y values of 
+    /* Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
        */
     val probOne = prob(one)
@@ -460,7 +462,6 @@ object CaratDynamoDataAnalysis {
         getDistance(cumulative, cumulativeNeg)
       }
 
-      // TODO: Normalize x range here
       val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
 
       DynamoDbEncoder.putBug(table, keyNames, keyValues, maxX, bucketed, bucketedNeg, distance)
@@ -470,7 +471,7 @@ object CaratDynamoDataAnalysis {
   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyName: String, keyValue: String) {
     // probability distribution: r, count/sumCount
 
-    /* TODO: Figure out max x value (maximum rate) and bucket y values of 
+    /* Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
        */
     val probOne = prob(one)
@@ -518,7 +519,7 @@ object CaratDynamoDataAnalysis {
     val bucketedNeg = new ArrayBuffer[(Int, Double)]
 
     val maxX = math.max(values.last._1, others.last._1)
-    // TODO: Bucket x ranges here
+
     var valueIndex = 0
     var othersIndex = 0
     for (k <- 0 until buckets) {
