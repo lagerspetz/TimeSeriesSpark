@@ -434,9 +434,11 @@ object CaratDynamoDataAnalysis {
   
   def similarApps(all: RDD[(String, Seq[CaratRate])], uuid: String, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
+    printf("SimilarApps uuid=%s sCount=%s uuidApps.size\n",sCount, uuid, uuidApps.size)
     val similar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size >= sCount))
     val dissimilar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size < sCount))
-     writeTriplet(similar, dissimilar, similarsTable, similarKey, uuid)
+    printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
+    writeTriplet(similar, dissimilar, similarsTable, similarKey, uuid)
   }
 
   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyNames: (String, String), keyValues: (String, String)) {
@@ -491,7 +493,7 @@ object CaratDynamoDataAnalysis {
        */
     val probOne = prob(one)
     val probTwo = prob(two)
-
+    printf("About to flatten %s %s and %s %s\n", probOne, probOne.count(), probTwo, probTwo.count())
     val values = flatten(probOne)
     val others = flatten(probTwo)
 
