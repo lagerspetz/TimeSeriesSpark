@@ -9,7 +9,6 @@ import com.amazonaws.services.dynamodb.model.ProvisionedThroughput
 import com.amazonaws.services.dynamodb.model.PutItemRequest
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import com.amazonaws.services.dynamodb.model.DeleteTableRequest
-import com.amazonaws.services.dynamodb.model.UpdateTableRequest
 import collection.JavaConversions._
 import java.util.HashSet
 

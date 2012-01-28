@@ -392,25 +392,28 @@ object CaratDynamoDataAnalysis {
 
       writeTriplet(fromModel, notFromModel, modelsTable, modelKey, model)
     }
-    
+
     for (uuid <- uuids) {
       /*
        * TODO: if there are other combinations with uuid, they go into this loop
        */
+      
       val fromUuid = rateData.filter(_._1 == uuid)
-      
-      val tempApps = fromUuid.map(x => {
-      var buf = new HashSet[String]
-      for (k <- x._2) {
-        buf ++= k.getAllApps()
-      }
-      buf
-    }).collect()
 
-    var uuidApps = new HashSet[String]
-    for (k <- tempApps)
-      uuidApps ++= k
-      
+      val tempApps = fromUuid.map(x => {
+        var buf = new HashSet[String]
+        for (k <- x._2) {
+          buf ++= k.getAllApps()
+        }
+        buf
+      }).collect()
+
+      var uuidApps = new HashSet[String]
+      for (k <- tempApps)
+        uuidApps ++= k
+        
+      similarApps(rateData, uuid, uuidApps)
+
       val notFromUuid = rateData.filter(_._1 != uuid)
 
       writeTriplet(fromUuid, notFromUuid, resultsTable, resultKey, uuid, uuidApps)
@@ -420,7 +423,6 @@ object CaratDynamoDataAnalysis {
         val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
         writeTriplet(appFromUuid, appNotFromUuid, bugsTable, (resultKey, appKey), (uuid, app))
       }
-      similarApps(fromUuid, notFromUuid, uuid, uuidApps)
     }
 
     for (app <- allApps) {
@@ -430,10 +432,11 @@ object CaratDynamoDataAnalysis {
     }
   }
   
-  def similarApps(mine: RDD[(String, Seq[CaratRate])], others: RDD[(String, Seq[CaratRate])], uuid: String, uuidApps: Set[String]) {
+  def similarApps(all: RDD[(String, Seq[CaratRate])], uuid: String, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
-    val similarOthers = others.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size >= sCount))
-     writeTriplet(mine, similarOthers, similarsTable, similarKey, uuid)
+    val similar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size >= sCount))
+    val dissimilar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size < sCount))
+     writeTriplet(similar, dissimilar, similarsTable, similarKey, uuid)
   }
 
   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], table: String, keyNames: (String, String), keyValues: (String, String)) {
