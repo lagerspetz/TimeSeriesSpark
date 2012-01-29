@@ -216,9 +216,9 @@ object CaratDynamoDataAnalysis {
       for (x <- samples) {
         for (k <- x) {
           if (k._2.isInstanceOf[Seq[String]])
-            print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ")")
+            print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ") ")
           else
-            print(k)
+            print(k+" ")
         }
         println()
       }
@@ -436,7 +436,7 @@ object CaratDynamoDataAnalysis {
   
   def similarApps(all: RDD[(String, Seq[CaratRate])], uuid: String, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
-    printf("SimilarApps uuid=%s sCount=%s uuidApps.size\n",sCount, uuid, uuidApps.size)
+    printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n",uuid, sCount, uuidApps.size)
     val similar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size >= sCount))
     val dissimilar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size < sCount))
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
