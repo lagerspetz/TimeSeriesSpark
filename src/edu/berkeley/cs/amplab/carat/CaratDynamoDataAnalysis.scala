@@ -212,14 +212,16 @@ object CaratDynamoDataAnalysis {
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
   def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate] = null) = {
-    if (samples.size < 100){
-      for (x <- samples)
-       for (k <- x){
-         if (k._2.isInstanceOf[Seq[String]])
-               println("("+k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size+")")
-         else
-           println(k)
-       }
+    if (samples.size < 100) {
+      for (x <- samples) {
+        for (k <- x) {
+          if (k._2.isInstanceOf[Seq[String]])
+            print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ")")
+          else
+            print(k)
+        }
+        println()
+      }
     }
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(x => {
@@ -437,7 +439,7 @@ object CaratDynamoDataAnalysis {
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size\n",sCount, uuid, uuidApps.size)
     val similar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size >= sCount))
     val dissimilar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size < sCount))
-    printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
+    //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     writeTriplet(similar, dissimilar, similarsTable, similarKey, uuid)
   }
 
@@ -493,7 +495,7 @@ object CaratDynamoDataAnalysis {
        */
     val probOne = prob(one)
     val probTwo = prob(two)
-    printf("About to flatten %s %s and %s %s\n", probOne, probOne.count(), probTwo, probTwo.count())
+    //printf("About to flatten %s %s and %s %s\n", probOne, probOne.count(), probTwo, probTwo.count())
     val values = flatten(probOne)
     val others = flatten(probTwo)
 
