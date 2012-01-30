@@ -40,6 +40,8 @@ object CaratDynamoDataAnalysis {
   // Bucketing and decimal constants
   val buckets = 100
   val DECIMALS = 3
+  
+  val LIMIT_SPEED = false
 
    /**
    * Main program entry point.
@@ -198,7 +200,8 @@ object CaratDynamoDataAnalysis {
       
     while (!finished) {
       // avoid overloading "provisionedThroughput"
-      Thread.sleep(1)
+      if (LIMIT_SPEED)
+        Thread.sleep(1)
       
       println("Continuing from key=" + key)
       var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)

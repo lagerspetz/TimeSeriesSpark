@@ -84,7 +84,7 @@ object DynamoDbDecoder {
   def getAllItems(table:String) = {
     println("Getting all items from table " + table)
     val s = new ScanRequest(table)
-    s.setLimit(THROUGHPUT_LIMIT) 
+    //s.setLimit(THROUGHPUT_LIMIT) 
     val sr = DynamoDbEncoder.dd.scan(s)
     (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
@@ -93,21 +93,21 @@ object DynamoDbDecoder {
     println("Getting all items from table " + table + " starting with " + firstKey)
     val s = new ScanRequest(table)
     s.setExclusiveStartKey(firstKey)
-    s.setLimit(THROUGHPUT_LIMIT)
+    //s.setLimit(THROUGHPUT_LIMIT)
     val sr = DynamoDbEncoder.dd.scan(s)
     (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
 
   def getItems(table: String, keyPart: String) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart))
-    q.setLimit(THROUGHPUT_LIMIT)
+    //q.setLimit(THROUGHPUT_LIMIT)
     val sr = DynamoDbEncoder.dd.query(q)
     (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
 
   def getItems(table: String, keyPart: String, lastKey: Key) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart)).withExclusiveStartKey(lastKey)
-    q.setLimit(THROUGHPUT_LIMIT)
+    //q.setLimit(THROUGHPUT_LIMIT)
     val sr = DynamoDbEncoder.dd.query(q)
     (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
   }
