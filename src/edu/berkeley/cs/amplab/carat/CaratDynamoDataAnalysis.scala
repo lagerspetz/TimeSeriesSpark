@@ -283,7 +283,7 @@ object CaratDynamoDataAnalysis {
       batt = k._3.toDouble
       events = new ArrayBuffer[String]
       events ++= k._4.trim().toLowerCase().split(" ")
-      events += k._5
+      events += k._5.trim().toLowerCase()
       apps = k._6
 
       if (events.contains(discharge)) {
