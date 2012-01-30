@@ -217,13 +217,13 @@ object CaratDynamoDataAnalysis {
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
-  def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate] = null) = {
+  def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate]) = {
     if (samples.size < 100) {
       for (x <- samples) {
         for (k <- x) {
-          if (k._2.isInstanceOf[Seq[String]])
+          /*if (k._2.isInstanceOf[Seq[String]])
             print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ") ")
-          else
+          else*/
             print(k+" ")
         }
         println()
@@ -370,7 +370,8 @@ object CaratDynamoDataAnalysis {
     })
   }
 
-  def analyzeRateData(rateData: RDD[(String, Seq[CaratRate])],  uuids: Set[String], oses: Set[String], models: Set[String]) {
+  def analyzeRateData(rateData: RDD[(String, Seq[CaratRate])], 
+      uuids: Set[String], oses: Set[String], models: Set[String]) {
     val apps = rateData.map(x => {
       var buf = new HashSet[String]
       for (k <- x._2) {
@@ -382,6 +383,7 @@ object CaratDynamoDataAnalysis {
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
+    println("AllApps: "+ allApps)
   /* debug
     val coll = rateData.collect()
     for (k <- coll)
