@@ -233,11 +233,11 @@ object CaratDynamoDataAnalysis {
       val mapped = samples.map(x => {
         /* See properties in package.scala for data keys. */
         val uuid = x.get(sampleKey).getOrElse("").toString()
-        val apps = x.get(sampleProcesses).getOrElse(Seq[String]()).asInstanceOf[Seq[String]].map(x => {
-          if (x == null)
+        val apps = x.get(sampleProcesses).getOrElse(new ArrayBuffer[String]).asInstanceOf[Seq[String]].map(w => {
+          if (w == null)
             ""
           else {
-            val s = x.split(";")
+            val s = w.split(";")
             if (s.size > 1)
               s(1)
             else
