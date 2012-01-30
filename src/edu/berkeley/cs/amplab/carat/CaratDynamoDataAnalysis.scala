@@ -120,25 +120,20 @@ object CaratDynamoDataAnalysis {
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
 
+    var allRates:spark.RDD[CaratRate] = null
     var allData:spark.RDD[(String, Seq[CaratRate])] = null
     
-    var finished = false
-    var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
-    println("Got: " + regs.size + " registrations.")
-    allData = handleRegs(sc, regs, allUuids)
-    if (key == null)
-      finished = true
-    while (!finished) {
-      println("Continuing from key=" + key)
-      var (key2, regs2) = DynamoDbDecoder.getAllItems(registrationTable, key)
-      regs = regs2
-      key = key2
-      println("Got: " + regs.size + " registrations.")
-      if (allData != null)
-        allData = allData.union(handleRegs(sc, regs, allUuids))
-      if (key == null)
-        finished = true
+    allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+        DynamoDbDecoder.getAllItems(registrationTable, _),
+        handleRegs(sc, _, allUuids, _), allRates)
+    
+    if (allRates != null) {
+      allData = allRates.map(x => {
+        (x.uuid, x)
+      }).groupByKey()
+      //    })
     }
+    
     if (allData != null)
       analyzeRateData(allData, allUuids, allOses, allModels)
   }
@@ -146,7 +141,7 @@ object CaratDynamoDataAnalysis {
   /**
    * 
    */
-  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], allUuids: Set[String]) = {
+  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], allUuids: Set[String], dist: spark.RDD[CaratRate]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
      */
@@ -163,7 +158,7 @@ object CaratDynamoDataAnalysis {
       (uuid, model, os)
     })
     
-    var dist: spark.RDD[CaratRate] = null
+    var distRet: spark.RDD[CaratRate] = dist
     for (x <- regSet) {
       /*
        * Data format guess:
@@ -177,34 +172,45 @@ object CaratDynamoDataAnalysis {
        * FIXME: With incremental processing, the LAST sample or a few last samples
        * (as many as have a zero battery drain) should be re-used in the next batch. 
        */
-      var finished = false
-      var (key, samples) = DynamoDbDecoder.getItems(samplesTable, uuid)
-      println("Got: " + samples.size + " samples.")
-      dist = handleSamples(sc, samples, os, model, dist)
+      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable,uuid), DynamoDbDecoder.getItems(samplesTable,uuid, _), handleSamples(sc, _, os, model, _), distRet)
+    }
+    distRet
+  }
+
+  def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, scala.collection.mutable.Buffer[Map[String, Any]]),
+      tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, scala.collection.mutable.Buffer[Map[String, Any]]),
+    stepHandler: (scala.collection.mutable.Buffer[Map[String, Any]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
+    dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
+    /* 
+       * FIXME: With incremental processing, the LAST sample or a few last samples
+       * (as many as have a zero battery drain) should be re-used in the next batch. 
+       */
+    var finished = false
+    
+    var (key, results) = tableAndValueToKeyAndResults
+    println("Got: " + results.size + " results.")
+    
+    var distRet: spark.RDD[CaratRate] = null
+    distRet = stepHandler(results, dist)
+    
+    if (key == null)
+      finished = true
+      
+    while (!finished) {
+      // avoid overloading "provisionedThroughput"
+      Thread.sleep(1)
+      
+      println("Continuing from key=" + key)
+      var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
+      results = results2
+      key = key2
+      println("Got: " + results.size + " results.")
+      
+      distRet = stepHandler(results, distRet)
       if (key == null)
         finished = true
-      while (!finished) {
-        // avoid overloading "provisionedThroughput"
-        Thread.sleep(1) 
-        println("Continuing samples from key=" + key)
-        var (key2, samples2) = DynamoDbDecoder.getItems(samplesTable, uuid, key)
-        samples = samples2
-        key = key2
-        println("Got: " + samples.size + " samples.")
-        dist = handleSamples(sc, samples, os, model, dist)
-        if (key == null)
-          finished = true
-      }
     }
-    
-    var result:spark.RDD[(String, Seq[CaratRate])] = null
-    if (dist != null) {
-      result = dist.map(x => {
-        (x.uuid, x)
-      }).groupByKey()
-      //    })
-    }
-    result
+    distRet
   }
 
   /**
