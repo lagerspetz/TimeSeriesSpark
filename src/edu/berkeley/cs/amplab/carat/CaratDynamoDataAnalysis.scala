@@ -244,6 +244,7 @@ object CaratDynamoDataAnalysis {
               ""
           }
         })
+        println("uuid="+ uuid + " apps=" + apps)
         
         val time = x.get(sampleTime).getOrElse("").toString()
         val batteryState = x.get(sampleBatteryState).getOrElse("").toString()
