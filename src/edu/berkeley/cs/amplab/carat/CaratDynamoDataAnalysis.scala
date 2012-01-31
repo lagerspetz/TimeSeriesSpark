@@ -516,7 +516,8 @@ object CaratDynamoDataAnalysis {
 
     println("prob.size=" + values.size + " prob2.size=" + others.size + " " + keyName + "-" + keyValue)
     if (values.size > 0 && others.size > 0) {
-      val distance = {
+      val distance = getDistanceNonCumulative(values, others) 
+      val oldDist = {
         val cumulative = flatten(probOne.mapValues(x => {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
@@ -538,9 +539,11 @@ object CaratDynamoDataAnalysis {
         }))
         getDistance(cumulative, cumulativeNeg)
       }
+      println("old Dist: " + oldDist + "\n"+
+              "distance: " + distance)
       if (table != appsTable || distance >= 0) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
-        DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance, uuidApps.toSeq)
+        DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, oldDist, uuidApps.toSeq)
       }
     }
   }
@@ -593,6 +596,60 @@ object CaratDynamoDataAnalysis {
       mul *= 10
     result = math.round(result * mul)
     result / mul
+  }
+  
+  def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
+    // FIXME: use of collect may cause memory issues.
+    var maxDistance = -2.0
+    var prevOne = (-2.0, 0.0)
+    var prevTwo = (-2.0, 0.0)
+    var nextTwo = prevTwo
+
+    var smaller = one
+    var bigger = two
+
+    var sumOne = 0.0
+    var sumTwo = 0.0
+          
+    /* Swap if the above assignment was not the right guess: */
+    if (one.size > 0 && two.size > 0) {
+      if (one.head._1 < two.head._1) {
+        smaller = two
+        bigger = one
+      }
+    }
+
+    //println("one.size=" + one.size + " two.size=" + two.size)
+
+    var smallIter = smaller.iterator
+    for (k <- bigger) {
+      var distance = 0.0
+      sumOne += k._2
+      
+      while (smallIter.hasNext && nextTwo._1 < k._1) {
+        nextTwo = smallIter.next
+        sumTwo += nextTwo._2
+        nextTwo = (nextTwo._1, sumTwo)
+        //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
+        if (nextTwo._1 < k._1)
+          prevTwo = nextTwo
+      }
+
+      /* now nextTwo has the bigger one,
+         * prevTwo the one directly below k
+         */
+
+      /* NoApp - App gives a high positive number
+         * if the app uses a more energy. This is because
+         * if the app distribution is shifted to the right,
+         * it has a high probability of running at a high drain rate,
+         * and so its cumulative dist value is lower, and NoApp
+         * has a higher value. Inverse for low energy usage. */
+      distance = prevTwo._2 - sumOne
+      if (distance > maxDistance)
+        maxDistance = distance
+    }
+    maxDistance
   }
 
   def getDistance(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
