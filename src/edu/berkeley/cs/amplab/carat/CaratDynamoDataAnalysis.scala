@@ -551,17 +551,16 @@ object CaratDynamoDataAnalysis {
   }
 
   def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
-    // FIXME: use of collect may cause memory issues.
+    // Definitions:
+    // result will be here
     var maxDistance = -2.0
-    var prevOne = (-2.0, 0.0)
+    // represents previous value of distribution with a smaller starting value
     var prevTwo = (-2.0, 0.0)
+    // represents next value of distribution with a smaller starting value
     var nextTwo = prevTwo
-
+    // Guess which distribution has a smaller starting value
     var smaller = one
     var bigger = two
-
-    var sumOne = 0.0
-    var sumTwo = 0.0
 
     /* Swap if the above assignment was not the right guess: */
     if (one.size > 0 && two.size > 0) {
@@ -571,33 +570,40 @@ object CaratDynamoDataAnalysis {
       }
     }
 
+    // use these to keep the cumulative distribution current value
+    var sumOne = 0.0
+    var sumTwo = 0.0
+
     //println("one.size=" + one.size + " two.size=" + two.size)
 
+    // advance the smaller dist manually
     var smallIter = smaller.iterator
+    // and the bigger automatically
     for (k <- bigger) {
-      var distance = 0.0
+      // current value of bigger dist
       sumOne += k._2
 
+      // advance smaller past bigger, keep prev and next
+      // from either side of the current value of bigger
       while (smallIter.hasNext && nextTwo._1 < k._1) {
         nextTwo = smallIter.next
         sumTwo += nextTwo._2
+        // assign cumulative dist value
         nextTwo = (nextTwo._1, sumTwo)
         //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
         if (nextTwo._1 < k._1)
           prevTwo = nextTwo
       }
 
-      /* now nextTwo has the bigger one,
-         * prevTwo the one directly below k
-         */
+      /* now nextTwo >= k > prevTwo */
 
-      /* NoApp - App gives a high positive number
+      /* (NoApp - App) gives a high positive number
          * if the app uses a more energy. This is because
          * if the app distribution is shifted to the right,
          * it has a high probability of running at a high drain rate,
          * and so its cumulative dist value is lower, and NoApp
          * has a higher value. Inverse for low energy usage. */
-      distance = prevTwo._2 - sumOne
+      val distance = prevTwo._2 - sumOne
       if (distance > maxDistance)
         maxDistance = distance
     }
