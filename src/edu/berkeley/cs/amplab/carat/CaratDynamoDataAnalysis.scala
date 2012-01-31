@@ -229,7 +229,7 @@ object CaratDynamoDataAnalysis {
               ""
           }
         })
-        println("uuid=" + uuid + " apps=" + apps)
+        //println("uuid=" + uuid + " apps=" + apps)
 
         val time = x.get(sampleTime).getOrElse("").toString()
         val batteryState = x.get(sampleBatteryState).getOrElse("").toString()
@@ -579,7 +579,8 @@ object CaratDynamoDataAnalysis {
     }
     
     var bigCounter = 0
-    var smallCounter = 0
+    var smallNext = 0
+    var smallLast = 0
 
     // use these to keep the cumulative distribution current value
     var sumOne = 0.0
@@ -604,16 +605,19 @@ object CaratDynamoDataAnalysis {
       while (smallIter.hasNext && nextTwo._1 <= k._1) {
         var temp = smallIter.next
         sumTwo += temp._2
-        if (smallCounter < smallerDbg.size)
-          printf("smaller: %s debug: %s\n",sumTwo,smallerDbg(smallCounter)._2)
+        if (smallNext < smallerDbg.size)
+          printf("smaller: %s debug: %s\n",sumTwo,smallerDbg(smallNext)._2)
         else
           printf("smaller: %s\n",sumTwo)
-        smallCounter += 1
+        
         // assign cumulative dist value
         nextTwo = (temp._1, sumTwo)
         //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
-        if (nextTwo._1 <= k._1)
+        if (nextTwo._1 <= k._1){
           prevTwo = nextTwo
+          smallLast = smallNext
+        }
+        smallNext += 1
       }
 
       /* now nextTwo >= k > prevTwo */
@@ -625,6 +629,8 @@ object CaratDynamoDataAnalysis {
          * and so its cumulative dist value is lower, and NoApp
          * has a higher value. Inverse for low energy usage. */
       val distance = prevTwo._2 - sumOne
+      if (smallNext < smallerDbg.size && bigCounter < biggerDbg.size)
+        printf("%s debug\n%s prevTwo \n%s k\n%s kbug\n%s nextTwo\n%s debug\ndistance:%s\n", smallerDbg(smallLast), prevTwo, k, biggerDbg(bigCounter), nextTwo, smallerDbg(smallNext), distance)
       if (distance > maxDistance)
         maxDistance = distance
     }
