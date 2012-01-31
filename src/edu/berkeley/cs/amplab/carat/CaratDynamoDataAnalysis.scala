@@ -593,18 +593,22 @@ object CaratDynamoDataAnalysis {
     for (k <- bigger) {
       // current value of bigger dist
       sumOne += k._2
-      printf("bigger: %s debug: %s\n",sumOne,biggerDbg(bigCounter))
+      if (bigCounter < biggerDbg.size)
+        printf("bigger: %s debug: %s\n",sumOne,biggerDbg(bigCounter)._2)
       bigCounter+=1
       
       // advance smaller past bigger, keep prev and next
       // from either side of the current value of bigger
       while (smallIter.hasNext && nextTwo._1 < k._1) {
-        nextTwo = smallIter.next
-        sumTwo += nextTwo._2
-        printf("smaller: %s debug: %s\n",sumTwo,smallerDbg(smallCounter))
+        var temp = smallIter.next
+        sumTwo += temp._2
+        if (smallCounter < smallerDbg.size)
+          printf("smaller: %s debug: %s\n",sumTwo,smallerDbg(smallCounter)._2)
+        else
+          printf("smaller: %s\n",sumTwo)
         smallCounter += 1
         // assign cumulative dist value
-        nextTwo = (nextTwo._1, sumTwo)
+        nextTwo = (temp._1, sumTwo)
         //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
         if (nextTwo._1 < k._1)
           prevTwo = nextTwo
