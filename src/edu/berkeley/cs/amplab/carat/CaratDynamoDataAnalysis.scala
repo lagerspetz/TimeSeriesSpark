@@ -643,7 +643,7 @@ object CaratDynamoDataAnalysis {
 
     /* Swap if the above assignment was not the right guess: */
     if (one.size > 0 && two.size > 0) {
-      if (one.head._1 < two.head._1) {
+      if (one.head._1 > two.head._1) {
         smaller = two
         bigger = one
       }
@@ -655,10 +655,10 @@ object CaratDynamoDataAnalysis {
     for (k <- bigger) {
       var distance = 0.0
 
-      while (smallIter.hasNext && nextTwo._1 < k._1) {
+      while (smallIter.hasNext && nextTwo._1 <= k._1) {
         nextTwo = smallIter.next
         //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
-        if (nextTwo._1 < k._1)
+        if (nextTwo._1 <= k._1)
           prevTwo = nextTwo
       }
 
