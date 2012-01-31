@@ -468,9 +468,7 @@ object CaratDynamoDataAnalysis {
 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
     if (values.size > 0 && others.size > 0) {
-      val distance = getDistanceNonCumulative(values.sorted, others.sorted)
-      val oldDist = {
-        val cumulative = flatten(probOne.mapValues(x => {
+      val cumulative = flatten(probOne.mapValues(x => {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
           for (d <- x) {
@@ -479,7 +477,6 @@ object CaratDynamoDataAnalysis {
           }
           buf
         }))
-
         val cumulativeNeg = flatten(probTwo.mapValues(x => {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
@@ -489,8 +486,9 @@ object CaratDynamoDataAnalysis {
           }
           buf
         }))
-        getDistance(cumulative, cumulativeNeg)
-      }
+      val oldDist = getDistance(cumulative, cumulativeNeg)
+      val distance = getDistanceNonCumulative(values, others, cumulative, cumulativeNeg)
+      
       println("old Dist: " + oldDist + "\n" +
         "distance: " + distance)
       if (distance >= 0 || !distanceCheck) {
@@ -550,7 +548,7 @@ object CaratDynamoDataAnalysis {
     result / mul
   }
 
-  def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
+  def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)], debug1: Array[(Double, Double)], debug2: Array[(Double, Double)]) = {
     // Definitions:
     // result will be here
     var maxDistance = -2.0
@@ -561,14 +559,27 @@ object CaratDynamoDataAnalysis {
     // Guess which distribution has a smaller starting value
     var smaller = one
     var bigger = two
+    
+    var smallerDbg = debug1
+    var biggerDbg = debug2
 
     /* Swap if the above assignment was not the right guess: */
     if (one.size > 0 && two.size > 0) {
-      if (one.head._1 < two.head._1) {
+      if (one.head._1 > two.head._1) {
         smaller = two
         bigger = one
       }
     }
+    
+    if (smallerDbg.size > 0 && biggerDbg.size > 0) {
+      if (smallerDbg.head._1 > biggerDbg.head._1) {
+        smaller = debug2
+        bigger = debug1
+      }
+    }
+    
+    var bigCounter = 0
+    var smallCounter = 0
 
     // use these to keep the cumulative distribution current value
     var sumOne = 0.0
@@ -582,12 +593,16 @@ object CaratDynamoDataAnalysis {
     for (k <- bigger) {
       // current value of bigger dist
       sumOne += k._2
-
+      printf("bigger: %s debug: %s\n",sumOne,biggerDbg(bigCounter))
+      bigCounter+=1
+      
       // advance smaller past bigger, keep prev and next
       // from either side of the current value of bigger
       while (smallIter.hasNext && nextTwo._1 < k._1) {
         nextTwo = smallIter.next
         sumTwo += nextTwo._2
+        printf("smaller: %s debug: %s\n",sumTwo,smallerDbg(smallCounter))
+        smallCounter += 1
         // assign cumulative dist value
         nextTwo = (nextTwo._1, sumTwo)
         //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
