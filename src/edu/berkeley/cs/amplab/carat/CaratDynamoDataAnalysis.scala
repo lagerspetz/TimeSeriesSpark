@@ -441,9 +441,11 @@ object CaratDynamoDataAnalysis {
     }
 
     for (app <- allApps) {
-      val filtered = rateData.map(distributionFilter(_, appFilter(_, app)))
-      val filteredNeg = rateData.map(distributionFilter(_, negativeAppFilter(_, app)))
-      writeTriplet(filtered, filteredNeg, appsTable, appKey, app)
+      if (app != CARAT) {
+        val filtered = rateData.map(distributionFilter(_, appFilter(_, app)))
+        val filteredNeg = rateData.map(distributionFilter(_, negativeAppFilter(_, app)))
+        writeTriplet(filtered, filteredNeg, appsTable, appKey, app)
+      }
     }
   }
   
