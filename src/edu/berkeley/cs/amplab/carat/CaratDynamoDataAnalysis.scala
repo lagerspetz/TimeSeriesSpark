@@ -486,7 +486,7 @@ object CaratDynamoDataAnalysis {
           }
           buf
         }))
-      printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values, others, cumulative, cumulativeNeg)
+      printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values.mkString(" "), others.mkString(" "), cumulative.mkString(" "), cumulativeNeg.mkString(" "))
       val oldDist = getDistance(cumulative, cumulativeNeg)
       val distance = getDistanceNonCumulative(values, others, cumulative, cumulativeNeg)
       
