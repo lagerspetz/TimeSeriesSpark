@@ -468,7 +468,7 @@ object CaratDynamoDataAnalysis {
 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
     if (values.size > 0 && others.size > 0) {
-      val distance = getDistanceNonCumulative(values, others)
+      val distance = getDistanceNonCumulative(values.sorted, others.sorted)
       val oldDist = {
         val cumulative = flatten(probOne.mapValues(x => {
           var sum = 0.0
