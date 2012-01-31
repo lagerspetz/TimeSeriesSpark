@@ -4,6 +4,7 @@ import spark.RDD
 import scala.collection.immutable.TreeMap
 package object carat {
 
+  val CARAT = "Carat"
   val UUIDString = "uuId"
 
   val resultsTable = "carat.latestresults"

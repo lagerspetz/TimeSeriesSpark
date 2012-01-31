@@ -11,35 +11,33 @@ import scala.collection.immutable.TreeMap
 import collection.JavaConversions._
 
 /**
- * A program for calculating the rates, sorting them, and calculating their cumulative probability distribution
- * from a Carat data file of the format:
- * {{{
- * time, uid, battery level, space separated events, running apps
- * }}}
- * For example:
- * {{{
- * Mon Dec 26 09:43:36 PST 2011, 46, 99, batteryStatusChanged unplugged, Safari, Mail
- * Mon Dec 26 12:13:11 PST 2011, 46, 80, batteryStatusChanged, Safari, Mail, Angry Birds
- * Mon Dec 26 09:51:00 PST 2011, 86, 100, batteryStatusChanged unplugged, Safari, Mail
- * Mon Dec 26 17:16:00 PST 2011, 46, 66, batteryStatusChanged, Safari, Mail, Amazon Kindle
- * Mon Dec 26 12:23:11 PST 2011, 86, 68, batteryStatusChanged, Safari, Mail, Angry Birds, Opera
- * Mon Dec 26 16:11:00 PST 2011, 86, 65, batteryStatusChanged, Safari, Mail, Opera
- * Mon Dec 26 23:20:12 PST 2011, 46, 53, batteryStatusChanged pluggedIn usbPower, Safari, Mail
- * Mon Dec 27 01:10:01 PST 2011, 86, 20, batteryStatusChanged pluggedIn, Safari, Mail
- * }}}
+ * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
+ * of battery rates for each of the following case pairs: 
+ * 1) App X is running & App X is not running
+ * 2) App X is running on uuId U & App X is running on uuId != U
+ * 3) OS Version == V & OS Version != V
+ * 4) Device Model == M & Device Model != M
+ * 5) uuId == U & uuId != U
+ * 6) Similar apps to uuId U are running vs dissimilar apps are running.
+ *    This is calculated by taking the set A of all apps ever reported running on uuId U
+ *    and taking the data from samples where (A intersection sample.getAllApps()).size >= ln(A)
+ *    and comparing it with (A intersection sample.getAllApps()).size < ln(A).
  *
- * Usage:
- * {{{
- *  CaratFakeDataAnalysis.main(Array("fakedatafile.txt"))
- * }}}
- * The results will be called dumpsys-script-data.txt and powermon-file-data.txt.
+ * Where uuId is a unique device identifier.
+ * 
+ * @author Eemil Lagerspetz
  */
 
 object CaratDynamoDataAnalysis {
+  /**
+   * Todo: do not store hogs or bugs with negative distance values.
+   * 
+   */
 
   // Bucketing and decimal constants
   val buckets = 100
   val DECIMALS = 3
+  val DEBUG = false
   
   val LIMIT_SPEED = false
 
@@ -47,45 +45,22 @@ object CaratDynamoDataAnalysis {
    * Main program entry point.
    */
   def main(args: Array[String]) {
-    val sc = new SparkContext(args(0), "CaratDataAnalysis")
+    val sc = new SparkContext(args(0), "CaratDynamoDataAnalysis")
     analyzeData(sc)
     sys.exit(0)
   }
 
   /**
-   * We will not be building distributions for all possible groups of apps.
-   * I don't even think that would be tractable for very long. We need
-   * distributions for (off the top of my head):
-   * 1) App X is running
-   * 2) App X is not running
-   * 3) App X is running on uuid U
-   * 4) App X is running on uuid != U
-   * 5) OS Version == V
-   * 6) OS Version != V
-   * 7) Device Model == M
-   * 8) Device Model != M
-   * 9) uuid == U
-   * 10) uuid != U
-   *
-   * We also need to compute distributions for users that run "similar"
-   * apps. I am open to suggestions for how to do this efficiently while
-   * still providing a number that means something.
+   * Main function. Called from main() after sc initialization.
    */
 
   def analyzeData(sc: SparkContext) = {
-    /* get registrations.
-     * This should ideally be done inside an RDD part by part.
-     * A slightly better implementation than the below would also
-     * be to work with one registration message at a time,
-     * computing stuff for it and then requesting the next one.
+    /* Get unique uuIds, Oses, and Models from registrations.
+     * 
+     * TODO: This should ideally be done inside an RDD part by part.
+     * However, the current implementation does things in batches,
+     * so it should be sufficient for memory saving for now.
      */
-
-    /* 
-     * Gather all uuids...
-     * TODO: I think these we need in memory, unless we want to
-     * request them again each time we need to get other devices' samples. 
-     */
-
     val (allUuids, allOses, allModels) = {
       val resultUuids = new HashSet[String]
       val resultModels = new HashSet[String]
@@ -93,6 +68,7 @@ object CaratDynamoDataAnalysis {
       var finished = false
 
       var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
+      println("Got: " + regs.size + " registrations.")
       for (k <- regs){
         resultUuids += k.get(regsUuid).getOrElse("").toString()
         resultModels += k.get(regsModel).getOrElse("").toString()
@@ -127,13 +103,12 @@ object CaratDynamoDataAnalysis {
     
     allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
         DynamoDbDecoder.getAllItems(registrationTable, _),
-        handleRegs(sc, _, allUuids, _), allRates)
+        handleRegs(sc, _, _), allRates)
     
     if (allRates != null) {
       allData = allRates.map(x => {
         (x.uuid, x)
       }).groupByKey()
-      //    })
     }
     
     if (allData != null)
@@ -141,9 +116,10 @@ object CaratDynamoDataAnalysis {
   }
 
   /**
-   * 
+   * Handles a set of registration messages from the Carat DynamoDb.
+   * Samples matching each registration identifier are got, rates calculated from them, and combined with `dist`. 
    */
-  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], allUuids: Set[String], dist: spark.RDD[CaratRate]) = {
+  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], dist: spark.RDD[CaratRate]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
      */
@@ -179,6 +155,10 @@ object CaratDynamoDataAnalysis {
     distRet
   }
 
+  /**
+   * Generic Carat DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
+   * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
+   */
   def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, scala.collection.mutable.Buffer[Map[String, Any]]),
       tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, scala.collection.mutable.Buffer[Map[String, Any]]),
     stepHandler: (scala.collection.mutable.Buffer[Map[String, Any]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
@@ -221,17 +201,19 @@ object CaratDynamoDataAnalysis {
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
   def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate]) = {
-    if (samples.size < 100) {
-      for (x <- samples) {
-        for (k <- x) {
-          /*if (k._2.isInstanceOf[Seq[String]])
-            print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ") ")
-          else*/
-            print(k+" ")
+    if (DEBUG)
+      if (samples.size < 100) {
+        for (x <- samples) {
+          for (k <- x) {
+            if (k._2.isInstanceOf[Seq[String]])
+              print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ") ")
+            else
+              print(k + " ")
+          }
+          println()
         }
-        println()
       }
-    }
+    
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(x => {
         /* See properties in package.scala for data keys. */
@@ -262,6 +244,9 @@ object CaratDynamoDataAnalysis {
     rateRdd
   }
 
+  /**
+   * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
+   */
   def rateMapper(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
     // (uuid, time, batteryLevel, event, batteryState, apps)
     var prevD = 0.0
@@ -349,14 +334,28 @@ object CaratDynamoDataAnalysis {
     rates.toSeq
   }
 
+  
+  /**
+   * Filter a set of (String, Seq[CaratRates]). Useful for writing a filter that
+   * applies to a single CaratRate.
+   */
   def distributionFilter(rates: (String, Seq[CaratRate]), filter: CaratRate => Boolean) = {
     (rates._1, rates._2.filter(filter))
   }
 
+  /**
+   * Use with distributionFilter. A convenience function that matches apps of the CaratRate by exact String.
+   */
   def appFilter(rate: CaratRate, app: String) = rate.apps1.contains(app) || rate.apps2.contains(app)
 
+  /**
+   * Use with distributionFilter. A convenience function that is the inverse of `appFilter`.
+   */
   def negativeAppFilter(rate: CaratRate, app: String) = !appFilter(rate, app)
 
+  /**
+   * Create a probability function out of a set of CaratRates.
+   */
   def prob(rates: RDD[(String, Seq[CaratRate])]) = {
     rates.mapValues(x => {
       var sum = 0.0
@@ -433,9 +432,11 @@ object CaratDynamoDataAnalysis {
       writeTriplet(fromUuid, notFromUuid, resultsTable, resultKey, uuid, uuidApps)
 
       for (app <- allApps) {
-        val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
-        val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
-        writeTriplet(appFromUuid, appNotFromUuid, bugsTable, (resultKey, appKey), (uuid, app))
+        if (app != CARAT) {
+          val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
+          val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
+          writeTriplet(appFromUuid, appNotFromUuid, bugsTable, (resultKey, appKey), (uuid, app))
+        }
       }
     }
 
@@ -492,10 +493,10 @@ object CaratDynamoDataAnalysis {
         }))
         getDistance(cumulative, cumulativeNeg)
       }
-
-      val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
-
-      DynamoDbEncoder.putBug(table, keyNames, keyValues, maxX, bucketed, bucketedNeg, distance)
+      if (distance >= 0){
+        val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+        DynamoDbEncoder.putBug(table, keyNames, keyValues, maxX, bucketed, bucketedNeg, distance)
+      }
     }
   }
 
@@ -535,9 +536,10 @@ object CaratDynamoDataAnalysis {
         }))
         getDistance(cumulative, cumulativeNeg)
       }
-
-      val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
-      DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance, uuidApps.toSeq)
+      if (table != appsTable || distance >= 0) {
+        val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+        DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance, uuidApps.toSeq)
+      }
     }
   }
 
