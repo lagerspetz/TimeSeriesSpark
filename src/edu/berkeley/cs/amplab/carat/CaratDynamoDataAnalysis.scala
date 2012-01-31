@@ -487,6 +487,16 @@ object CaratDynamoDataAnalysis {
           buf
         }))
       printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values.mkString(" "), others.mkString(" "), cumulative.mkString(" "), cumulativeNeg.mkString(" "))
+      var sum = 0
+      for (k <- values)
+        sum+= k._2
+      if (sum > 1.01)
+        throw new Error("Sum of " + values.mkString(" ") + " is " + sum + "!")
+      sum = 0
+      for (k <- others)
+        sum+= k._2
+      if (sum > 1.01)
+        throw new Error("Sum of " + others.mkString(" ") + " is " + sum + "!")
       val oldDist = getDistance(cumulative, cumulativeNeg)
       val distance = getDistanceNonCumulative(values, others, cumulative, cumulativeNeg)
       
