@@ -136,9 +136,9 @@ object DynamoDbEncoder {
           println("Warning: only increasing write cap to "+ (wr*2) +" due to DynamoDb limits.")
         }          
         val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(READ).withWriteCapacityUnits(WRITE))
-        dd.updateTable(k)
+        val upd = dd.updateTable(k)
         // apparently only one table can be updated "at a time" whatever that means.
-        Thread.sleep(10000)
+        Thread.sleep(20000)
       }else{
         println("Doing nothing, current tp is: " + rd + ", " + wr)
       }
