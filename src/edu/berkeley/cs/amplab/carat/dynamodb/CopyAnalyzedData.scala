@@ -20,7 +20,7 @@ object CopyAnalyzedData {
     if (uuId != null) {
       println("Getting stuff from resultsTable")
       val simUuid = "4EA21A48-AF1D-4C2D-A3A7-91D7F2857A10"
-      var (key, res) = DynamoDbDecoder.getItems(resultsTable, resultKey, uuId)
+      var (key, res) = DynamoDbDecoder.getItemsIN(resultsTable, resultKey, uuId)
       for (x <- res) {
         if (x.containsKey(resultKey))
           x.put(resultKey, new AttributeValue(simUuid))
@@ -29,7 +29,7 @@ object CopyAnalyzedData {
       DynamoDbEncoder.putItems(resultsTable, res)
 
       while (key != null) {
-        val (key2, res2) = DynamoDbDecoder.getItems(resultsTable, resultKey, uuId, key)
+        val (key2, res2) = DynamoDbDecoder.getItemsIN(resultsTable, resultKey, uuId, key)
         key = key2
         res = res2
         for (x <- res) {
@@ -46,7 +46,7 @@ object CopyAnalyzedData {
     val simOs = "5.0"
     val realOs = "5.0.1"
     println("Getting stuff from osTable")
-    var (key, res) = DynamoDbDecoder.getItems(osTable, osKey, realOs)
+    var (key, res) = DynamoDbDecoder.getItemsIN(osTable, osKey, realOs)
     for (x <- res) {
       if (x.containsKey(osKey))
         x.put(osKey, new AttributeValue(simOs))
@@ -55,7 +55,7 @@ object CopyAnalyzedData {
     DynamoDbEncoder.putItems(osTable, res)
 
     while (key != null) {
-      val (key2, res2) = DynamoDbDecoder.getItems(osTable, osKey, realOs, key)
+      val (key2, res2) = DynamoDbDecoder.getItemsIN(osTable, osKey, realOs, key)
       key = key2
       res = res2
       for (x <- res) {
@@ -71,7 +71,7 @@ object CopyAnalyzedData {
     val simModel = "Simulator"
     val realModel = "iPhone 4S"
     println("Getting stuff from modelsTable")
-    var (key, res) = DynamoDbDecoder.getItems(modelsTable, modelKey, realModel)
+    var (key, res) = DynamoDbDecoder.getItemsIN(modelsTable, modelKey, realModel)
     for (x <- res) {
       if (x.containsKey(modelKey))
         x.put(modelKey, new AttributeValue(simModel))
@@ -80,7 +80,7 @@ object CopyAnalyzedData {
     DynamoDbEncoder.putItems(modelsTable, res)
 
     while (key != null) {
-      val (key2, res2) = DynamoDbDecoder.getItems(modelsTable, modelKey, realModel, key)
+      val (key2, res2) = DynamoDbDecoder.getItemsIN(modelsTable, modelKey, realModel, key)
       key = key2
       res = res2
       for (x <- res) {

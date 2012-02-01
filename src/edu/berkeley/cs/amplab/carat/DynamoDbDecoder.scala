@@ -107,10 +107,29 @@ object DynamoDbDecoder {
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
   
+  def getItemsIN(table: String, keyName:String, keyPart: String) = {
+    val q = new ScanRequest(table)
+    val conds = new java.util.HashMap[String, Condition]
+    conds += ((keyName, new Condition().withComparisonOperator("IN").withAttributeValueList(new AttributeValue(keyPart))))
+    //q.setLimit(THROUGHPUT_LIMIT)
+    val sr = DynamoDbEncoder.dd.scan(q)
+    (sr.getLastEvaluatedKey(), sr.getItems())
+  }
+  
   def getItems(table: String, keyName:String, keyPart: String, lastKey:Key) = {
     val q = new ScanRequest(table)
     val conds = new java.util.HashMap[String, Condition]
     conds += ((keyName, new Condition().withComparisonOperator("EQ").withAttributeValueList(new AttributeValue(keyPart))))
+    q.setExclusiveStartKey(lastKey)
+    //q.setLimit(THROUGHPUT_LIMIT)
+    val sr = DynamoDbEncoder.dd.scan(q)
+    (sr.getLastEvaluatedKey(), sr.getItems())
+  }
+  
+  def getItemsIN(table: String, keyName:String, keyPart: String, lastKey:Key) = {
+    val q = new ScanRequest(table)
+    val conds = new java.util.HashMap[String, Condition]
+    conds += ((keyName, new Condition().withComparisonOperator("IN").withAttributeValueList(new AttributeValue(keyPart))))
     q.setExclusiveStartKey(lastKey)
     //q.setLimit(THROUGHPUT_LIMIT)
     val sr = DynamoDbEncoder.dd.scan(q)
