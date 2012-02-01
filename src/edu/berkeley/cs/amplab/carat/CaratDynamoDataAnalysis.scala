@@ -354,22 +354,21 @@ object CaratDynamoDataAnalysis {
 
   /**
    * Create a probability function out of a set of CaratRates.
+   * If these are not for the same uuId, this fails!
    */
-  def prob(rates: RDD[(String, Seq[CaratRate])]) = {
-    rates.mapValues(x => {
-      var sum = 0.0
-      var buf = new TreeMap[Double, Double]
-      for (d <- x) {
-        var count = buf.get(d.rate)
-        buf += ((d.rate, count.getOrElse(0.0) + 1.0))
-        sum += 1
-      }
+  def prob(rates: Array[CaratRate]) = {
+    var sum = 0.0
+    var buf = new TreeMap[Double, Double]
+    for (d <- rates) {
+      var count = buf.get(d.rate)
+      buf += ((d.rate, count.getOrElse(0.0) + 1.0))
+      sum += 1
+    }
 
-      for (k <- buf)
-        buf += ((k._1, k._2 / sum))
+    for (k <- buf)
+      buf += ((k._1, k._2 / sum))
 
-      buf
-    })
+    buf.toArray
   }
 
   def analyzeRateData(rateData: RDD[(String, Seq[CaratRate])],
@@ -460,32 +459,32 @@ object CaratDynamoDataAnalysis {
     /* Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
        */
-    val probOne = prob(one)
-    val probTwo = prob(two)
-
-    val values = flatten(probOne)
-    val others = flatten(probTwo)
+    val flatOne = flatten(one)
+    val flatTwo = flatten(two)
+   
+    val values = prob(flatOne)
+    val others = prob(flatTwo)
 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
     if (values.size > 0 && others.size > 0) {
-      val cumulative = flatten(probOne.mapValues(x => {
+      val cumulative = {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
-          for (d <- x) {
+          for (d <- values) {
             sum += d._2
             buf += ((d._1, sum))
           }
-          buf
-        }))
-        val cumulativeNeg = flatten(probTwo.mapValues(x => {
+          buf.toArray
+        }
+        val cumulativeNeg = {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
-          for (d <- x) {
+          for (d <- others) {
             sum += d._2
             buf += ((d._1, sum))
           }
-          buf
-        }))
+          buf.toArray
+        }
       printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values.mkString(" "), others.mkString(" "), cumulative.mkString(" "), cumulativeNeg.mkString(" "))
       var sum = 0.0
       for (k <- values)

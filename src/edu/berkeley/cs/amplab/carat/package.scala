@@ -51,4 +51,9 @@ package object carat {
       result
     }).collect()
   }
+  
+  def flatten(structured: RDD[(String, Seq[CaratRate])]) = {
+    // there are x treemaps. We need to flatten them but include the uuid.
+    structured.flatMap(x => {x._2}).collect()
+  }
 }
