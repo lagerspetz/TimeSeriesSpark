@@ -583,8 +583,8 @@ object CaratDynamoDataAnalysis {
     
     if (smallerDbg.size > 0 && biggerDbg.size > 0) {
       if (smallerDbg.head._1 > biggerDbg.head._1) {
-        smaller = debug2
-        bigger = debug1
+        smallerDbg = debug2
+        biggerDbg = debug1
       }
     }
     
