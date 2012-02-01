@@ -466,7 +466,7 @@ object CaratDynamoDataAnalysis {
     val others = prob(flatTwo)
 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
-    if (values.size > 0 && others.size > 0) {
+/*    if (values.size > 0 && others.size > 0) {
       val cumulative = {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
@@ -485,7 +485,7 @@ object CaratDynamoDataAnalysis {
           }
           buf.toArray
         }
-      printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values.mkString(" "), others.mkString(" "), cumulative.mkString(" "), cumulativeNeg.mkString(" "))
+      printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values.mkString(" "), others.mkString(" "), cumulative.mkString(" "), cumulativeNeg.mkString(" "))*/
       var sum = 0.0
       for (k <- values)
         sum+= k._2
@@ -496,11 +496,11 @@ object CaratDynamoDataAnalysis {
         sum+= k._2
       if (sum > 1.01)
         throw new Error("Sum of " + others.mkString(" ") + " is " + sum + "!")
-      val oldDist = getDistance(cumulative, cumulativeNeg)
-      val distance = getDistanceNonCumulative(values, others, cumulative, cumulativeNeg)
+//      val oldDist = getDistance(cumulative, cumulativeNeg)
+      val distance = getDistanceNonCumulative(values, others)
       
-      println("old Dist: " + oldDist + "\n" +
-        "distance: " + distance)
+/*      println("old Dist: " + oldDist + "\n" +
+        "distance: " + distance)*/
       if (distance >= 0 || !distanceCheck) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
         putFunction(maxX, bucketed, bucketedNeg, distance)
@@ -641,6 +641,68 @@ object CaratDynamoDataAnalysis {
       val distance = prevTwo._2 - sumOne
       if (smallNext < smallerDbg.size && bigCounter < biggerDbg.size)
         printf("%s debug\n%s prevTwo \n%s k\n%s kbug\n%s nextTwo\n%s debug\ndistance:%s\n", smallerDbg(smallLast), prevTwo, k, biggerDbg(bigCounter), nextTwo, smallerDbg(smallNext), distance)
+      if (distance > maxDistance)
+        maxDistance = distance
+    }
+    maxDistance
+  }
+  
+  def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
+    // Definitions:
+    // result will be here
+    var maxDistance = -2.0
+    // represents previous value of distribution with a smaller starting value
+    var prevTwo = (-2.0, 0.0)
+    // represents next value of distribution with a smaller starting value
+    var nextTwo = prevTwo
+    // Guess which distribution has a smaller starting value
+    var smaller = one
+    var bigger = two
+    
+    /* Swap if the above assignment was not the right guess: */
+    if (one.size > 0 && two.size > 0) {
+      if (one.head._1 > two.head._1) {
+        smaller = two
+        bigger = one
+      }
+    }
+
+    // use these to keep the cumulative distribution current value
+    var sumOne = 0.0
+    var sumTwo = 0.0
+
+    //println("one.size=" + one.size + " two.size=" + two.size)
+
+    // advance the smaller dist manually
+    var smallIter = smaller.iterator
+    // and the bigger automatically
+    for (k <- bigger) {
+      // current value of bigger dist
+      sumOne += k._2
+      
+      // advance smaller past bigger, keep prev and next
+      // from either side of the current value of bigger
+      while (smallIter.hasNext && nextTwo._1 <= k._1) {
+        var temp = smallIter.next
+        sumTwo += temp._2
+        
+        // assign cumulative dist value
+        nextTwo = (temp._1, sumTwo)
+        //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
+        if (nextTwo._1 <= k._1){
+          prevTwo = nextTwo
+        }
+      }
+
+      /* now nextTwo >= k > prevTwo */
+
+      /* (NoApp - App) gives a high positive number
+         * if the app uses a more energy. This is because
+         * if the app distribution is shifted to the right,
+         * it has a high probability of running at a high drain rate,
+         * and so its cumulative dist value is lower, and NoApp
+         * has a higher value. Inverse for low energy usage. */
+      val distance = prevTwo._2 - sumOne
       if (distance > maxDistance)
         maxDistance = distance
     }
