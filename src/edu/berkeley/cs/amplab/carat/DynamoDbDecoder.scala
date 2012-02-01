@@ -154,7 +154,7 @@ object DynamoDbDecoder {
   def getItem(table:String, keyPart:String) = {
     val key = new Key().withHashKeyElement(new AttributeValue(keyPart))
     val g = new GetItemRequest(table, key)
-    getVals(DynamoDbEncoder.dd.getItem(g).getItem())
+    DynamoDbEncoder.dd.getItem(g).getItem()
   }
   
   def getItem(table:String, keyParts:(String, String)) = {

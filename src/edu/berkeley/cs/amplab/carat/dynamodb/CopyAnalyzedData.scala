@@ -9,7 +9,7 @@ import collection.JavaConversions._
  */
 object CopyAnalyzedData {
   def main(args: Array[String]) {
-    if (args != null && args.length == 1){
+    if (args != null && args.length == 1) {
       copyResultsData(args(0))
       copyOsData()
       copyModelData()
@@ -20,25 +20,12 @@ object CopyAnalyzedData {
     if (uuId != null) {
       println("Getting stuff from resultsTable")
       val simUuid = "4EA21A48-AF1D-4C2D-A3A7-91D7F2857A10"
-      var (key, res) = DynamoDbDecoder.getItemsIN(resultsTable, resultKey, uuId)
-      for (x <- res) {
-        if (x.containsKey(resultKey))
-          x.put(resultKey, new AttributeValue(simUuid))
+      var res = DynamoDbDecoder.getItem(resultsTable, uuId)
+      if (res.containsKey(resultKey)) {
+        res.put(resultKey, new AttributeValue(simUuid))
       }
       println("Putting stuff to resultsTable")
-      DynamoDbEncoder.putItems(resultsTable, res)
-
-      while (key != null) {
-        val (key2, res2) = DynamoDbDecoder.getItemsIN(resultsTable, resultKey, uuId, key)
-        key = key2
-        res = res2
-        for (x <- res) {
-          if (x.containsKey(resultKey))
-            x.put(resultKey, new AttributeValue(simUuid))
-        }
-        println("Putting stuff to resultsTable")
-        DynamoDbEncoder.putItems(resultsTable, res)
-      }
+      DynamoDbEncoder.putItem(resultsTable, res)
     }
   }
 
@@ -46,49 +33,21 @@ object CopyAnalyzedData {
     val simOs = "5.0"
     val realOs = "5.0.1"
     println("Getting stuff from osTable")
-    var (key, res) = DynamoDbDecoder.getItemsIN(osTable, osKey, realOs)
-    for (x <- res) {
-      if (x.containsKey(osKey))
-        x.put(osKey, new AttributeValue(simOs))
-    }
+    var x = DynamoDbDecoder.getItem(osTable, realOs)
+    if (x.containsKey(osKey))
+      x.put(osKey, new AttributeValue(simOs))
     println("Putting stuff to osTable")
-    DynamoDbEncoder.putItems(osTable, res)
-
-    while (key != null) {
-      val (key2, res2) = DynamoDbDecoder.getItemsIN(osTable, osKey, realOs, key)
-      key = key2
-      res = res2
-      for (x <- res) {
-        if (x.containsKey(osKey))
-          x.put(osKey, new AttributeValue(simOs))
-      }
-      println("Putting stuff to osTable")
-      DynamoDbEncoder.putItems(osTable, res)
-    }
+    DynamoDbEncoder.putItem(osTable, x)
   }
 
   def copyModelData() {
     val simModel = "Simulator"
     val realModel = "iPhone 4S"
     println("Getting stuff from modelsTable")
-    var (key, res) = DynamoDbDecoder.getItemsIN(modelsTable, modelKey, realModel)
-    for (x <- res) {
-      if (x.containsKey(modelKey))
-        x.put(modelKey, new AttributeValue(simModel))
-    }
+    var x = DynamoDbDecoder.getItem(modelsTable, realModel)
+    if (x.containsKey(modelKey))
+      x.put(modelKey, new AttributeValue(simModel))
     println("Putting stuff to modelsTable")
-    DynamoDbEncoder.putItems(modelsTable, res)
-
-    while (key != null) {
-      val (key2, res2) = DynamoDbDecoder.getItemsIN(modelsTable, modelKey, realModel, key)
-      key = key2
-      res = res2
-      for (x <- res) {
-        if (x.containsKey(modelKey))
-          x.put(modelKey, new AttributeValue(simModel))
-      }
-      println("Putting stuff to modelsTable")
-      DynamoDbEncoder.putItems(modelsTable, res)
-    }
+    DynamoDbEncoder.putItem(modelsTable, x)
   }
 }
