@@ -9,6 +9,7 @@ import scala.collection.mutable.Set
 import scala.collection.mutable.HashSet
 import scala.collection.immutable.TreeMap
 import collection.JavaConversions._
+import com.amazonaws.services.dynamodb.model.AttributeValue
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -76,7 +77,7 @@ object CaratDynamoDataAnalysis {
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
-    
+
     if (allRates != null) {
       allData = allRates.map(x => {
         (x.uuid, x)
@@ -91,7 +92,7 @@ object CaratDynamoDataAnalysis {
    * Handles a set of registration messages from the Carat DynamoDb.
    * Samples matching each registration identifier are got, rates calculated from them, and combined with `dist`.
    */
-  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], dist: spark.RDD[CaratRate], uuids:Set[String], oses:Set[String], models:Set[String]) = {
+  def handleRegs(sc: SparkContext, regs: java.util.List[java.util.Map[String, AttributeValue]], dist: spark.RDD[CaratRate], uuids: Set[String], oses: Set[String], models: Set[String]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
      */
@@ -102,9 +103,9 @@ object CaratDynamoDataAnalysis {
     // Remove duplicates caused by re-registrations:
     val regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
     regSet ++= regs.map(x => {
-      val uuid = x.get(regsUuid).getOrElse("").toString()
-      val model = x.get(regsModel).getOrElse("").toString()
-      val os = x.get(regsOs).getOrElse("").toString()
+      val uuid = x.get(regsUuid).getS()
+      val model = x.get(regsModel).getS()
+      val os = x.get(regsOs).getS()
       (uuid, model, os)
     })
 
@@ -117,12 +118,12 @@ object CaratDynamoDataAnalysis {
       val uuid = x._1
       val model = x._2
       val os = x._3
-      
+
       // Collect all uuids, models and oses in the same loop
       uuids += uuid
       models += model
       oses += os
-      
+
       println("Handling reg:" + x)
       /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
@@ -137,9 +138,9 @@ object CaratDynamoDataAnalysis {
    * Generic Carat DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
    * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
    */
-  def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, scala.collection.mutable.Buffer[Map[String, Any]]),
-    tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, scala.collection.mutable.Buffer[Map[String, Any]]),
-    stepHandler: (scala.collection.mutable.Buffer[Map[String, Any]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
+  def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
+    tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
+    stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
     dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
     /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
@@ -159,7 +160,7 @@ object CaratDynamoDataAnalysis {
     while (!finished) {
       // avoid overloading "provisionedThroughput"
       if (LIMIT_SPEED)
-        Thread.sleep(1)
+        Thread.sleep(1000)
 
       println("Continuing from key=" + key)
       var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
@@ -178,7 +179,7 @@ object CaratDynamoDataAnalysis {
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
-  def handleSamples(sc: SparkContext, samples: Seq[Map[java.lang.String, Any]], os: String, model: String, rates: RDD[CaratRate]) = {
+  def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]], os: String, model: String, rates: RDD[CaratRate]) = {
     if (DEBUG)
       if (samples.size < 100) {
         for (x <- samples) {
@@ -195,8 +196,8 @@ object CaratDynamoDataAnalysis {
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(x => {
         /* See properties in package.scala for data keys. */
-        val uuid = x.get(sampleKey).getOrElse("").toString()
-        val apps = x.get(sampleProcesses).getOrElse(new ArrayBuffer[String]).asInstanceOf[Seq[String]].map(w => {
+        val uuid = x.get(sampleKey).getS()
+        val apps = x.get(sampleProcesses).getSS().map(w => {
           if (w == null)
             ""
           else {
@@ -209,10 +210,10 @@ object CaratDynamoDataAnalysis {
         })
         //println("uuid=" + uuid + " apps=" + apps)
 
-        val time = x.get(sampleTime).getOrElse("").toString()
-        val batteryState = x.get(sampleBatteryState).getOrElse("").toString()
-        val batteryLevel = x.get(sampleBatteryLevel).getOrElse("").toString()
-        val event = x.get(sampleEvent).getOrElse("").toString()
+        val time = x.get(sampleTime).getN()
+        val batteryState = x.get(sampleBatteryState).getS()
+        val batteryLevel = x.get(sampleBatteryLevel).getN()
+        val event = x.get(sampleEvent).getS()
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       rateMapper(os, model, mapped)
@@ -439,13 +440,13 @@ object CaratDynamoDataAnalysis {
        */
     val flatOne = flatten(one)
     val flatTwo = flatten(two)
-   
+
     val values = prob(flatOne)
     val others = prob(flatTwo)
 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
     if (values.size > 0 && others.size > 0) {
-/*      val cumulative = {
+      /*      val cumulative = {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
           for (d <- values) {
@@ -466,18 +467,18 @@ object CaratDynamoDataAnalysis {
       printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values.mkString(" "), others.mkString(" "), cumulative.mkString(" "), cumulativeNeg.mkString(" "))*/
       var sum = 0.0
       for (k <- values)
-        sum+= k._2
+        sum += k._2
       if (sum > 1.01)
         throw new Error("Sum of " + values.mkString(" ") + " is " + sum + "!")
       sum = 0.0
       for (k <- others)
-        sum+= k._2
+        sum += k._2
       if (sum > 1.01)
         throw new Error("Sum of " + others.mkString(" ") + " is " + sum + "!")
-//      val oldDist = getDistance(cumulative, cumulativeNeg)
+      //      val oldDist = getDistance(cumulative, cumulativeNeg)
       val distance = getDistanceNonCumulative(values, others)
-      
-/*      println("old Dist: " + oldDist + "\n" +
+
+      /*      println("old Dist: " + oldDist + "\n" +
         "distance: " + distance)*/
       if (distance >= 0 || !distanceCheck) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
@@ -547,7 +548,7 @@ object CaratDynamoDataAnalysis {
     // Guess which distribution has a smaller starting value
     var smaller = one
     var bigger = two
-    
+
     var smallerDbg = debug1
     var biggerDbg = debug2
 
@@ -558,14 +559,14 @@ object CaratDynamoDataAnalysis {
         bigger = one
       }
     }
-    
+
     if (smallerDbg.size > 0 && biggerDbg.size > 0) {
       if (smallerDbg.head._1 > biggerDbg.head._1) {
         smallerDbg = debug2
         biggerDbg = debug1
       }
     }
-    
+
     var bigCounter = 0
     var smallNext = 0
     var smallLast = 0
@@ -583,25 +584,25 @@ object CaratDynamoDataAnalysis {
       // current value of bigger dist
       sumOne += k._2
       if (bigCounter < biggerDbg.size)
-        printf("bigger: %s debug: %s\n",sumOne,biggerDbg(bigCounter)._2)
+        printf("bigger: %s debug: %s\n", sumOne, biggerDbg(bigCounter)._2)
       else
-        printf("bigger: %s\n",sumOne)
-      bigCounter+=1
-      
+        printf("bigger: %s\n", sumOne)
+      bigCounter += 1
+
       // advance smaller past bigger, keep prev and next
       // from either side of the current value of bigger
       while (smallIter.hasNext && nextTwo._1 <= k._1) {
         var temp = smallIter.next
         sumTwo += temp._2
         if (smallNext < smallerDbg.size)
-          printf("smaller: %s debug: %s\n",sumTwo,smallerDbg(smallNext)._2)
+          printf("smaller: %s debug: %s\n", sumTwo, smallerDbg(smallNext)._2)
         else
-          printf("smaller: %s\n",sumTwo)
-        
+          printf("smaller: %s\n", sumTwo)
+
         // assign cumulative dist value
         nextTwo = (temp._1, sumTwo)
         //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
-        if (nextTwo._1 <= k._1){
+        if (nextTwo._1 <= k._1) {
           prevTwo = nextTwo
           smallLast = smallNext
         }
@@ -624,7 +625,7 @@ object CaratDynamoDataAnalysis {
     }
     maxDistance
   }
-  
+
   def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
     // Definitions:
     // result will be here
@@ -636,7 +637,7 @@ object CaratDynamoDataAnalysis {
     // Guess which distribution has a smaller starting value
     var smaller = one
     var bigger = two
-    
+
     /* Swap if the above assignment was not the right guess: */
     if (one.size > 0 && two.size > 0) {
       if (one.head._1 > two.head._1) {
@@ -657,17 +658,17 @@ object CaratDynamoDataAnalysis {
     for (k <- bigger) {
       // current value of bigger dist
       sumOne += k._2
-      
+
       // advance smaller past bigger, keep prev and next
       // from either side of the current value of bigger
       while (smallIter.hasNext && nextTwo._1 <= k._1) {
         var temp = smallIter.next
         sumTwo += temp._2
-        
+
         // assign cumulative dist value
         nextTwo = (temp._1, sumTwo)
         //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
-        if (nextTwo._1 <= k._1){
+        if (nextTwo._1 <= k._1) {
           prevTwo = nextTwo
         }
       }

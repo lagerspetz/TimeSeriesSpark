@@ -36,7 +36,7 @@ object DynamoDbDecoder {
   def deleteItems(table:String, keyName:String, vals: (String, Any)*){
     val items = filterItems(table, vals: _*)
     for (k <- items._2){
-      val key = k.get(keyName).getOrElse("").toString()
+      val key = k.get(keyName).getS()
       if (key != ""){
         println("Going to delete " +keyName +" = " + key + ": " + k + " from " + table)
         //deleteItem(key)
@@ -47,8 +47,8 @@ object DynamoDbDecoder {
   def deleteItems(table:String, hashKeyName:String, rangeKeyName:String, vals: (String, Any)*){
     val items = filterItems(table, vals: _*)
     for (k <- items._2){
-      val hkey = k.get(hashKeyName).getOrElse("").toString()
-      val rkey = k.get(rangeKeyName).get
+      val hkey = k.get(hashKeyName).getS()
+      val rkey = k.get(rangeKeyName).getS()
       if (hkey != null && rkey != ""){
         println("Going to delete " +hashKeyName +" = " + hkey +", " +rangeKeyName +" = " + rkey + ": " + k + " from " + table)
         deleteItem(table, hkey, rkey)
@@ -77,7 +77,7 @@ object DynamoDbDecoder {
     }))
     s.setScanFilter(conds)
     val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
+    (sr.getLastEvaluatedKey(), sr.getItems())
   }
   
   
@@ -86,7 +86,7 @@ object DynamoDbDecoder {
     val s = new ScanRequest(table)
     //s.setLimit(THROUGHPUT_LIMIT) 
     val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
+    (sr.getLastEvaluatedKey(), sr.getItems())
   }
   
   def getAllItems(table:String, firstKey:Key) = {
@@ -95,21 +95,21 @@ object DynamoDbDecoder {
     s.setExclusiveStartKey(firstKey)
     //s.setLimit(THROUGHPUT_LIMIT)
     val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
+    (sr.getLastEvaluatedKey(), sr.getItems())
   }
 
   def getItems(table: String, keyPart: String) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart))
     //q.setLimit(THROUGHPUT_LIMIT)
     val sr = DynamoDbEncoder.dd.query(q)
-    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
+    (sr.getLastEvaluatedKey(), sr.getItems())
   }
 
   def getItems(table: String, keyPart: String, lastKey: Key) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart)).withExclusiveStartKey(lastKey)
     //q.setLimit(THROUGHPUT_LIMIT)
     val sr = DynamoDbEncoder.dd.query(q)
-    (sr.getLastEvaluatedKey(), sr.getItems().map(getVals))
+    (sr.getLastEvaluatedKey(), sr.getItems())
   }
   
   def getItem(table:String, keyPart:String) = {

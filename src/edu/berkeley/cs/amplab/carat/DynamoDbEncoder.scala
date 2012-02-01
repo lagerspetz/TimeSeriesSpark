@@ -116,7 +116,6 @@ object DynamoDbEncoder {
     }
 //    val k = new UpdateTableRequest().withTableName(samplesTable).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(30))
 //    dd.updateTable(k)
-    clearTables()
   }
 
   /**
@@ -135,8 +134,8 @@ object DynamoDbEncoder {
     dd.deleteTable(del)
     del = new DeleteTableRequest(similarsTable)
     dd.deleteTable(del)
-
-    Thread.sleep(5)
+    // Sleep for 5 secs...
+    Thread.sleep(5000)
 
     createResultsTable()
     createOsTable()
