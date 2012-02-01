@@ -119,11 +119,29 @@ object DynamoDbEncoder {
   }
 
   def updateTableThroughput(tables: String*) {
+    var READ = 60L
+    var WRITE = 60L
     for (t <- tables) {
-      val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(60).withWriteCapacityUnits(20))
-      dd.updateTable(k)
-      // apparently only one table can be updated "at a time" whatever that means.
-      Thread.sleep(2000)
+      val v = dd.describeTable(new DescribeTableRequest().withTableName(t))
+      val tp = v.getTable().getProvisionedThroughput()
+      val rd = tp.getReadCapacityUnits()
+      val wr = tp.getWriteCapacityUnits()
+      if (rd < READ || wr < WRITE) {
+        if (rd*2 < READ){
+          READ = rd*2
+          println("Warning: only increasing read cap to "+ (rd*2) +" due to DynamoDb limits.")
+        }
+         if (wr*2 < WRITE){
+          WRITE = wr*2
+          println("Warning: only increasing write cap to "+ (wr*2) +" due to DynamoDb limits.")
+        }          
+        val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(READ).withWriteCapacityUnits(WRITE))
+        dd.updateTable(k)
+        // apparently only one table can be updated "at a time" whatever that means.
+        Thread.sleep(2000)
+      }else{
+        println("Doing nothing, current tp is: " + rd + ", " + wr)
+      }
     }
   }
   
