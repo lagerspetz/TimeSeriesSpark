@@ -18,12 +18,14 @@ object CopyAnalyzedData {
 
   def copyResultsData(uuId: String) {
     if (uuId != null) {
+      println("Getting stuff from resultsTable")
       val simUuid = "4EA21A48-AF1D-4C2D-A3A7-91D7F2857A10"
       var (key, res) = DynamoDbDecoder.getItems(resultsTable, uuId)
       for (x <- res) {
         if (x.containsKey(resultKey))
           x.put(resultKey, new AttributeValue(simUuid))
       }
+      println("Putting stuff to resultsTable")
       DynamoDbEncoder.putItems(resultsTable, res)
 
       while (key != null) {
@@ -34,6 +36,7 @@ object CopyAnalyzedData {
           if (x.containsKey(resultKey))
             x.put(resultKey, new AttributeValue(simUuid))
         }
+        println("Putting stuff to resultsTable")
         DynamoDbEncoder.putItems(resultsTable, res)
       }
     }
@@ -42,12 +45,13 @@ object CopyAnalyzedData {
   def copyOsData() {
     val simOs = "5.0"
     val realOs = "5.0.1"
-
+    println("Getting stuff from osTable")
     var (key, res) = DynamoDbDecoder.getItems(osTable, realOs)
     for (x <- res) {
       if (x.containsKey(osKey))
         x.put(osKey, new AttributeValue(simOs))
     }
+    println("Putting stuff to osTable")
     DynamoDbEncoder.putItems(osTable, res)
 
     while (key != null) {
@@ -58,19 +62,21 @@ object CopyAnalyzedData {
         if (x.containsKey(osKey))
           x.put(osKey, new AttributeValue(simOs))
       }
+      println("Putting stuff to osTable")
       DynamoDbEncoder.putItems(osTable, res)
     }
   }
 
   def copyModelData() {
     val simModel = "Simulator"
-      val realModel = "iPhone 4S"
-
+    val realModel = "iPhone 4S"
+    println("Getting stuff from modelsTable")
     var (key, res) = DynamoDbDecoder.getItems(modelsTable, realModel)
     for (x <- res) {
       if (x.containsKey(modelKey))
         x.put(osKey, new AttributeValue(simModel))
     }
+    println("Putting stuff to modelsTable")
     DynamoDbEncoder.putItems(modelsTable, res)
 
     while (key != null) {
@@ -81,6 +87,7 @@ object CopyAnalyzedData {
         if (x.containsKey(modelKey))
           x.put(modelKey, new AttributeValue(simModel))
       }
+      println("Putting stuff to modelsTable")
       DynamoDbEncoder.putItems(modelsTable, res)
     }
   }
