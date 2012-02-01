@@ -66,7 +66,7 @@ object CaratDynamoDataAnalysis {
     allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
       DynamoDbDecoder.getAllItems(registrationTable, _),
       handleRegs(sc, _, _, allUuids, allOses, allModels), allRates)
-
+      
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
