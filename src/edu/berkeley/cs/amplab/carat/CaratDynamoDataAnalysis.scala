@@ -103,9 +103,9 @@ object CaratDynamoDataAnalysis {
     // Remove duplicates caused by re-registrations:
     val regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
     regSet ++= regs.map(x => {
-      val uuid = x.get(regsUuid).getS()
-      val model = x.get(regsModel).getS()
-      val os = x.get(regsOs).getS()
+      val uuid = {val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
+      val model = {val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
+      val os = {val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
       (uuid, model, os)
     })
 
@@ -210,10 +210,10 @@ object CaratDynamoDataAnalysis {
         })
         //println("uuid=" + uuid + " apps=" + apps)
 
-        val time = x.get(sampleTime).getN()
-        val batteryState = x.get(sampleBatteryState).getS()
-        val batteryLevel = x.get(sampleBatteryLevel).getN()
-        val event = x.get(sampleEvent).getS()
+        val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
+        val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
+        val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
+        val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       rateMapper(os, model, mapped)
