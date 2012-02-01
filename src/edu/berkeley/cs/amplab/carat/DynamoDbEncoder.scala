@@ -55,6 +55,17 @@ object DynamoDbEncoder {
   }
 
   /**
+   * Function that makes it easy to use the ridiculous DynamoDB put API.
+   */
+  def putItems(table: String, stuff: java.util.List[java.util.Map[String, AttributeValue]]) = {
+    for (map <- stuff) {
+      println("Going to put into " + table + ":\n" + map.mkString("\n"))
+      val putReq = new PutItemRequest(table, map)
+      dd.putItem(putReq)
+    }
+  }
+
+  /**
    * Helper function used by put(table, vals).
    * Constructs Maps to be put into a table from a variable number of (String, Any) - pairs.
    */
