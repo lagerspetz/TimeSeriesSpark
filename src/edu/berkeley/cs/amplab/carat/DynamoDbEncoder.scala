@@ -120,8 +120,10 @@ object DynamoDbEncoder {
 
   def updateTableThroughput(tables: String*) {
     for (t <- tables) {
-      val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(60).withWriteCapacityUnits(60))
+      val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(60).withWriteCapacityUnits(20))
       dd.updateTable(k)
+      // apparently only one table can be updated "at a time" whatever that means.
+      Thread.sleep(2000)
     }
   }
   

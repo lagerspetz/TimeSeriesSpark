@@ -54,18 +54,13 @@ object CaratDynamoDataAnalysis {
    * Main function. Called from main() after sc initialization.
    */
 
-  def analyzeData(sc: SparkContext) = {
-    /* Get unique uuIds, Oses, and Models from registrations.
-     * 
-     * TODO: This should ideally be done inside an RDD part by part.
-     * However, the current implementation does things in batches,
-     * so it should be sufficient for memory saving for now.
-     */
-
+  def analyzeData(sc: SparkContext) {
+    // Unique uuIds, Oses, and Models from registrations.
     val allUuids = new HashSet[String]
     val allModels = new HashSet[String]
     val allOses = new HashSet[String]
 
+    // Master RDD for all data.
     var allRates: spark.RDD[CaratRate] = null
 
     allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
