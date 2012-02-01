@@ -466,8 +466,8 @@ object CaratDynamoDataAnalysis {
     val others = prob(flatTwo)
 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
-/*    if (values.size > 0 && others.size > 0) {
-      val cumulative = {
+    if (values.size > 0 && others.size > 0) {
+/*      val cumulative = {
           var sum = 0.0
           var buf = new TreeMap[Double, Double]
           for (d <- values) {
