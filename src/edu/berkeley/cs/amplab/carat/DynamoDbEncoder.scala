@@ -137,8 +137,8 @@ object DynamoDbEncoder {
         }          
         val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(READ).withWriteCapacityUnits(WRITE))
         val upd = dd.updateTable(k)
-        // apparently only one table can be updated "at a time" whatever that means.
-        Thread.sleep(20000)
+        // apparently only one table can be updated "simultaneously" whatever that means.
+        Thread.sleep(40000)
       }else{
         println("Doing nothing, current tp for " + t +" is: " + rd + ", " + wr)
       }
