@@ -31,8 +31,7 @@ import com.amazonaws.services.dynamodb.model.AttributeValue
 
 object CaratDynamoDataAnalysis {
   /**
-   * Todo: do not store hogs or bugs with negative distance values.
-   *
+   * We do not store hogs or bugs with negative distance values.
    */
 
   // Bucketing and decimal constants
@@ -68,7 +67,6 @@ object CaratDynamoDataAnalysis {
     val allOses = new HashSet[String]
 
     var allRates: spark.RDD[CaratRate] = null
-    var allData: spark.RDD[(String, Seq[CaratRate])] = null
 
     allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
       DynamoDbDecoder.getAllItems(registrationTable, _),
@@ -79,13 +77,8 @@ object CaratDynamoDataAnalysis {
     println("All models: " + allModels.mkString(", "))
 
     if (allRates != null) {
-      allData = allRates.map(x => {
-        (x.uuid, x)
-      }).groupByKey()
+        analyzeRateData(allRates, allUuids, allOses, allModels)
     }
-
-    if (allData != null)
-      analyzeRateData(allData, allUuids, allOses, allModels)
   }
 
   /**
@@ -354,15 +347,14 @@ object CaratDynamoDataAnalysis {
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
-  def analyzeRateData(rateData: RDD[(String, Seq[CaratRate])],
+  def analyzeRateData(allRates: RDD[CaratRate],
     uuids: Set[String], oses: Set[String], models: Set[String]) {
-    val apps = rateData.map(x => {
-      var buf = new HashSet[String]
-      for (k <- x._2) {
-        buf ++= k.getAllApps()
-      }
-      buf
-    }).collect()
+    /* Grouping is not necessary. This is an artifact of an older design. */
+    /*val rateData = allRates.map(x => {
+        (x.uuid, x)
+      }).groupByKey()*/
+    
+    val apps = allRates.map(_.getAllApps()).collect()
 
     var allApps = new HashSet[String]
     for (k <- apps)
@@ -370,17 +362,17 @@ object CaratDynamoDataAnalysis {
     println("AllApps: " + allApps)
 
     for (os <- oses) {
-      val fromOs = rateData.map(distributionFilter(_, _.os == os))
-      val notFromOs = rateData.map(distributionFilter(_, _.os != os))
+      val fromOs = allRates.filter(_.os == os)
+      val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      writeTriplet(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _), false)
+      writeTripletUngrouped(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _), false)
     }
 
     for (model <- models) {
-      val fromModel = rateData.map(distributionFilter(_, _.model == model))
-      val notFromModel = rateData.map(distributionFilter(_, _.model != model))
+      val fromModel = allRates.filter(_.model == model)
+      val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      writeTriplet(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _), false)
+      writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _), false)
     }
 
     for (uuid <- uuids) {
@@ -388,41 +380,35 @@ object CaratDynamoDataAnalysis {
        * TODO: if there are other combinations with uuid, they go into this loop
        */
 
-      val fromUuid = rateData.filter(_._1 == uuid)
+      val fromUuid = allRates.filter(_.uuid == uuid)
 
-      val tempApps = fromUuid.map(x => {
-        var buf = new HashSet[String]
-        for (k <- x._2) {
-          buf ++= k.getAllApps()
-        }
-        buf
-      }).collect()
+      val tempApps = fromUuid.map(_.getAllApps()).collect()
 
       var uuidApps = new HashSet[String]
       for (k <- tempApps)
         uuidApps ++= k
 
-      similarApps(rateData, uuid, uuidApps)
+      similarApps(allRates, uuid, uuidApps)
 
-      val notFromUuid = rateData.filter(_._1 != uuid)
+      val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
-      writeTriplet(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
+      writeTripletUngrouped(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
 
       /* Only consider apps reported from this uuId. */
       for (app <- uuidApps) {
         if (app != CARAT) {
-          val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
-          val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
-          writeTriplet(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _))
+          val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
+          val appNotFromUuid = notFromUuid.filter(_.getAllApps().contains(app))
+          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _))
         }
       }
     }
 
     for (app <- allApps) {
       if (app != CARAT) {
-        val filtered = rateData.map(distributionFilter(_, appFilter(_, app)))
-        val filteredNeg = rateData.map(distributionFilter(_, negativeAppFilter(_, app)))
-        writeTriplet(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _))
+        val filtered = allRates.filter(_.getAllApps().contains(app))
+        val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
+        writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _))
       }
     }
   }
@@ -431,14 +417,14 @@ object CaratDynamoDataAnalysis {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: RDD[(String, Seq[CaratRate])], uuid: String, uuidApps: Set[String]) {
+  def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
-    val similar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size >= sCount))
-    val dissimilar = all.map(distributionFilter(_, _.getAllApps().intersect(uuidApps).size < sCount))
+    val similar = all.filter(_.getAllApps().intersect(uuidApps).size >= sCount)
+    val dissimilar = all.filter(_.getAllApps().intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    writeTriplet(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
+    writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
   }
 
   /**
@@ -452,6 +438,32 @@ object CaratDynamoDataAnalysis {
        */
     val flatOne = flatten(one)
     val flatTwo = flatten(two)
+
+    val values = prob(flatOne)
+    val others = prob(flatTwo)
+
+    println("prob1.size=" + values.size + " prob2.size=" + others.size)
+    if (values.size > 0 && others.size > 0) {
+      val distance = getDistanceNonCumulative(values, others)
+
+      if (distance >= 0 || !distanceCheck) {
+        val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+        putFunction(maxX, bucketed, bucketedNeg, distance)
+      }
+    }
+  }
+  
+  /**
+   * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
+   */
+  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, distanceCheck: Boolean = true) = {
+    // probability distribution: r, count/sumCount
+
+    /* Figure out max x value (maximum rate) and bucket y values of 
+       * both distributions into n buckets, averaging inside a bucket
+       */
+    val flatOne = one.collect()
+    val flatTwo = two.collect()
 
     val values = prob(flatOne)
     val others = prob(flatTwo)
