@@ -11,6 +11,7 @@ import com.amazonaws.services.dynamodb.model.AttributeValue
 import com.amazonaws.services.dynamodb.model.DeleteTableRequest
 import collection.JavaConversions._
 import java.util.HashSet
+import com.amazonaws.services.dynamodb.model.UpdateTableRequest
 
 object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)
@@ -103,7 +104,7 @@ object DynamoDbEncoder {
    *
    */
   def main(args: Array[String]) {
-    val tables = dd.listTables().getTableNames()
+    /*val tables = dd.listTables().getTableNames()
     S3Decoder.printList(tables)
     val it = tables.iterator()
     while (it.hasNext) {
@@ -113,11 +114,17 @@ object DynamoDbEncoder {
       println(desc.toString())
       //val item = dd.getItem(new GetItemRequest("carat.latestbugs", new Key(new AttributeValue("85")))).getItem()
       //println("Item: " + item.mkString("\n"))
-    }
-//    val k = new UpdateTableRequest().withTableName(samplesTable).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(30))
-//    dd.updateTable(k)
+    }*/
+    updateTableThroughput(resultsTable, osTable, modelsTable, appsTable, bugsTable, similarsTable)
   }
 
+  def updateTableThroughput(tables: String*) {
+    for (t <- tables) {
+      val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(60).withWriteCapacityUnits(60))
+      dd.updateTable(k)
+    }
+  }
+  
   /**
    * Dangerous. Destroys and recreates tables.
    */
