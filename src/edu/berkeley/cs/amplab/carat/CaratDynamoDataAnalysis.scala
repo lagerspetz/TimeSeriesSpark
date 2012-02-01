@@ -91,6 +91,7 @@ object CaratDynamoDataAnalysis {
   /**
    * Handles a set of registration messages from the Carat DynamoDb.
    * Samples matching each registration identifier are got, rates calculated from them, and combined with `dist`.
+   * uuids, oses and models are filled during registration message handling. Returns the updated version of `dist`.
    */
   def handleRegs(sc: SparkContext, regs: java.util.List[java.util.Map[String, AttributeValue]], dist: spark.RDD[CaratRate], uuids: Set[String], oses: Set[String], models: Set[String]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
@@ -350,6 +351,9 @@ object CaratDynamoDataAnalysis {
     buf.toArray
   }
 
+  /**
+   * Main analysis function. Called on the entire collected set of CaratRates.
+   */
   def analyzeRateData(rateData: RDD[(String, Seq[CaratRate])],
     uuids: Set[String], oses: Set[String], models: Set[String]) {
     val apps = rateData.map(x => {
@@ -404,7 +408,8 @@ object CaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       writeTriplet(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
 
-      for (app <- allApps) {
+      /* Only consider apps reported from this uuId. */
+      for (app <- uuidApps) {
         if (app != CARAT) {
           val appFromUuid = fromUuid.map(distributionFilter(_, appFilter(_, app)))
           val appNotFromUuid = notFromUuid.map(distributionFilter(_, appFilter(_, app)))
@@ -422,6 +427,10 @@ object CaratDynamoDataAnalysis {
     }
   }
 
+  /**
+   * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
+   * Write them to DynamoDb.
+   */
   def similarApps(all: RDD[(String, Seq[CaratRate])], uuid: String, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
@@ -432,6 +441,9 @@ object CaratDynamoDataAnalysis {
     writeTriplet(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
   }
 
+  /**
+   * Write the probability distributions, the distance, and the xmax value to DynamoDb.
+   */
   def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, distanceCheck: Boolean = true) = {
     // probability distribution: r, count/sumCount
 
@@ -446,40 +458,8 @@ object CaratDynamoDataAnalysis {
 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
     if (values.size > 0 && others.size > 0) {
-      /*      val cumulative = {
-          var sum = 0.0
-          var buf = new TreeMap[Double, Double]
-          for (d <- values) {
-            sum += d._2
-            buf += ((d._1, sum))
-          }
-          buf.toArray
-        }
-        val cumulativeNeg = {
-          var sum = 0.0
-          var buf = new TreeMap[Double, Double]
-          for (d <- others) {
-            sum += d._2
-            buf += ((d._1, sum))
-          }
-          buf.toArray
-        }
-      printf("one %s\ntwo %s\ncumu %s\ncu2  %s\n", values.mkString(" "), others.mkString(" "), cumulative.mkString(" "), cumulativeNeg.mkString(" "))*/
-      var sum = 0.0
-      for (k <- values)
-        sum += k._2
-      if (sum > 1.01)
-        throw new Error("Sum of " + values.mkString(" ") + " is " + sum + "!")
-      sum = 0.0
-      for (k <- others)
-        sum += k._2
-      if (sum > 1.01)
-        throw new Error("Sum of " + others.mkString(" ") + " is " + sum + "!")
-      //      val oldDist = getDistance(cumulative, cumulativeNeg)
       val distance = getDistanceNonCumulative(values, others)
 
-      /*      println("old Dist: " + oldDist + "\n" +
-        "distance: " + distance)*/
       if (distance >= 0 || !distanceCheck) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
         putFunction(maxX, bucketed, bucketedNeg, distance)
@@ -487,6 +467,9 @@ object CaratDynamoDataAnalysis {
     }
   }
 
+  /**
+   * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
+   */
   def bucketDistributions(values: Array[(Double, Double)], others: Array[(Double, Double)]) = {
     /*maxX defines the buckets. Each bucket is
      * k /100 * maxX to k+1 / 100 * maxX.
@@ -537,95 +520,10 @@ object CaratDynamoDataAnalysis {
     result / mul
   }
 
-  def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)], debug1: Array[(Double, Double)], debug2: Array[(Double, Double)]) = {
-    // Definitions:
-    // result will be here
-    var maxDistance = -2.0
-    // represents previous value of distribution with a smaller starting value
-    var prevTwo = (-2.0, 0.0)
-    // represents next value of distribution with a smaller starting value
-    var nextTwo = prevTwo
-    // Guess which distribution has a smaller starting value
-    var smaller = one
-    var bigger = two
-
-    var smallerDbg = debug1
-    var biggerDbg = debug2
-
-    /* Swap if the above assignment was not the right guess: */
-    if (one.size > 0 && two.size > 0) {
-      if (one.head._1 > two.head._1) {
-        smaller = two
-        bigger = one
-      }
-    }
-
-    if (smallerDbg.size > 0 && biggerDbg.size > 0) {
-      if (smallerDbg.head._1 > biggerDbg.head._1) {
-        smallerDbg = debug2
-        biggerDbg = debug1
-      }
-    }
-
-    var bigCounter = 0
-    var smallNext = 0
-    var smallLast = 0
-
-    // use these to keep the cumulative distribution current value
-    var sumOne = 0.0
-    var sumTwo = 0.0
-
-    //println("one.size=" + one.size + " two.size=" + two.size)
-
-    // advance the smaller dist manually
-    var smallIter = smaller.iterator
-    // and the bigger automatically
-    for (k <- bigger) {
-      // current value of bigger dist
-      sumOne += k._2
-      if (bigCounter < biggerDbg.size)
-        printf("bigger: %s debug: %s\n", sumOne, biggerDbg(bigCounter)._2)
-      else
-        printf("bigger: %s\n", sumOne)
-      bigCounter += 1
-
-      // advance smaller past bigger, keep prev and next
-      // from either side of the current value of bigger
-      while (smallIter.hasNext && nextTwo._1 <= k._1) {
-        var temp = smallIter.next
-        sumTwo += temp._2
-        if (smallNext < smallerDbg.size)
-          printf("smaller: %s debug: %s\n", sumTwo, smallerDbg(smallNext)._2)
-        else
-          printf("smaller: %s\n", sumTwo)
-
-        // assign cumulative dist value
-        nextTwo = (temp._1, sumTwo)
-        //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
-        if (nextTwo._1 <= k._1) {
-          prevTwo = nextTwo
-          smallLast = smallNext
-        }
-        smallNext += 1
-      }
-
-      /* now nextTwo >= k > prevTwo */
-
-      /* (NoApp - App) gives a high positive number
-         * if the app uses a more energy. This is because
-         * if the app distribution is shifted to the right,
-         * it has a high probability of running at a high drain rate,
-         * and so its cumulative dist value is lower, and NoApp
-         * has a higher value. Inverse for low energy usage. */
-      val distance = prevTwo._2 - sumOne
-      if (smallNext < smallerDbg.size && bigCounter < biggerDbg.size)
-        printf("%s debug\n%s prevTwo \n%s k\n%s kbug\n%s nextTwo\n%s debug\ndistance:%s\n", smallerDbg(smallLast), prevTwo, k, biggerDbg(bigCounter), nextTwo, smallerDbg(smallNext), distance)
-      if (distance > maxDistance)
-        maxDistance = distance
-    }
-    maxDistance
-  }
-
+  /**
+   * Get the distance from a regular, non-cumulative distribution.
+   * The cumulative distribution values are constructed on the fly and discarded afterwards.
+   */
   def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
     // Definitions:
     // result will be here
@@ -682,54 +580,6 @@ object CaratDynamoDataAnalysis {
          * and so its cumulative dist value is lower, and NoApp
          * has a higher value. Inverse for low energy usage. */
       val distance = prevTwo._2 - sumOne
-      if (distance > maxDistance)
-        maxDistance = distance
-    }
-    maxDistance
-  }
-
-  def getDistance(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
-    // FIXME: use of collect may cause memory issues.
-    var maxDistance = -2.0
-    var prevOne = (-2.0, 0.0)
-    var prevTwo = (-2.0, 0.0)
-    var nextTwo = prevTwo
-
-    var smaller = one
-    var bigger = two
-
-    /* Swap if the above assignment was not the right guess: */
-    if (one.size > 0 && two.size > 0) {
-      if (one.head._1 > two.head._1) {
-        smaller = two
-        bigger = one
-      }
-    }
-
-    //println("one.size=" + one.size + " two.size=" + two.size)
-
-    var smallIter = smaller.iterator
-    for (k <- bigger) {
-      var distance = 0.0
-
-      while (smallIter.hasNext && nextTwo._1 <= k._1) {
-        nextTwo = smallIter.next
-        //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
-        if (nextTwo._1 <= k._1)
-          prevTwo = nextTwo
-      }
-
-      /* now nextTwo has the bigger one,
-         * prevTwo the one directly below k
-         */
-
-      /* NoApp - App gives a high positive number
-         * if the app uses a more energy. This is because
-         * if the app distribution is shifted to the right,
-         * it has a high probability of running at a high drain rate,
-         * and so its cumulative dist value is lower, and NoApp
-         * has a higher value. Inverse for low energy usage. */
-      distance = prevTwo._2 - k._2
       if (distance > maxDistance)
         maxDistance = distance
     }
