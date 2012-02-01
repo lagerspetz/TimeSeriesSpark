@@ -74,7 +74,7 @@ object CopyAnalyzedData {
     var (key, res) = DynamoDbDecoder.getItems(modelsTable, modelKey, realModel)
     for (x <- res) {
       if (x.containsKey(modelKey))
-        x.put(osKey, new AttributeValue(simModel))
+        x.put(modelKey, new AttributeValue(simModel))
     }
     println("Putting stuff to modelsTable")
     DynamoDbEncoder.putItems(modelsTable, res)
