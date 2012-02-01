@@ -61,50 +61,22 @@ object CaratDynamoDataAnalysis {
      * However, the current implementation does things in batches,
      * so it should be sufficient for memory saving for now.
      */
-    val (allUuids, allOses, allModels) = {
-      val resultUuids = new HashSet[String]
-      val resultModels = new HashSet[String]
-      val resultOses = new HashSet[String]
-      var finished = false
 
-      var (key, regs) = DynamoDbDecoder.getAllItems(registrationTable)
-      println("Got: " + regs.size + " registrations.")
-      for (k <- regs) {
-        resultUuids += k.get(regsUuid).getOrElse("").toString()
-        resultModels += k.get(regsModel).getOrElse("").toString()
-        resultOses += k.get(regsOs).getOrElse("").toString()
-      }
-
-      if (key == null)
-        finished = true
-      while (!finished) {
-        println("Continuing from key=" + key)
-        var (key2, regs2) = DynamoDbDecoder.getAllItems(registrationTable, key)
-        regs = regs2
-        key = key2
-        println("Got: " + regs.size + " registrations.")
-        for (k <- regs) {
-          resultUuids += k.get(regsUuid).getOrElse("").toString()
-          resultModels += k.get(regsModel).getOrElse("").toString()
-          resultOses += k.get(regsOs).getOrElse("").toString()
-        }
-        if (key == null)
-          finished = true
-      }
-      (resultUuids, resultOses, resultModels)
-    }
-
-    println("All uuIds: " + allUuids.mkString(", "))
-    println("All oses: " + allOses.mkString(", "))
-    println("All models: " + allModels.mkString(", "))
+    val allUuids = new HashSet[String]
+    val allModels = new HashSet[String]
+    val allOses = new HashSet[String]
 
     var allRates: spark.RDD[CaratRate] = null
     var allData: spark.RDD[(String, Seq[CaratRate])] = null
 
     allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
       DynamoDbDecoder.getAllItems(registrationTable, _),
-      handleRegs(sc, _, _), allRates)
+      handleRegs(sc, _, _, allUuids, allOses, allModels), allRates)
 
+    println("All uuIds: " + allUuids.mkString(", "))
+    println("All oses: " + allOses.mkString(", "))
+    println("All models: " + allModels.mkString(", "))
+    
     if (allRates != null) {
       allData = allRates.map(x => {
         (x.uuid, x)
@@ -119,7 +91,7 @@ object CaratDynamoDataAnalysis {
    * Handles a set of registration messages from the Carat DynamoDb.
    * Samples matching each registration identifier are got, rates calculated from them, and combined with `dist`.
    */
-  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], dist: spark.RDD[CaratRate]) = {
+  def handleRegs(sc: SparkContext, regs: Seq[Map[String, Any]], dist: spark.RDD[CaratRate], uuids:Set[String], oses:Set[String], models:Set[String]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
      */
@@ -140,11 +112,17 @@ object CaratDynamoDataAnalysis {
     for (x <- regSet) {
       /*
        * Data format guess:
-       * Registration(uuId:0FC81205-55D0-46E5-8C80-5B96F17B5E7B, platformId:iPhone Simulator, systemVersion:5.0)
+       * Registration(uuId:0FC81205-55D0-46E5-8C80-5B96F17B5E7B, platformId:iPhone Simulator, osVersion:5.0)
        */
       val uuid = x._1
       val model = x._2
       val os = x._3
+      
+      // Collect all uuids, models and oses in the same loop
+      uuids += uuid
+      models += model
+      oses += os
+      
       println("Handling reg:" + x)
       /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
