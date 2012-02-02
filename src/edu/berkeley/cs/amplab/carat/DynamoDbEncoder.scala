@@ -146,9 +146,9 @@ object DynamoDbEncoder {
   }
 
   def updateTableThroughput(tables: String*) {
-    var READ = 60L
-    var WRITE = 60L
     for (t <- tables) {
+      var READ = 60L
+      var WRITE = 60L
       val v = dd.describeTable(new DescribeTableRequest().withTableName(t))
       val tp = v.getTable().getProvisionedThroughput()
       val rd = tp.getReadCapacityUnits()
@@ -161,7 +161,7 @@ object DynamoDbEncoder {
          if (wr*2 < WRITE){
           WRITE = wr*2
           println("Warning: only increasing write cap of " + t + " to "+ (wr*2) +" due to DynamoDb limits.")
-        }          
+        }        
         val k = new UpdateTableRequest().withTableName(t).withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(READ).withWriteCapacityUnits(WRITE))
         val upd = dd.updateTable(k)
         // apparently only one table can be updated "simultaneously" whatever that means.
@@ -205,7 +205,7 @@ object DynamoDbEncoder {
     ks.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(resultsTable, new KeySchema(ks))
-    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
+    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(20))
     dd.createTable(req)
   }
   
@@ -215,7 +215,7 @@ object DynamoDbEncoder {
     ks.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(similarsTable, new KeySchema(ks))
-    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
+    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(20))
     dd.createTable(req)
   }
 
@@ -225,7 +225,7 @@ object DynamoDbEncoder {
     ks.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(osTable, new KeySchema(ks))
-    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
+    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(20))
     dd.createTable(req)
   }
 
@@ -235,7 +235,7 @@ object DynamoDbEncoder {
     ks.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(modelsTable, new KeySchema(ks))
-    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
+    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(20))
     dd.createTable(req)
   }
 
@@ -248,7 +248,7 @@ object DynamoDbEncoder {
     rk.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(bugsTable, new KeySchema(ks).withRangeKeyElement(rk))
-    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
+    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(20))
     dd.createTable(req)
   }
 
@@ -258,7 +258,7 @@ object DynamoDbEncoder {
     ks.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(appsTable, new KeySchema(ks))
-    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(10))
+    req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(20))
     dd.createTable(req)
   }
 }
