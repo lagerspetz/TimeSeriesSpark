@@ -44,5 +44,6 @@ class CaratRate(var uuid:String, val os:String, val model:String,
       0
     else 1
   }
-
+  
+  override def toString() = "CaratRate rate="+rate+" uuid="+uuid+" os="+os+" model="+model+" events="+getAllEvents()+ " apps="+getAllApps()
 }

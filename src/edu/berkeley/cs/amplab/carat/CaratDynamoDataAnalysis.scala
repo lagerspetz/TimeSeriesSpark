@@ -356,6 +356,9 @@ object CaratDynamoDataAnalysis {
     /*val rateData = allRates.map(x => {
         (x.uuid, x)
       }).groupByKey()*/
+    val cc = allRates.collect()
+    for (k <- cc)
+      println(k)
     
     val apps = allRates.map(_.getAllApps()).collect()
 
