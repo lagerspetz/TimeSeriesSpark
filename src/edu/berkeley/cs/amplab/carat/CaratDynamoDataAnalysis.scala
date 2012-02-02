@@ -37,15 +37,20 @@ object CaratDynamoDataAnalysis {
   // Bucketing and decimal constants
   val buckets = 100
   val DECIMALS = 3
-  val DEBUG = false
-
+  var DEBUG = false
   val LIMIT_SPEED = false
 
   /**
    * Main program entry point.
    */
   def main(args: Array[String]) {
-    val sc = new SparkContext(args(0), "CaratDynamoDataAnalysis")
+    var master = "local[1]"
+    if (args != null || args.length >= 1)
+      master = args(0)
+    if (args != null || args.length > 1 && args(1) == "DEBUG")
+      DEBUG = true
+      
+    val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
     sys.exit(0)
   }
@@ -241,8 +246,8 @@ object CaratDynamoDataAnalysis {
       events ++= k._4.trim().toLowerCase().split(" ")
       events += k._5.trim().toLowerCase()
       apps = k._6
-      
-      printf("batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt-batt, events, apps)
+      if (DEBUG)
+        printf("batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt-batt, events, apps)
 
       if (events.contains(discharge)) {
         unplugged = true
@@ -260,7 +265,8 @@ object CaratDynamoDataAnalysis {
           prevBatt = batt
         }
         if (!pluggedIn) {
-          printf("unplugged batt=%f prevBatt=%f drain=%f events=%s\n", batt, prevBatt, prevBatt-batt, events)
+          if (DEBUG)
+            printf("unplugged batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt-batt, events, apps)
           // take periods where battery life has changed
           if (batt - prevBatt >= 0.01 || prevBatt - batt >= 0.01) {
             if (prevBatt -batt < 0){
@@ -355,13 +361,11 @@ object CaratDynamoDataAnalysis {
    */
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: Set[String], oses: Set[String], models: Set[String]) {
-    /* Grouping is not necessary. This is an artifact of an older design. */
-    /*val rateData = allRates.map(x => {
-        (x.uuid, x)
-      }).groupByKey()*/
-    val cc = allRates.collect()
-    for (k <- cc)
-      println(k)
+    if (DEBUG){
+      val cc = allRates.collect()
+      for (k <- cc)
+        println(k)
+    }
     
     val apps = allRates.map(_.getAllApps()).collect()
 
@@ -482,8 +486,10 @@ object CaratDynamoDataAnalysis {
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
     if (values.size > 0 && others.size > 0) {
       /*debug */
-      println("Nonzero prob: " + values.filter(_._2 > 0).mkString(" "))
-      println("Nonzero probNeg: "  + others.filter(_._2 > 0).mkString(" "))
+      if (DEBUG){
+        println("Nonzero prob: " + values.filter(_._2 > 0).mkString(" "))
+        println("Nonzero probNeg: "  + others.filter(_._2 > 0).mkString(" "))
+      }
       val distance = getDistanceNonCumulative(values, others)
 
       if (distance >= 0 || !distanceCheck) {
