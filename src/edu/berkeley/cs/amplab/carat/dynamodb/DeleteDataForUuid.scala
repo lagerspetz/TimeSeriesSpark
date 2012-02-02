@@ -24,7 +24,7 @@ object DeleteDataForUuid {
       var (key, res) = DynamoDbDecoder.getItems(samplesTable, uuId)
       for (k <- res){
         val key = k.get(sampleKey).getS()
-        val time = k.get(sampleTime).getN()
+        val time = k.get(sampleTime).getN().toDouble
         printf("key %s time %s\n", key, time)
         if (force)
           DynamoDbDecoder.deleteItem(samplesTable, key, time)
@@ -34,7 +34,7 @@ object DeleteDataForUuid {
       var (key2, res2) = DynamoDbDecoder.getItems(registrationTable, uuId)
       for (k <- res2){
         val key = k.get(regsUuid).getS()
-        val time = k.get(regsTimestamp).getN()
+        val time = k.get(regsTimestamp).getN().toDouble
         printf("key %s time %s\n", key, time)
         if (force)
           DynamoDbDecoder.deleteItem(registrationTable, key, time)
