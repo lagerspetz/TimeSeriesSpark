@@ -262,9 +262,10 @@ object CaratDynamoDataAnalysis {
           if (batt - prevBatt >= 1 || prevBatt - batt >= 1) {
             if (prevBatt -batt < 0){
               printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
-            }
-            rates += new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+            }else{
+              rates += new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
               prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+            }
             prevD = d
             prevBatt = batt
             // Reset, current apps and events added below
@@ -285,10 +286,11 @@ object CaratDynamoDataAnalysis {
          */
         if (k == observations.last && !pluggedIn) {
           if (prevD != d) {
-            if (prevBatt -batt < 0)
-              printf("[last] prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
-            rates += new CaratRate(observations.last._1, os, model, prevD, d, prevBatt, batt,
+            if (prevBatt -batt >= 0){
+              rates += new CaratRate(observations.last._1, os, model, prevD, d, prevBatt, batt,
               prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+            }else
+              printf("[last] prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
           }
         }
 
