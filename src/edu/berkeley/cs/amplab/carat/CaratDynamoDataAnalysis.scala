@@ -605,7 +605,12 @@ object CaratDynamoDataAnalysis {
          * it has a high probability of running at a high drain rate,
          * and so its cumulative dist value is lower, and NoApp
          * has a higher value. Inverse for low energy usage. */
-      val distance = prevTwo._2 - sumOne
+      val distance = {
+        if (smaller != two)
+           sumOne - prevTwo._2
+          else
+            prevTwo._2 - sumOne
+      }
       if (distance > maxDistance)
         maxDistance = distance
     }
