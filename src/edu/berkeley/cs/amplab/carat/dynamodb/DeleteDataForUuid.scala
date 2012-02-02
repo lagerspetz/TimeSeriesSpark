@@ -21,6 +21,7 @@ object DeleteDataForUuid {
       for (k <- res){
         val key = k.get(sampleKey).getS()
         val time = k.get(sampleTime).getN()
+        printf("key %s time %s\n", key, time)
         //DynamoDbDecoder.deleteItem(samplesTable, key, time)
       }
     }
