@@ -9,10 +9,14 @@ import collection.JavaConversions._
  */
 object DeleteDataForUuid {
   def main(args: Array[String]) {
-    if (args != null && args.length == 1) {
+    if (args != null && args.length >= 1) {
+      if (args.length > 1 && args(1) == "force")
+        force = true
       deleteDataForUuid(args(0))
     }
   }
+  
+  var force = false
 
   def deleteDataForUuid(uuId: String) {
     if (uuId != null) {
@@ -22,7 +26,18 @@ object DeleteDataForUuid {
         val key = k.get(sampleKey).getS()
         val time = k.get(sampleTime).getN()
         printf("key %s time %s\n", key, time)
-        //DynamoDbDecoder.deleteItem(samplesTable, key, time)
+        if (force)
+          DynamoDbDecoder.deleteItem(samplesTable, key, time)
+      }
+      
+       println("Getting stuff from "+registrationTable)
+      var (key2, res2) = DynamoDbDecoder.getItems(registrationTable, uuId)
+      for (k <- res2){
+        val key = k.get(regsUuid).getS()
+        val time = k.get(regsTimestamp).getN()
+        printf("key %s time %s\n", key, time)
+        if (force)
+          DynamoDbDecoder.deleteItem(registrationTable, key, time)
       }
     }
   }
