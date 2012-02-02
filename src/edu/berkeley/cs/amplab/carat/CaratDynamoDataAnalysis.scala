@@ -245,6 +245,9 @@ object CaratDynamoDataAnalysis {
       if (events.contains(discharge)) {
         unplugged = true
         pluggedIn = false
+      }else if (events.contains(charge)){
+        pluggedIn = true
+        unplugged = false
       }
 
       /* Ignore measurements until unplugged event
@@ -280,7 +283,7 @@ object CaratDynamoDataAnalysis {
          * This should work anyway. However, the state of plugged in or not should be remembered.
          * Current solution: Use charging and discharging battery state for this.
          */
-        if ((k == observations.last && !pluggedIn) || (!pluggedIn && (events.contains(charge)))) {
+        if (k == observations.last && !pluggedIn) {
           if (prevD != d) {
             if (prevBatt -batt < 0)
               printf("[last] prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
