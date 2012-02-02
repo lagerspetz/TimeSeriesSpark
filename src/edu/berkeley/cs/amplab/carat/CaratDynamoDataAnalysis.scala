@@ -322,7 +322,6 @@ object CaratDynamoDataAnalysis {
 
   /**
    * Create a probability function out of a set of CaratRates.
-   * If these are not for the same uuId, this fails!
    */
   def prob(rates: Array[CaratRate]) = {
     var sum = 0.0
@@ -460,11 +459,16 @@ object CaratDynamoDataAnalysis {
     val flatOne = one.collect()
     val flatTwo = two.collect()
 
+    println("Nonzero rates: " + flatOne.filter(_.rate() > 0).map(_.rate()).mkString(" "))
+    println("Nonzero ratesNeg: "  + flatTwo.filter(_.rate() > 0).map(_.rate()).mkString(" "))
+    
     val values = prob(flatOne)
-    val others = prob(flatTwo)
-
+    val others = prob(flatTwo) 
     println("prob1.size=" + values.size + " prob2.size=" + others.size)
     if (values.size > 0 && others.size > 0) {
+      /*debug */
+      println("Nonzero prob: " + values.filter(_._2 > 0).mkString(" "))
+      println("Nonzero probNeg: "  + others.filter(_._2 > 0).mkString(" "))
       val distance = getDistanceNonCumulative(values, others)
 
       if (distance >= 0 || !distanceCheck) {
