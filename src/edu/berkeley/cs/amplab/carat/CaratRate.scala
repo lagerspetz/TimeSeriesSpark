@@ -21,7 +21,11 @@ class CaratRate(var uuid:String, val os:String, val model:String,
     this(uuid, os, model, time2-time1, battery2-battery1, events1, events2, apps1, apps2)
   }
   
-  def rate() = batteryDiff * -1.0 / (timeDiff / 1000.0)
+  def rate() = {
+    // batteryDiff is between 0 and 1, negative. Multiply by -100.0 to get 0 to 100, positive.
+    // The unit for rate is percent per second.
+    batteryDiff * -100.0 / timeDiff
+  }
   
   def getAllApps() = {
     val k = new HashSet[String]

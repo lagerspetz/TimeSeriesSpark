@@ -262,7 +262,7 @@ object CaratDynamoDataAnalysis {
         if (!pluggedIn) {
           printf("unplugged batt=%f prevBatt=%f drain=%f events=%s\n", batt, prevBatt, prevBatt-batt, events)
           // take periods where battery life has changed
-          if (batt - prevBatt >= 1 || prevBatt - batt >= 1) {
+          if (batt - prevBatt >= 0.01 || prevBatt - batt >= 0.01) {
             if (prevBatt -batt < 0){
               printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
             }else{
