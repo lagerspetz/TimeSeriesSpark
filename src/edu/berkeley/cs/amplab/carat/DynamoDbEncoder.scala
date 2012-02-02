@@ -135,7 +135,14 @@ object DynamoDbEncoder {
       //val item = dd.getItem(new GetItemRequest("carat.latestbugs", new Key(new AttributeValue("85")))).getItem()
       //println("Item: " + item.mkString("\n"))
     }*/
-    updateTableThroughput(resultsTable, osTable, modelsTable, appsTable, bugsTable, similarsTable)
+    if (args != null){
+      if (args.length == 1){
+        if (args(0) == "updateThroughput")
+          updateTableThroughput(resultsTable, osTable, modelsTable, appsTable, bugsTable, similarsTable)
+        if (args(0) == "clearTablesDangerous")
+          clearTables()
+      }
+    }
   }
 
   def updateTableThroughput(tables: String*) {
