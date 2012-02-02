@@ -257,7 +257,9 @@ object CaratDynamoDataAnalysis {
         if (!pluggedIn) {
           // take periods where battery life has changed
           if (batt - prevBatt >= 1 || prevBatt - batt >= 1) {
-
+            if (prevBatt -batt < 0){
+              println("prevBatt %s batt %s for observation %s", prevBatt, batt, k)
+            }
             rates += new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
               prevEvents.toArray, events.toArray, prevApps.toArray, apps)
             prevD = d
@@ -280,6 +282,7 @@ object CaratDynamoDataAnalysis {
          */
         if ((k == observations.last && !pluggedIn) || (!pluggedIn && (events.contains(charge)))) {
           if (prevD != d) {
+            println("[last] prevBatt %s batt %s for observation %s", prevBatt, batt, k)
             rates += new CaratRate(observations.last._1, os, model, prevD, d, prevBatt, batt,
               prevEvents.toArray, events.toArray, prevApps.toArray, apps)
           }
@@ -298,7 +301,7 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
-
+    
     rates.toSeq
   }
 
