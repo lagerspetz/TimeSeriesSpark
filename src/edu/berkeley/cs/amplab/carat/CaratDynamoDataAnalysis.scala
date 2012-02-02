@@ -241,6 +241,8 @@ object CaratDynamoDataAnalysis {
       events ++= k._4.trim().toLowerCase().split(" ")
       events += k._5.trim().toLowerCase()
       apps = k._6
+      
+      printf("batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt-batt, events, apps)
 
       if (events.contains(discharge)) {
         unplugged = true
@@ -258,6 +260,7 @@ object CaratDynamoDataAnalysis {
           prevBatt = batt
         }
         if (!pluggedIn) {
+          printf("unplugged batt=%f prevBatt=%f drain=%f events=%s\n", batt, prevBatt, prevBatt-batt, events)
           // take periods where battery life has changed
           if (batt - prevBatt >= 1 || prevBatt - batt >= 1) {
             if (prevBatt -batt < 0){
