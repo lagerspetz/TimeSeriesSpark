@@ -17,13 +17,12 @@ object DeleteDataForUuid {
   def deleteDataForUuid(uuId: String) {
     if (uuId != null) {
       println("Getting stuff from "+samplesTable)
-      var (key, res) = DynamoDbDecoder.getItems(samplesTable, uuId)
+      var (key, res) = DynamoDbDecoder.getItemsIN(samplesTable, sampleKey, uuId)
       for (k <- res){
         val key = k.get(sampleKey).getS()
         val time = k.get(sampleTime).getN()
         //DynamoDbDecoder.deleteItem(samplesTable, key, time)
       }
-        
     }
   }
 }
