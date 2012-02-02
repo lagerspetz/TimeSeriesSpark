@@ -49,15 +49,15 @@ object PowerMonToDynamoSamples {
     val dfs = "EEE MMM dd HH:mm:ss zzz yyyy"
     val df = new SimpleDateFormat(dfs)
     val uuId = arr(1)
-    val timestamp = df.parse(arr(0)).getTime()
-    val batteryLevel = arr(2).toDouble
+    val timestamp = df.parse(arr(0)).getTime() / 1000.0
+    val batteryLevel = arr(2).toDouble / 100.0
     val events = arr(3).trim().toLowerCase().split(" ")
     val triggeredBy = events(0)
     val batteryState = {
       if (!events.contains("pluggedin"))
-        "unplugged"
+        "Unplugged"
       else
-        "charging"
+        "Charging"
     }
     var apps = new Array[String](arr.length - 4)
     Array.copy(arr, 4, apps, 0, apps.length)
