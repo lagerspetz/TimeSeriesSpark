@@ -493,12 +493,12 @@ object CaratDynamoDataAnalysis {
     var valueIndex = 0
     var othersIndex = 0
     for (k <- 0 until buckets) {
-      val start = maxX / buckets * k
-      val end = maxX / buckets * (k + 1)
+      val start = k * maxX / buckets
+      val end = (k+1) * maxX / buckets
       var sumV = 0.0
       var sumO = 0.0
       var countV = valueIndex
-      var countO = valueIndex
+      var countO = othersIndex
       while (valueIndex < values.size && values(valueIndex)._1 >= start && values(valueIndex)._1 < end) {
         sumV += values(valueIndex)._2
         valueIndex += 1
