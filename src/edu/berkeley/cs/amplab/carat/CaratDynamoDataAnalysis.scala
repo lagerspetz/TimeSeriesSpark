@@ -335,7 +335,7 @@ object CaratDynamoDataAnalysis {
     for (k <- buf)
       buf += ((k._1, k._2 / sum))
 
-    buf.toArray
+    buf
   }
 
   /**
@@ -481,7 +481,7 @@ object CaratDynamoDataAnalysis {
   /**
    * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
    */
-  def bucketDistributions(values: Array[(Double, Double)], others: Array[(Double, Double)]) = {
+  def bucketDistributions(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) = {
     /*maxX defines the buckets. Each bucket is
      * k /100 * maxX to k+1 / 100 * maxX.
      * Therefore, do not store the bucket starts and ends, only bucket numbers from 0 to 99.*/
@@ -489,26 +489,34 @@ object CaratDynamoDataAnalysis {
     val bucketedNeg = new ArrayBuffer[(Int, Double)]
 
     val maxX = math.max(values.last._1, others.last._1)
-
-    var valueIndex = 0
-    var othersIndex = 0
+    
+    val iter = values.iterator
+    val otherIter = others.iterator
+    
     for (k <- 0 until buckets) {
       val start = k * maxX / buckets
       val end = (k+1) * maxX / buckets
+      
       var sumV = 0.0
+      var countV = 0
+      var xValue = start
+      while (iter.hasNext &&  xValue >= start && xValue < end) {
+        val (xValue2, yValue2) = iter.next()
+        xValue = xValue2
+        sumV += yValue2
+        countV += 1
+      }
+      
       var sumO = 0.0
-      var countV = valueIndex
-      var countO = othersIndex
-      while (valueIndex < values.size && values(valueIndex)._1 >= start && values(valueIndex)._1 < end) {
-        sumV += values(valueIndex)._2
-        valueIndex += 1
+      var countO = 0
+      xValue = start
+      while (otherIter.hasNext &&  xValue >= start && xValue < end) {
+        val (xValue2, yValue2) = otherIter.next()
+        xValue = xValue2
+        sumO += yValue2
+        countO += 1
       }
-      countV = valueIndex - countV
-      while (othersIndex < others.size && others(othersIndex)._1 >= start && others(othersIndex)._1 < end) {
-        sumO += others(othersIndex)._2
-        othersIndex += 1
-      }
-      countO = othersIndex - countO
+      
       if (countV > 0) {
         bucketed += ((k, nDecimal(sumV / countV)))
       } else
@@ -535,7 +543,7 @@ object CaratDynamoDataAnalysis {
    * Get the distance from a regular, non-cumulative distribution.
    * The cumulative distribution values are constructed on the fly and discarded afterwards.
    */
-  def getDistanceNonCumulative(one: Array[(Double, Double)], two: Array[(Double, Double)]) = {
+  def getDistanceNonCumulative(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
     // Definitions:
     // result will be here
     var maxDistance = -2.0
