@@ -500,100 +500,24 @@ object CaratDynamoDataAnalysis {
       val x = k._1 / xmax
       val bucket = (x * buckets).toInt
       var old = bucketed.get(bucket).getOrElse(0.0)
-      bucketed.put(bucket, old + k._2)
+      bucketed += ((bucket, old + k._2))
     }
     
     for (k <- others){
       val x = k._1 / xmax
       val bucket = (x * buckets).toInt
       var old = bucketedNeg.get(bucket).getOrElse(0.0)
-      bucketedNeg.put(bucket, old + k._2)
+      bucketedNeg += ((bucket, old + k._2))
     }
     
     for (k <- 0 until buckets){
       if (!bucketed.contains(k))
-        bucketed.put(0, 0.0)
+        bucketed += ((0, 0.0))
       if (!bucketedNeg.contains(k))
-        bucketedNeg.put(0, 0.0)
+        bucketedNeg += ((0, 0.0))
     }
     
     (xmax, bucketed, bucketedNeg)
-  }
-
-  /**
-   * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
-   */
-  def bucketDistributionsOld(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) = {
-    /*maxX defines the buckets. Each bucket is
-     * k /100 * maxX to k+1 / 100 * maxX.
-     * Therefore, do not store the bucket starts and ends, only bucket numbers from 0 to 99.*/
-    val bucketed = new ArrayBuffer[(Int, Double)]
-    val bucketedNeg = new ArrayBuffer[(Int, Double)]
-
-    val maxX = math.max(values.last._1, others.last._1)
-    
-    val iter = values.iterator
-    val otherIter = others.iterator
-    
-    var nx = (0.0, 0.0)
-    var nnx = (0.0, 0.0)
-    
-    for (k <- 0 until buckets) {
-      val start = k * maxX / buckets
-      val end = (k+1) * maxX / buckets
-      
-      var sumV = 0.0
-      var xValue = end
-      var yValue = 0.0
-      
-      if (iter.hasNext){
-        nx = iter.next()
-        xValue = nx._1
-        yValue = nx._2
-      }
-
-      while ((xValue > start || (start == 0 && xValue >= start)) && xValue <= end) {
-        sumV += yValue
-        if (iter.hasNext) {
-          nx = iter.next()
-          xValue = nx._1
-          yValue = nx._2
-        }
-      }
-
-      var sumO = 0.0
-      xValue = end
-      yValue = 0.0
-      
-      if (otherIter.hasNext){
-        nnx = otherIter.next()
-        xValue = nnx._1
-        yValue = nnx._2
-      }
-
-      while ((xValue > start || (start == 0 && xValue >= start)) && xValue <= end) {
-        sumO += yValue
-        if (otherIter.hasNext) {
-          nnx = otherIter.next()
-          xValue = nnx._1
-          yValue = nnx._2
-        }
-      }
-      
-      bucketed += ((k, nDecimal(sumV)))
-      bucketedNeg += ((k, nDecimal(sumO)))
-    }
-
-    (maxX, bucketed, bucketedNeg)
-  }
-
-  def nDecimal(orig: Double) = {
-    var result = orig
-    var mul = 1
-    for (k <- 0 until DECIMALS)
-      mul *= 10
-    result = math.round(result * mul)
-    result / mul
   }
 
   /**
