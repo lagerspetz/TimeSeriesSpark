@@ -491,8 +491,8 @@ object CaratDynamoDataAnalysis {
    * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
    */
   def bucketDistributionsByX(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) = {
-    val bucketed = new TreeMap[Int, Double]
-    val bucketedNeg = new TreeMap[Int, Double]
+    var bucketed = new TreeMap[Int, Double]
+    var bucketedNeg = new TreeMap[Int, Double]
 
     val xmax = math.max(values.last._1, others.last._1)
 
