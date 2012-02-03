@@ -441,32 +441,6 @@ object CaratDynamoDataAnalysis {
   }
 
   /**
-   * Write the probability distributions, the distance, and the xmax value to DynamoDb.
-   */
-  def writeTriplet(one: RDD[(String, Seq[CaratRate])], two: RDD[(String, Seq[CaratRate])], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, distanceCheck: Boolean = true) = {
-    // probability distribution: r, count/sumCount
-
-    /* Figure out max x value (maximum rate) and bucket y values of 
-       * both distributions into n buckets, averaging inside a bucket
-       */
-    val flatOne = flatten(one)
-    val flatTwo = flatten(two)
-
-    val values = prob(flatOne)
-    val others = prob(flatTwo)
-
-    println("prob1.size=" + values.size + " prob2.size=" + others.size)
-    if (values.size > 0 && others.size > 0) {
-      val distance = getDistanceNonCumulative(values, others)
-
-      if (distance >= 0 || !distanceCheck) {
-        val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
-        putFunction(maxX, bucketed, bucketedNeg, distance)
-      }
-    }
-  }
-  
-  /**
    * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
    */
   def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, distanceCheck: Boolean = true) = {
@@ -507,7 +481,7 @@ object CaratDynamoDataAnalysis {
           println("Nonzero bucket: " + bucketed.filter(_._2 > 0).mkString(" "))
           println("Nonzero bucketNeg: " + bucketedNeg.filter(_._2 > 0).mkString(" "))
         }
-        putFunction(maxX, bucketed, bucketedNeg, distance)
+        putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], distance)
       }
     }
   }
