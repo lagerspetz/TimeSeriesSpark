@@ -45,10 +45,11 @@ object CaratDynamoDataAnalysis {
    */
   def main(args: Array[String]) {
     var master = "local[1]"
-    if (args != null || args.length >= 1)
+    if (args != null && args.length >= 1){
       master = args(0)
-    if (args != null || args.length > 1 && args(1) == "DEBUG")
-      DEBUG = true
+        if (args.length > 1 && args(1) == "DEBUG")
+          DEBUG = true
+    }
       
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
