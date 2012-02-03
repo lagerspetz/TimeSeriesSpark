@@ -460,7 +460,7 @@ object CaratDynamoDataAnalysis {
       val distance = getDistanceNonCumulative(values, others)
 
       if (distance >= 0 || !distanceCheck) {
-        val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+        val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
         putFunction(maxX, bucketed, bucketedNeg, distance)
       }
     }
@@ -502,7 +502,7 @@ object CaratDynamoDataAnalysis {
       val distance = getDistanceNonCumulative(values, others)
 
       if (distance >= 0 || !distanceCheck) {
-        val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+        val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
         if (DEBUG) {
           println("Nonzero bucket: " + bucketed.filter(_._2 > 0).mkString(" "))
           println("Nonzero bucketNeg: " + bucketedNeg.filter(_._2 > 0).mkString(" "))
@@ -511,11 +511,45 @@ object CaratDynamoDataAnalysis {
       }
     }
   }
+  
+  
+   /**
+   * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
+   */
+  def bucketDistributionsByX(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) = {
+    val bucketed = new TreeMap[Int, Double]
+    val bucketedNeg = new TreeMap[Int, Double]
+
+    val xmax = math.max(values.last._1, others.last._1)
+
+    for (k <- values) {
+      val x = k._1 / xmax
+      val bucket = (x * buckets).toInt
+      var old = bucketed.get(bucket).getOrElse(0.0)
+      bucketed.put(bucket, old + k._2)
+    }
+    
+    for (k <- others){
+      val x = k._1 / xmax
+      val bucket = (x * buckets).toInt
+      var old = bucketedNeg.get(bucket).getOrElse(0.0)
+      bucketedNeg.put(bucket, old + k._2)
+    }
+    
+    for (k <- 0 until buckets){
+      if (!bucketed.contains(k))
+        bucketed.put(0, 0.0)
+      if (!bucketedNeg.contains(k))
+        bucketedNeg.put(0, 0.0)
+    }
+    
+    (xmax, bucketed, bucketedNeg)
+  }
 
   /**
    * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
    */
-  def bucketDistributions(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) = {
+  def bucketDistributionsOld(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) = {
     /*maxX defines the buckets. Each bucket is
      * k /100 * maxX to k+1 / 100 * maxX.
      * Therefore, do not store the bucket starts and ends, only bucket numbers from 0 to 99.*/
@@ -527,38 +561,53 @@ object CaratDynamoDataAnalysis {
     val iter = values.iterator
     val otherIter = others.iterator
     
+    var nx = (0.0, 0.0)
+    var nnx = (0.0, 0.0)
+    
     for (k <- 0 until buckets) {
       val start = k * maxX / buckets
       val end = (k+1) * maxX / buckets
       
       var sumV = 0.0
-      var countV = 0
       var xValue = end
-      while (iter.hasNext &&  xValue > start && xValue <= end) {
-        val (xValue2, yValue2) = iter.next()
-        xValue = xValue2
-        sumV += yValue2
-        countV += 1
-      }
+      var yValue = 0.0
       
+      if (iter.hasNext){
+        nx = iter.next()
+        xValue = nx._1
+        yValue = nx._2
+      }
+
+      while ((xValue > start || (start == 0 && xValue >= start)) && xValue <= end) {
+        sumV += yValue
+        if (iter.hasNext) {
+          nx = iter.next()
+          xValue = nx._1
+          yValue = nx._2
+        }
+      }
+
       var sumO = 0.0
-      var countO = 0
       xValue = end
-      while (otherIter.hasNext &&  xValue > start && xValue <= end) {
-        val (xValue2, yValue2) = otherIter.next()
-        xValue = xValue2
-        sumO += yValue2
-        countO += 1
+      yValue = 0.0
+      
+      if (otherIter.hasNext){
+        nnx = otherIter.next()
+        xValue = nnx._1
+        yValue = nnx._2
+      }
+
+      while ((xValue > start || (start == 0 && xValue >= start)) && xValue <= end) {
+        sumO += yValue
+        if (otherIter.hasNext) {
+          nnx = otherIter.next()
+          xValue = nnx._1
+          yValue = nnx._2
+        }
       }
       
-      if (countV > 0) {
-        bucketed += ((k, nDecimal(sumV / countV)))
-      } else
-        bucketed += ((k, 0.0))
-      if (countO > 0) {
-        bucketedNeg += ((k, nDecimal(sumO / countO)))
-      } else
-        bucketedNeg += ((k, 0.0))
+      bucketed += ((k, nDecimal(sumV)))
+      bucketedNeg += ((k, nDecimal(sumO)))
     }
 
     (maxX, bucketed, bucketedNeg)
