@@ -498,23 +498,27 @@ object CaratDynamoDataAnalysis {
 
     for (k <- values) {
       val x = k._1 / xmax
-      val bucket = (x * buckets).toInt
+      var bucket = (x * buckets).toInt
+      if (bucket >= buckets)
+        bucket = buckets-1
       var old = bucketed.get(bucket).getOrElse(0.0)
       bucketed += ((bucket, old + k._2))
     }
     
     for (k <- others){
       val x = k._1 / xmax
-      val bucket = (x * buckets).toInt
+      var bucket = (x * buckets).toInt
+      if (bucket >= buckets)
+        bucket = buckets-1
       var old = bucketedNeg.get(bucket).getOrElse(0.0)
       bucketedNeg += ((bucket, old + k._2))
     }
     
     for (k <- 0 until buckets){
       if (!bucketed.contains(k))
-        bucketed += ((0, 0.0))
+        bucketed += ((k, 0.0))
       if (!bucketedNeg.contains(k))
-        bucketedNeg += ((0, 0.0))
+        bucketedNeg += ((k, 0.0))
     }
     
     (xmax, bucketed, bucketedNeg)
