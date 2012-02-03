@@ -487,13 +487,26 @@ object CaratDynamoDataAnalysis {
     if (values.size > 0 && others.size > 0) {
       /*debug */
       if (DEBUG){
-        println("Nonzero prob: " + values.filter(_._2 > 0).mkString(" "))
-        println("Nonzero probNeg: "  + others.filter(_._2 > 0).mkString(" "))
+        val nzp = values.filter(_._2 > 0)
+        val nnzp = others.filter(_._2 > 0)
+        var sum = 0.0
+        var nsum = 0.0
+        for (k <- nzp)
+          sum += k._2
+        for (k <- nnzp)
+          nsum += k._2
+        
+        println("Nonzero prob: " + nzp.mkString(" ") + " sum="+sum)
+        println("Nonzero probNeg: "  + nnzp.mkString(" ") + " sum="+nsum)
       }
       val distance = getDistanceNonCumulative(values, others)
 
       if (distance >= 0 || !distanceCheck) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+        if (DEBUG) {
+          println("Nonzero bucket: " + bucketed.filter(_._2 > 0).mkString(" "))
+          println("Nonzero bucketNeg: " + bucketedNeg.filter(_._2 > 0).mkString(" "))
+        }
         putFunction(maxX, bucketed, bucketedNeg, distance)
       }
     }
@@ -520,8 +533,8 @@ object CaratDynamoDataAnalysis {
       
       var sumV = 0.0
       var countV = 0
-      var xValue = start
-      while (iter.hasNext &&  xValue >= start && xValue < end) {
+      var xValue = end
+      while (iter.hasNext &&  xValue > start && xValue <= end) {
         val (xValue2, yValue2) = iter.next()
         xValue = xValue2
         sumV += yValue2
@@ -530,8 +543,8 @@ object CaratDynamoDataAnalysis {
       
       var sumO = 0.0
       var countO = 0
-      xValue = start
-      while (otherIter.hasNext &&  xValue >= start && xValue < end) {
+      xValue = end
+      while (otherIter.hasNext &&  xValue > start && xValue <= end) {
         val (xValue2, yValue2) = otherIter.next()
         xValue = xValue2
         sumO += yValue2
