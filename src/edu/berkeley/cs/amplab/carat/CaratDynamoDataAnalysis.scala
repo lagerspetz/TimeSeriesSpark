@@ -92,9 +92,6 @@ object CaratDynamoDataAnalysis {
      * all the data for the other uuids, resulting in n^2 execution time.
      */
 
-    //val parallel = sc.parallelize[java.util.Map[String, com.amazonaws.services.dynamodb.model.AttributeValue]](regs)
-    //parallel.foreach(x => {
-
     // Remove duplicates caused by re-registrations:
     val regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
     regSet ++= regs.map(x => {
@@ -106,10 +103,6 @@ object CaratDynamoDataAnalysis {
 
     var distRet: spark.RDD[CaratRate] = dist
     for (x <- regSet) {
-      /*
-       * Data format guess:
-       * Registration(uuId:0FC81205-55D0-46E5-8C80-5B96F17B5E7B, platformId:iPhone Simulator, osVersion:5.0)
-       */
       val uuid = x._1
       val model = x._2
       val os = x._3
@@ -149,14 +142,7 @@ object CaratDynamoDataAnalysis {
     var distRet: spark.RDD[CaratRate] = null
     distRet = stepHandler(results, dist)
 
-    if (key == null)
-      finished = true
-
-    while (!finished) {
-      // avoid overloading "provisionedThroughput"
-      if (LIMIT_SPEED)
-        Thread.sleep(1000)
-
+    while (key != null) {
       println("Continuing from key=" + key)
       var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
       results = results2
@@ -164,8 +150,6 @@ object CaratDynamoDataAnalysis {
       println("Got: " + results.size + " results.")
 
       distRet = stepHandler(results, distRet)
-      if (key == null)
-        finished = true
     }
     distRet
   }
@@ -203,7 +187,6 @@ object CaratDynamoDataAnalysis {
               ""
           }
         })
-        //println("uuid=" + uuid + " apps=" + apps)
 
         val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
         val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
@@ -238,7 +221,6 @@ object CaratDynamoDataAnalysis {
     var apps: Seq[String] = Array[String]()
     var batt = 0.0
     var unplugged = false
-    var pluggedIn = false
 
     for (k <- observations) {
       d = k._2.toDouble
@@ -252,93 +234,61 @@ object CaratDynamoDataAnalysis {
 
       if (events.contains(discharge)) {
         unplugged = true
-        pluggedIn = false
       }else if (events.contains(charge)){
-        pluggedIn = true
         unplugged = false
       }
 
       /* Ignore measurements until unplugged event
        * and record until pluggedIn */
       if (unplugged) {
+        // First time set start date and starting battery
         if (prevD == 0) {
           prevD = d
           prevBatt = batt
         }
-        if (!pluggedIn) {
-          if (DEBUG)
-            printf("unplugged batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt-batt, events, apps)
-          // take periods where battery life has changed
-          if (batt - prevBatt >= 0.01 || prevBatt - batt >= 0.01) {
-            if (prevBatt -batt < 0){
-              printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
-            }else{
-              rates += new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+        
+        if (DEBUG)
+          printf("unplugged batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt - batt, events, apps)
+        // take periods where battery life has changed
+        if (batt - prevBatt >= 0.01 || prevBatt - batt >= 0.01) {
+          if (prevBatt - batt < 0) {
+            printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
+          } else {
+            rates += new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
               prevEvents.toArray, events.toArray, prevApps.toArray, apps)
-            }
-            prevD = d
-            prevBatt = batt
-            // Reset, current apps and events added below
-            prevEvents = new HashSet[String]()
-            prevApps = new HashSet[String]()
           }
+          // Even if period was ignored, set new start date and starting battery
+          prevD = d
+          prevBatt = batt
+          // Reset, current apps and events added below
+          prevEvents = new HashSet[String]()
+          prevApps = new HashSet[String]()
         }
-        /* 
-       * done every time to make sure the set contains all
-       * the apps and events that happened between the two points
-       * Do not add if there are trailing measurements
-       * Do add the one with pluggedIn but nothing after it
-       */
-        // last one ...
-        /* FIXME: Last one is not "last" many times, since this is incremental.
-         * This should work anyway. However, the state of plugged in or not should be remembered.
-         * Current solution: Use charging and discharging battery state for this.
+        /* FIXME: Last one is not "last", since DynamoDb gives out items in batches.
+         * However, this may lead to some higher drain rates, or apps or events being ignored.
+         * for example, when we have an interval at the end of batch:
+         * battery 0.95 0.95, apps Carat, AngryBirds, Mail, Safari
+         * And in the beginning of the next batch:
+         * battery 0.95 0.90, apps Mail, Safari
+         * The drop of 5% will register for the time spent in the new batch only,
+         * causing a faster drain rate to show up. 
          */
-        if (k == observations.last && !pluggedIn) {
+        if (k == observations.last) {
           if (prevD != d) {
-            if (prevBatt -batt >= 0){
+            if (prevBatt - batt >= 0) {
               rates += new CaratRate(observations.last._1, os, model, prevD, d, prevBatt, batt,
-              prevEvents.toArray, events.toArray, prevApps.toArray, apps)
-            }else
+                prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+            } else
               printf("[last] prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
           }
         }
-
-        if (!pluggedIn) {
-          prevApps ++= apps
-          prevEvents ++= events
-        }
-
-        if (events.contains(charge)) {
-          pluggedIn = true
-          unplugged = false
-          prevD = 0
-          prevBatt = 0
-        }
+        prevApps ++= apps
+        prevEvents ++= events
       }
     }
-    
     rates.toSeq
   }
-
-  /**
-   * Filter a set of (String, Seq[CaratRates]). Useful for writing a filter that
-   * applies to a single CaratRate.
-   */
-  def distributionFilter(rates: (String, Seq[CaratRate]), filter: CaratRate => Boolean) = {
-    (rates._1, rates._2.filter(filter))
-  }
-
-  /**
-   * Use with distributionFilter. A convenience function that matches apps of the CaratRate by exact String.
-   */
-  def appFilter(rate: CaratRate, app: String) = rate.apps1.contains(app) || rate.apps2.contains(app)
-
-  /**
-   * Use with distributionFilter. A convenience function that is the inverse of `appFilter`.
-   */
-  def negativeAppFilter(rate: CaratRate, app: String) = !appFilter(rate, app)
-
+  
   /**
    * Create a probability function out of a set of CaratRates.
    */
@@ -346,14 +296,13 @@ object CaratDynamoDataAnalysis {
     var sum = 0.0
     var buf = new TreeMap[Double, Double]
     for (d <- rates) {
-      var count = buf.get(d.rate)
-      buf += ((d.rate, count.getOrElse(0.0) + 1.0))
+      var count = buf.get(d.rate).getOrElse(0.0) + 1.0
+      buf += ((d.rate, count))
       sum += 1
     }
 
     for (k <- buf)
       buf += ((k._1, k._2 / sum))
-
     buf
   }
 
@@ -390,10 +339,6 @@ object CaratDynamoDataAnalysis {
     }
 
     for (uuid <- uuids) {
-      /*
-       * TODO: if there are other combinations with uuid, they go into this loop
-       */
-
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       val tempApps = fromUuid.map(_.getAllApps()).collect()
@@ -408,7 +353,7 @@ object CaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       writeTripletUngrouped(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
 
-      /* Only consider apps reported from this uuId. */
+      /* Bugs: Only consider apps reported from this uuId. */
       for (app <- uuidApps) {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
@@ -417,7 +362,7 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
-
+    /* Hogs: Consider all apps */
     for (app <- allApps) {
       if (app != CARAT) {
         val filtered = allRates.filter(_.getAllApps().contains(app))
@@ -452,41 +397,41 @@ object CaratDynamoDataAnalysis {
        */
     val flatOne = one.collect()
     val flatTwo = two.collect()
-
-    println("Nonzero rates: " + flatOne.filter(_.rate() > 0).map(_.rate()).mkString(" "))
-    println("Nonzero ratesNeg: "  + flatTwo.filter(_.rate() > 0).map(_.rate()).mkString(" "))
+    if (DEBUG){
+      debugNonZero(flatOne.map(_.rate()), flatTwo.map(_.rate()), "rates")
+    }
     
-    val values = prob(flatOne)
-    val others = prob(flatTwo) 
-    println("prob1.size=" + values.size + " prob2.size=" + others.size)
-    if (values.size > 0 && others.size > 0) {
-      /*debug */
-      if (DEBUG){
-        val nzp = values.filter(_._2 > 0)
-        val nnzp = others.filter(_._2 > 0)
-        var sum = 0.0
-        var nsum = 0.0
-        for (k <- nzp)
-          sum += k._2
-        for (k <- nnzp)
-          nsum += k._2
-        
-        println("Nonzero prob: " + nzp.mkString(" ") + " sum="+sum)
-        println("Nonzero probNeg: "  + nnzp.mkString(" ") + " sum="+nsum)
-      }
+    println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
+    if (flatOne.size > 0 && flatTwo.size > 0) {
+      val values = prob(flatOne)
+      val others = prob(flatTwo)
+      
+      if (DEBUG)
+        debugNonZero(values.map(_._2), others.map(_._2), "prob")
+      
       val distance = getDistanceNonCumulative(values, others)
 
       if (distance >= 0 || !distanceCheck) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
         if (DEBUG) {
-          println("Nonzero bucket: " + bucketed.filter(_._2 > 0).mkString(" "))
-          println("Nonzero bucketNeg: " + bucketedNeg.filter(_._2 > 0).mkString(" "))
+          debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
         }
         putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], distance)
       }
     }
   }
   
+  def debugNonZero(one:Iterable[Double], two:Iterable[Double], kw1:String) {
+    debugNonZeroOne(one, kw1)
+    debugNonZeroOne(two, kw1+"Neg")
+  }
+  
+  def debugNonZeroOne(one:Iterable[Double], kw:String) {
+    if (DEBUG){
+        val nz = one.filter(_ > 0)
+        println("Nonzero " + kw +": " + nz.mkString(" ") + " sum="+nz.sum)
+    }
+  }
   
    /**
    * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
