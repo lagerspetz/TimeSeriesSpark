@@ -349,7 +349,7 @@ object PowerMonToDynamoDataAnalysis {
       // TODO: Normalize x range here
       val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
 
-      DynamoDbEncoder.putBug(table, keyNames, keyValues, maxX, bucketed, bucketedNeg, distance)
+      DynamoDbEncoder.putBug(table, keyNames, keyValues, maxX, bucketed, bucketedNeg, distance, 0.0, 0.0)
     }
   }
 
