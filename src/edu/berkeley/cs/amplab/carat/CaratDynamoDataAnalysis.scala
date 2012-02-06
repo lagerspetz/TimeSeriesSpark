@@ -358,7 +358,7 @@ object CaratDynamoDataAnalysis {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
           val appNotFromUuid = notFromUuid.filter(_.getAllApps().contains(app))
-          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _))
+          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _), true)
         }
       }
     }
@@ -367,7 +367,7 @@ object CaratDynamoDataAnalysis {
       if (app != CARAT) {
         val filtered = allRates.filter(_.getAllApps().contains(app))
         val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
-        writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _))
+        writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _), true)
       }
     }
   }
@@ -386,10 +386,23 @@ object CaratDynamoDataAnalysis {
     writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
   }
 
+  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, isBugOrHog: Boolean) {
+    writeTripletUngrouped(one, two,
+        (xmax: Double,
+            oneS: Seq[(Int, Double)], twoS: Seq[(Int, Double)],
+            distance:Double,
+            ev:Double,
+            evNeg:Double) => {
+     putFunction(xmax, oneS, twoS, distance) 
+    }, isBugOrHog)
+  }
+  
   /**
    * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
    */
-  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, distanceCheck: Boolean = true) = {
+  
+  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit, isBugOrHog: Boolean) {
+  
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
@@ -411,14 +424,23 @@ object CaratDynamoDataAnalysis {
       
       val distance = getDistanceNonCumulative(values, others)
 
-      if (distance >= 0 || !distanceCheck) {
+      if (distance >= 0 || !isBugOrHog) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
         if (DEBUG) {
           debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
         }
-        putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], distance)
+        val ev = getEv(values)
+        val evNeg = getEv(others)
+        putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], distance, ev, evNeg)
       }
     }
+  }
+  
+  def getEv(values: TreeMap[Double, Double]) = {
+    val m = values.map(x => {
+      x._1 * x._2
+    }).toSeq
+    m.sum
   }
   
   def debugNonZero(one:Iterable[Double], two:Iterable[Double], kw1:String) {

@@ -17,6 +17,8 @@ package object carat {
   val appKey = "appName"
 
   val bugsTable = "carat.latestbugs"
+  val expectedValue = "expectedValue"
+  val expectedValueNeg = expectedValue+"Neg"
 
   val modelsTable = "carat.latestmodels"
   val modelKey = "model"
