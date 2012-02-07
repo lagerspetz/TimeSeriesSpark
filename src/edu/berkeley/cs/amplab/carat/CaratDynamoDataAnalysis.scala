@@ -337,6 +337,20 @@ object CaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _), false)
     }
+    
+    var allHogs =  new HashSet[String]
+    /* Hogs: Consider all apps */
+    for (app <- allApps) {
+      if (app != CARAT) {
+        val filtered = allRates.filter(_.getAllApps().contains(app))
+        val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
+        if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
+            DynamoDbDecoder.deleteItem(appsTable, app), true)){
+          // this is a hog
+          allHogs += app
+        }
+      }
+    }
 
     for (uuid <- uuids) {
       val fromUuid = allRates.filter(_.uuid == uuid)
@@ -344,8 +358,11 @@ object CaratDynamoDataAnalysis {
       val tempApps = fromUuid.map(_.getAllApps()).collect()
 
       var uuidApps = new HashSet[String]
+      var nonHogs =  new HashSet[String]
       for (k <- tempApps)
         uuidApps ++= k
+      nonHogs ++= uuidApps
+      nonHogs.removeAll(allHogs)
 
       similarApps(allRates, uuid, uuidApps)
 
@@ -353,23 +370,14 @@ object CaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       writeTripletUngrouped(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
 
-      /* Bugs: Only consider apps reported from this uuId. */
-      for (app <- uuidApps) {
+      /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+      for (app <- nonHogs) {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
           val appNotFromUuid = notFromUuid.filter(_.getAllApps().contains(app))
           writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
               DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
         }
-      }
-    }
-    /* Hogs: Consider all apps */
-    for (app <- allApps) {
-      if (app != CARAT) {
-        val filtered = allRates.filter(_.getAllApps().contains(app))
-        val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
-        writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
-            DynamoDbDecoder.deleteItem(appsTable, app), true)
       }
     }
   }
@@ -388,7 +396,7 @@ object CaratDynamoDataAnalysis {
     writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
   }
 
-  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, isBugOrHog: Boolean) {
+  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, isBugOrHog: Boolean):Boolean = {
     writeTripletUngrouped(one, two,
       (xmax: Double, oneS: Seq[(Int, Double)], twoS: Seq[(Int, Double)],
         distance: Double, ev: Double, evNeg: Double) => {
@@ -402,7 +410,7 @@ object CaratDynamoDataAnalysis {
    */
   
   def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit, 
-      deleteFunction: => Unit,isBugOrHog: Boolean) {
+      deleteFunction: => Unit,isBugOrHog: Boolean) = {
   
     // probability distribution: r, count/sumCount
 
@@ -415,6 +423,8 @@ object CaratDynamoDataAnalysis {
       debugNonZero(flatOne.map(_.rate()), flatTwo.map(_.rate()), "rates")
     }
     
+    var distance = 0.0
+    
     println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
     if (flatOne.size > 0 && flatTwo.size > 0) {
       val values = prob(flatOne)
@@ -423,7 +433,7 @@ object CaratDynamoDataAnalysis {
       if (DEBUG)
         debugNonZero(values.map(_._2), others.map(_._2), "prob")
       
-      val distance = getDistanceNonCumulative(values, others)
+      distance = getDistanceNonCumulative(values, others)
 
       if (distance >= 0 || !isBugOrHog) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
@@ -438,6 +448,7 @@ object CaratDynamoDataAnalysis {
         //deleteFunction()
       }
     }
+    isBugOrHog && distance > 0
   }
   
   def getEv(values: TreeMap[Double, Double]) = {
