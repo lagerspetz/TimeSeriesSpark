@@ -358,7 +358,8 @@ object CaratDynamoDataAnalysis {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
           val appNotFromUuid = notFromUuid.filter(_.getAllApps().contains(app))
-          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _), true)
+          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
+              DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
         }
       }
     }
@@ -367,7 +368,8 @@ object CaratDynamoDataAnalysis {
       if (app != CARAT) {
         val filtered = allRates.filter(_.getAllApps().contains(app))
         val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
-        writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _), true)
+        writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
+            DynamoDbDecoder.deleteItem(appsTable, app), true)
       }
     }
   }
@@ -388,20 +390,19 @@ object CaratDynamoDataAnalysis {
 
   def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, isBugOrHog: Boolean) {
     writeTripletUngrouped(one, two,
-        (xmax: Double,
-            oneS: Seq[(Int, Double)], twoS: Seq[(Int, Double)],
-            distance:Double,
-            ev:Double,
-            evNeg:Double) => {
-     putFunction(xmax, oneS, twoS, distance) 
-    }, isBugOrHog)
+      (xmax: Double, oneS: Seq[(Int, Double)], twoS: Seq[(Int, Double)],
+        distance: Double, ev: Double, evNeg: Double) => {
+        putFunction(xmax, oneS, twoS, distance)
+      },{ println("ERROR: Delete called for a non-bug non-hog!") },
+      isBugOrHog)
   }
   
   /**
    * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
    */
   
-  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit, isBugOrHog: Boolean) {
+  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit, 
+      deleteFunction: => Unit,isBugOrHog: Boolean) {
   
     // probability distribution: r, count/sumCount
 
@@ -432,6 +433,9 @@ object CaratDynamoDataAnalysis {
         val ev = getEv(values)
         val evNeg = getEv(others)
         putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], distance, ev, evNeg)
+      }else if (distance < 0){
+        /* Should we remove it in this case? */
+        //deleteFunction()
       }
     }
   }
