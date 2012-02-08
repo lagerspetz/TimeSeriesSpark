@@ -443,6 +443,7 @@ object CaratDynamoDataAnalysis {
     val removedPS = daemons.clone() -- intersectPerSampleApps
     intersectEverReportedApps.removeAll(daemons)
     intersectPerSampleApps.removeAll(daemons)
+    println("Daemons: " + daemons)
     println("New possible daemons (ever reported): " + intersectEverReportedApps)
     println("New possible daemons (per sample): " + intersectPerSampleApps)
     println("Removed daemons (ever reported): " + removed)
