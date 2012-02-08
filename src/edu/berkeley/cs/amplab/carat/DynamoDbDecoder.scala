@@ -8,8 +8,11 @@ import com.amazonaws.services.dynamodb.model.QueryRequest
 import collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.immutable.HashMap
+import java.util.List
+import java.util.Map
 import com.amazonaws.services.dynamodb.model.DeleteItemRequest
 import com.amazonaws.services.dynamodb.model.Condition
+import com.amazonaws.services.dynamodb.model.QueryResult
 
 object DynamoDbDecoder {
   
@@ -137,17 +140,33 @@ object DynamoDbDecoder {
   }
 
   
-  def getItems(table: String, keyPart: String) = {
+  def getItems(table: String, keyPart: String): (Key, List[Map[String, AttributeValue]]) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart))
-    //q.setLimit(THROUGHPUT_LIMIT)
-    val sr = DynamoDbEncoder.dd.query(q)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    getItems(q)
   }
 
-  def getItems(table: String, keyPart: String, lastKey: Key) = {
+  def getItems(table: String, keyPart: String, lastKey: Key): (Key, List[Map[String, AttributeValue]]) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart)).withExclusiveStartKey(lastKey)
-    //q.setLimit(THROUGHPUT_LIMIT)
-    val sr = DynamoDbEncoder.dd.query(q)
+    getItems(q)
+  }
+  
+  def getItems(q: QueryRequest): (Key, List[Map[String, AttributeValue]]) = {
+     var timedOut = true
+    var sr: QueryResult = null
+    while (timedOut) {
+      try {
+        sr = DynamoDbEncoder.dd.query(q)
+        timedOut = false
+      } catch {
+        case timeout: java.net.SocketTimeoutException => {
+          timedOut = true
+          println(timeout + " trying again in 1s...")
+          Thread.sleep(1000)
+        }
+        // Problem exception?
+        case x => { throw x }
+      }
+    }
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
   
@@ -164,7 +183,7 @@ object DynamoDbDecoder {
     getVals(DynamoDbEncoder.dd.getItem(g).getItem())
   }
   
-   def getVals(map: java.util.Map[String, AttributeValue]) = {
+   def getVals(map: Map[String, AttributeValue]) = {
      var stuff:Map[String, Any] = new HashMap[String, Any]()
     for (k <- map) {
       var num = k._2.getN()
