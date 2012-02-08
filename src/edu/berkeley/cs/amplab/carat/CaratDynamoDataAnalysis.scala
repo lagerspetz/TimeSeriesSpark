@@ -311,6 +311,41 @@ object CaratDynamoDataAnalysis {
    */
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: Set[String], oses: Set[String], models: Set[String]) {
+    /* Daemon apps, hardcoded for now */
+    var daemons = new HashSet[String]
+    daemons += "BTServer"
+    daemons += "Carat"
+    daemons += "MobileMail"
+    daemons += "MobilePhone"
+    daemons += "MobileSafari"
+    daemons += "SpringBoard"
+    daemons += "UserEventAgent"
+    daemons += "aggregated"
+    daemons += "apsd"
+    daemons += "configd"
+    daemons += "dataaccessd"
+    daemons += "fseventsd"
+    daemons += "iapd"
+    daemons += "imagent"
+    daemons += "installd"
+    daemons += "kernel_task"
+    daemons += "launchd"
+    daemons += "locationd"
+    daemons += "lockdownd"
+    daemons += "lsd"
+    daemons += "mDNSResponder"
+    daemons += "mediaremoted"
+    daemons += "mediaserverd"
+    daemons += "networkd"
+    daemons += "notifyd"
+    daemons += "pasteboardd"
+    daemons += "powerd"
+    daemons += "sandboxd"
+    daemons += "securityd"
+    daemons += "syslogd"
+    daemons += "ubd"
+    daemons += "wifid"
+    
     if (DEBUG){
       val cc = allRates.collect()
       for (k <- cc)
@@ -322,7 +357,8 @@ object CaratDynamoDataAnalysis {
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
-    println("AllApps: " + allApps)
+    allApps.removeAll(daemons)
+    println("AllApps (no daemons): " + allApps)
 
     for (os <- oses) {
       val fromOs = allRates.filter(_.os == os)
@@ -339,7 +375,7 @@ object CaratDynamoDataAnalysis {
     }
     
     var allHogs =  new HashSet[String]
-    /* Hogs: Consider all apps */
+    /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
       if (app != CARAT) {
         val filtered = allRates.filter(_.getAllApps().contains(app))
@@ -354,7 +390,6 @@ object CaratDynamoDataAnalysis {
     
     var intersectEverReportedApps = new HashSet[String]
     var intersectPerSampleApps = new HashSet[String]
-    
 
     for (uuid <- uuids) {
       val fromUuid = allRates.filter(_.uuid == uuid)
@@ -383,6 +418,8 @@ object CaratDynamoDataAnalysis {
       nonHogs ++= uuidApps
       nonHogs.removeAll(allHogs)
       
+      /* allApps has daemons removed, so this will result in daemons being removed from uuidApps. */
+      uuidApps = uuidApps.intersect(allApps)
       if (uuidApps.size > 0)
         similarApps(allRates, uuid, uuidApps)
       //else
