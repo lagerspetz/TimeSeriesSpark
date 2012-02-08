@@ -439,8 +439,16 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
-    println("Intersection of ever reported apps: " + intersectEverReportedApps)
-    println("Intersection of per sample apps: " + intersectPerSampleApps)
+    var removed = daemons.clone()
+    removed.removeAll(intersectEverReportedApps)
+    var removedPS = daemons.clone()
+    removedPS.removeAll(intersectPerSampleApps)
+    intersectEverReportedApps.removeAll(daemons)
+    intersectPerSampleApps.removeAll(daemons)
+    println("New possible daemons (ever reported): " + intersectEverReportedApps)
+    println("New possible daemons (per sample): " + intersectPerSampleApps)
+    println("Removed daemons (ever reported): " + removed)
+    println("Removed daemons (per sample): " + removedPS)
   }
 
   /**
