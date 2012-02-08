@@ -439,10 +439,8 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
-    var removed = daemons.clone()
-    removed.removeAll(intersectEverReportedApps)
-    var removedPS = daemons.clone()
-    removedPS.removeAll(intersectPerSampleApps)
+    val removed = daemons.clone() -- intersectEverReportedApps
+    val removedPS = daemons.clone() -- intersectPerSampleApps
     intersectEverReportedApps.removeAll(daemons)
     intersectPerSampleApps.removeAll(daemons)
     println("New possible daemons (ever reported): " + intersectEverReportedApps)
