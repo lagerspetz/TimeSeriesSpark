@@ -312,39 +312,39 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: Set[String], oses: Set[String], models: Set[String]) {
     /* Daemon apps, hardcoded for now */
-    var daemons = new HashSet[String]
-    daemons += "BTServer"
-    daemons += "Carat"
-    daemons += "MobileMail"
-    daemons += "MobilePhone"
-    daemons += "MobileSafari"
-    daemons += "SpringBoard"
-    daemons += "UserEventAgent"
-    daemons += "aggregated"
-    daemons += "apsd"
-    daemons += "configd"
-    daemons += "dataaccessd"
-    daemons += "fseventsd"
-    daemons += "iapd"
-    daemons += "imagent"
-    daemons += "installd"
-    daemons += "kernel_task"
-    daemons += "launchd"
-    daemons += "locationd"
-    daemons += "lockdownd"
-    daemons += "lsd"
-    daemons += "mDNSResponder"
-    daemons += "mediaremoted"
-    daemons += "mediaserverd"
-    daemons += "networkd"
-    daemons += "notifyd"
-    daemons += "pasteboardd"
-    daemons += "powerd"
-    daemons += "sandboxd"
-    daemons += "securityd"
-    daemons += "syslogd"
-    daemons += "ubd"
-    daemons += "wifid"
+    var daemons = Set(
+    "BTServer",
+    "Carat",
+    "MobileMail",
+    "MobilePhone",
+    "MobileSafari",
+    "SpringBoard",
+    "UserEventAgent",
+    "aggregated",
+    "apsd",
+    "configd",
+    "dataaccessd",
+    "fseventsd",
+    "iapd",
+    "imagent",
+    "installd",
+    "kernel_task",
+    "launchd",
+    "locationd",
+    "lockdownd",
+    "lsd",
+    "mDNSResponder",
+    "mediaremoted",
+    "mediaserverd",
+    "networkd",
+    "notifyd",
+    "pasteboardd",
+    "powerd",
+    "sandboxd",
+    "securityd",
+    "syslogd",
+    "ubd",
+    "wifid")
     
     if (DEBUG){
       val cc = allRates.collect()
