@@ -20,7 +20,7 @@ object DumpTables {
       for (i <- res)
         println(i.mkString(", "))
       while(k != null){
-        val (k2,res2) = DynamoDbDecoder.getAllItems(t)
+        val (k2,res2) = DynamoDbDecoder.getAllItems(t, k)
         k = k2
         res = res2
         for (i <- res)
