@@ -370,14 +370,14 @@ object CaratDynamoDataAnalysis {
         uuidApps ++= k
         if (intersectPerSampleApps.size == 0)
           intersectPerSampleApps = k
-        else
+        else if (k.size > 0)
           intersectPerSampleApps = intersectPerSampleApps.intersect(k)
       }
       
       //Another method to find likely daemons
        if ( intersectEverReportedApps.size == 0)
          intersectPerSampleApps = uuidApps
-       else
+       else if (uuidApps.size > 0)
          intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
       
       nonHogs ++= uuidApps
