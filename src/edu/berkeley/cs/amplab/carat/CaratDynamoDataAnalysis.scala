@@ -351,16 +351,35 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
+    
+    var intersectEverReportedApps = new HashSet[String]
+    var intersectPerSampleApps = new HashSet[String]
+    
 
     for (uuid <- uuids) {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       val tempApps = fromUuid.map(_.getAllApps()).collect()
+      
 
       var uuidApps = new HashSet[String]
       var nonHogs =  new HashSet[String]
-      for (k <- tempApps)
+      
+      // Get all apps ever reported, also compute likely daemons
+      for (k <- tempApps){
         uuidApps ++= k
+        if (intersectPerSampleApps.size == 0)
+          intersectPerSampleApps = k
+        else
+          intersectPerSampleApps = intersectPerSampleApps.intersect(k)
+      }
+      
+      //Another method to find likely daemons
+       if ( intersectEverReportedApps.size == 0)
+         intersectPerSampleApps = uuidApps
+       else
+         intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
+      
       nonHogs ++= uuidApps
       nonHogs.removeAll(allHogs)
 
@@ -380,6 +399,8 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
+    println("Intersection of ever reported apps: " + intersectEverReportedApps)
+    println("Intersection of per sample apps: " + intersectPerSampleApps)
   }
 
   /**
