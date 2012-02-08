@@ -13,6 +13,8 @@ import java.util.Map
 import com.amazonaws.services.dynamodb.model.DeleteItemRequest
 import com.amazonaws.services.dynamodb.model.Condition
 import com.amazonaws.services.dynamodb.model.QueryResult
+import com.amazonaws.AmazonClientException
+import com.amazonaws.AmazonServiceException
 
 object DynamoDbDecoder {
   
@@ -158,7 +160,12 @@ object DynamoDbDecoder {
         sr = DynamoDbEncoder.dd.query(q)
         timedOut = false
       } catch {
-        case timeout: java.net.SocketTimeoutException => {
+        case timeout: AmazonClientException => {
+          timedOut = true
+          println(timeout + " trying again in 1s...")
+          Thread.sleep(1000)
+        }
+        case timeout: AmazonServiceException => {
           timedOut = true
           println(timeout + " trying again in 1s...")
           Thread.sleep(1000)

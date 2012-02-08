@@ -203,8 +203,8 @@ object DynamoDbEncoder {
     dd.deleteTable(del)
     del = new DeleteTableRequest(similarsTable)
     dd.deleteTable(del)
-    // Sleep for 5 secs...
-    Thread.sleep(5000)
+    // Sleep for 40 secs...
+    Thread.sleep(40000)
 
     createResultsTable()
     createOsTable()
