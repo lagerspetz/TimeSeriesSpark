@@ -376,14 +376,17 @@ object CaratDynamoDataAnalysis {
       
       //Another method to find likely daemons
        if ( intersectEverReportedApps.size == 0)
-         intersectPerSampleApps = uuidApps
+         intersectEverReportedApps = uuidApps
        else if (uuidApps.size > 0)
          intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
       
       nonHogs ++= uuidApps
       nonHogs.removeAll(allHogs)
-
-      similarApps(allRates, uuid, uuidApps)
+      
+      if (uuidApps.size > 0)
+        similarApps(allRates, uuid, uuidApps)
+      //else
+        // Remove similar apps entry?
 
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
@@ -464,9 +467,9 @@ object CaratDynamoDataAnalysis {
         val ev = getEv(values)
         val evNeg = getEv(others)
         putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], distance, ev, evNeg)
-      }else if (distance < 0){
-        /* Should we remove it in this case? */
-        //deleteFunction()
+      }else if (distance < 0 && isBugOrHog){
+        /* We should probably remove it in this case. */
+        deleteFunction
       }
     }
     isBugOrHog && distance > 0
