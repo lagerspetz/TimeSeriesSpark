@@ -444,10 +444,14 @@ object CaratDynamoDataAnalysis {
     intersectEverReportedApps.removeAll(daemons)
     intersectPerSampleApps.removeAll(daemons)
     println("Daemons: " + daemons)
-    println("New possible daemons (ever reported): " + intersectEverReportedApps)
-    println("New possible daemons (per sample): " + intersectPerSampleApps)
-    println("Removed daemons (ever reported): " + removed)
-    println("Removed daemons (per sample): " + removedPS)
+    if (intersectEverReportedApps.size > 0)
+      println("New possible daemons (ever reported): " + intersectEverReportedApps)
+    if (intersectPerSampleApps.size > 0)
+      println("New possible daemons (per sample): " + intersectPerSampleApps)
+    if (removed.size > 0) 
+      println("Removed daemons (ever reported): " + removed)
+    if (removedPS.size > 0) 
+      println("Removed daemons (per sample): " + removedPS)
   }
 
   /**
