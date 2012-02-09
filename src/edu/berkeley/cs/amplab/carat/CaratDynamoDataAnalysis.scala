@@ -267,8 +267,8 @@ object CaratDynamoDataAnalysis {
               }
             }
             rates += r
-            oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
           }
+          oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
           // Even if period was ignored, set new start date and starting battery
           prevD = d
           prevBatt = batt
@@ -304,9 +304,9 @@ object CaratDynamoDataAnalysis {
               }
             }
             rates += r
-            oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
             } else
               printf("[last] prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
+            oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
           }
         }
         prevApps ++= apps
