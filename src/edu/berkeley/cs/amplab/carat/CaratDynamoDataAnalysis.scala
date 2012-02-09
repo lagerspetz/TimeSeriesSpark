@@ -39,6 +39,7 @@ object CaratDynamoDataAnalysis {
   val DECIMALS = 3
   var DEBUG = false
   val LIMIT_SPEED = false
+  val ABNORMAL_RATE = 9
 
   /**
    * Main program entry point.
@@ -222,6 +223,7 @@ object CaratDynamoDataAnalysis {
     var batt = 0.0
     var unplugged = false
 
+    var oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
     for (k <- observations) {
       d = k._2.toDouble
       batt = k._3.toDouble
@@ -241,6 +243,7 @@ object CaratDynamoDataAnalysis {
       /* Ignore measurements until unplugged event
        * and record until pluggedIn */
       if (unplugged) {
+        oldObs += k
         // First time set start date and starting battery
         if (prevD == 0) {
           prevD = d
@@ -254,8 +257,17 @@ object CaratDynamoDataAnalysis {
           if (prevBatt - batt < 0) {
             printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
           } else {
-            rates += new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+            val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
               prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+            if (r.rate() > ABNORMAL_RATE){
+              printf("Abnormally high rate %f for time1=%f time2=%f batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", r.rate(), prevD, d, batt, prevBatt, prevBatt - batt, events, apps)
+              println("All observations included for the abnormally high rate: " + "("+ oldObs.size+")")
+              for (j <- oldObs){
+                printf("uuid=%s time=%s batt=%s event=%s apps=%s\n", j._1, j._2, j._3, j._4, j._5, j._6.mkString(", "))
+              }
+            }
+            rates += r
+            oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
           }
           // Even if period was ignored, set new start date and starting battery
           prevD = d
@@ -276,8 +288,23 @@ object CaratDynamoDataAnalysis {
         if (k == observations.last) {
           if (prevD != d) {
             if (prevBatt - batt >= 0) {
-              rates += new CaratRate(observations.last._1, os, model, prevD, d, prevBatt, batt,
-                prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+              prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+            if (r.rate() > ABNORMAL_RATE){
+              printf("Abnormally high rate %f for time1=%f time2=%f batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", r.rate(), prevD, d, batt, prevBatt, prevBatt - batt, events, apps)
+              println("All observations included for the abnormally high rate: " + "("+ oldObs.size+")")
+              for (j <- oldObs){
+                printf("uuid=%s time=%s batt=%s event=%s apps=%s\n", j._1, j._2, j._3, j._4, j._5, j._6.mkString(", "))
+              }
+            }else if (r.rate() == 0){
+              printf("Zero rate %f for time1=%f time2=%f batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", r.rate(), prevD, d, batt, prevBatt, prevBatt - batt, events, apps)
+              println("All observations included for the zero rate: " + "("+ oldObs.size+")")
+              for (j <- oldObs){
+                printf("uuid=%s time=%s batt=%s event=%s apps=%s\n", j._1, j._2, j._3, j._4, j._5, j._6.mkString(", "))
+              }
+            }
+            rates += r
+            oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
             } else
               printf("[last] prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
           }
