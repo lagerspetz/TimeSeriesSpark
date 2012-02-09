@@ -39,7 +39,7 @@ object CaratDynamoDataAnalysis {
   val DECIMALS = 3
   var DEBUG = false
   val LIMIT_SPEED = false
-  val ABNORMAL_RATE = 9
+  val ABNORMAL_RATE = 9
 
   /**
    * Main program entry point.
