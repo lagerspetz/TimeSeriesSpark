@@ -406,6 +406,7 @@ object CaratDynamoDataAnalysis {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
+      println("Considering os os="+os)
       writeTripletUngrouped(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _), false)
     }
 
@@ -413,6 +414,7 @@ object CaratDynamoDataAnalysis {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
+      println("Considering model model="+model)
       writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _), false)
     }
     
@@ -422,6 +424,7 @@ object CaratDynamoDataAnalysis {
       if (app != CARAT) {
         val filtered = allRates.filter(_.getAllApps().contains(app))
         val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
+        println("Considering hog app="+app)
         if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
             DynamoDbDecoder.deleteItem(appsTable, app), true)){
           // this is a hog
@@ -469,6 +472,7 @@ object CaratDynamoDataAnalysis {
 
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
+      println("Considering jscore uuid="+uuid)
       writeTripletUngrouped(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
@@ -476,6 +480,7 @@ object CaratDynamoDataAnalysis {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
           val appNotFromUuid = notFromUuid.filter(_.getAllApps().contains(app))
+          println("Considering bug app="+app +" uuid="+uuid)
           writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
               DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
         }
@@ -507,6 +512,7 @@ object CaratDynamoDataAnalysis {
     val dissimilar = all.filter(_.getAllApps().intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
+    println("Considering similarApps uuid="+uuid)
     writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
   }
 
@@ -544,8 +550,10 @@ object CaratDynamoDataAnalysis {
       val values = prob(flatOne)
       val others = prob(flatTwo)
       
-      if (DEBUG)
+      if (DEBUG){
         debugNonZero(values.map(_._2), others.map(_._2), "prob")
+        plot(values, others)
+      }
       
       distance = getDistanceNonCumulative(values, others)
 
@@ -582,6 +590,15 @@ object CaratDynamoDataAnalysis {
         val nz = one.filter(_ > 0)
         println("Nonzero " + kw +": " + nz.mkString(" ") + " sum="+nz.sum)
     }
+  }
+  
+  def plot(values: TreeMap[Double, Double], others: TreeMap[Double, Double]){
+    println("prob")
+    for (k <- values)
+      println(k._1 +" "+ k._2)
+    println("probNeg")
+    for (k <- others)
+      println(k._1 +" "+ k._2)
   }
   
    /**
