@@ -134,12 +134,14 @@ object CaratDynamoDataAnalysis {
     var batteryLevel = { val attr = list.last.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
     if (batteryLevel != "") {
       val batt = batteryLevel.toDouble
+      println("Last battery = " + batt)
       var count = 0
       var streak = true
       for (k <- list.reverse) {
         batteryLevel = { val attr = k.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
         if (batteryLevel != "" && streak) {
           var nBatt = batteryLevel.toDouble
+          println("nBatt = " + nBatt)
           if (nBatt == batt)
             count += 1
           else
@@ -291,7 +293,7 @@ object CaratDynamoDataAnalysis {
         if (DEBUG)
           printf("unplugged batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt - batt, events, apps)
         // take periods where battery life has changed
-        if (batt - prevBatt >= 0.01 || prevBatt - batt >= 0.01) {
+        if (batt - prevBatt >= 0 || prevBatt - batt >= 0) {
           if (prevBatt - batt < 0) {
             printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
             negDrainSamples += oldObs.size
