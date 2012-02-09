@@ -354,7 +354,7 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: Set[String], oses: Set[String], models: Set[String]) {
     /* Daemon apps, hardcoded for now */
-    var daemons = Set(
+    var daemons:Set[String] = Set(
     "BTServer",
     "Carat",
     "MobileMail",

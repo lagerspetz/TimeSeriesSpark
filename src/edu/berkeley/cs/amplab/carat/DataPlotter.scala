@@ -7,8 +7,11 @@ import scala.sys.process._
 
 object DataPlotter extends App {
 
+  val dir = "data/charts/"
+    
   var hogs = false
-  val lines = Source.fromFile("data/charts/alltables-2012-02-08.txt").getLines()
+  var bugs = false
+  val lines = Source.fromFile("data/charts/alltables-2012-02-09.txt").getLines()
   for (k <- lines){
     //println("Line: " + k)
     if (k.endsWith(appsTable)){
@@ -16,15 +19,28 @@ object DataPlotter extends App {
         println("Hogs:")
       hogs = true
     }
+    if (k.endsWith(bugsTable)){
+      if (!hogs)
+        println("Bugs:")
+      hogs = false
+      bugs = true
+    }
     if (hogs && k.startsWith(appKey)){
       
       // collect and plot hogs
       //println("Line:" + k + " start with: " + appKey)
-      parseLine(k)
+      parseLine(k, "hog")
+    }
+    
+    if (bugs && k.startsWith(appKey)){
+      
+      // collect and plot hogs
+      //println("Line:" + k + " start with: " + appKey)
+      parseLine(k, "bug")
     }
   }
 
-  def parseLine(k: String) = {
+  def parseLine(k: String, t:String) = {
     val s = k.split("->").map(typeStuff(_))
     val nextKeys = s.map(_._2)
     //println("Parsed line:" + s.mkString("# "))
@@ -33,21 +49,21 @@ object DataPlotter extends App {
       if (s(s.length - 2)._2 == ("xmax")) {
         xmax = s.last._1.toDouble
       }
-      if (xmax > 0 && xmax < 30) {
+      if (xmax > 0) {
         var probIndex = nextKeys.indexOf("prob")+1
         var probNegIndex = nextKeys.indexOf("probNeg")+1
-        val fname = "hog_" + s(1)._1
+        val fname = t+"_" + s(1)._1
         val fname1 = fname+".txt"
         val fname2 = fname+"_neg.txt"
-        val plotfile = new java.io.FileWriter("plotfile.txt")
+        val plotfile = new java.io.FileWriter(dir+"plotfile.txt")
         plotfile.write("set term postscript eps enhanced color 'Helvetica' 12\nset xtics out\n"+
     "set xlabel \"Battery drain %/s\"\n"+
     "set ylabel \"Probability\"\n")
-        plotfile.write("set output \""+fname+".eps\"\n")
-        plotfile.write("plot \""+fname1+"\" using 1:2 with linespoints, \""+fname2+"\" using 1:2 with linespoints\n")
+        plotfile.write("set output \""+dir+fname+".eps\"\n")
+        plotfile.write("plot \""+dir+fname1+"\" using 1:2 with linespoints, \""+dir+fname2+"\" using 1:2 with linespoints\n")
         plotfile.close
-        val out1 = new java.io.FileWriter(fname1)
-        val out2 = new java.io.FileWriter(fname2)
+        val out1 = new java.io.FileWriter(dir+fname1)
+        val out2 = new java.io.FileWriter(dir+fname2)
         
         //println(s(1)._1)
         val probDist = prob(xmax, s(probIndex)._1).map(x => {
@@ -62,7 +78,7 @@ object DataPlotter extends App {
         out2.write(probNegDist.mkString("\n")+"\n")
         out1.close
         out2.close
-        val temp = Runtime.getRuntime().exec("gnuplot plotfile.txt")
+        val temp = Runtime.getRuntime().exec("gnuplot "+dir+"plotfile.txt")
         val err_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getErrorStream()))
         var line = err_read.readLine()
         while (line != null){
