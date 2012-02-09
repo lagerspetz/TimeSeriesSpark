@@ -72,7 +72,7 @@ object CaratDynamoDataAnalysis {
 
     allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
       DynamoDbDecoder.getAllItems(registrationTable, _),
-      handleRegs(sc, _, _, allUuids, allOses, allModels), allRates)
+      handleRegs(sc, _, _, allUuids, allOses, allModels), null, allRates)
       
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
@@ -118,9 +118,40 @@ object CaratDynamoDataAnalysis {
        * FIXME: With incremental processing, the LAST sample or a few last samples
        * (as many as have a zero battery drain) should be re-used in the next batch. 
        */
-      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid), DynamoDbDecoder.getItems(samplesTable, uuid, _), handleSamples(sc, _, os, model, _), distRet)
+      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid),
+          DynamoDbDecoder.getItems(samplesTable, uuid, _),
+          handleSamples(sc, _, os, model, _),
+          lastZeroSamplesPrefixer,
+          distRet)
     }
     distRet
+  }
+  
+  def lastZeroSamplesPrefixer(list: java.util.List[java.util.Map[String, AttributeValue]]) = {
+    var res: java.util.List[java.util.Map[String, AttributeValue]] =
+      new java.util.ArrayList[java.util.Map[String, AttributeValue]]
+
+    var batteryLevel = { val attr = list.last.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
+    if (batteryLevel != "") {
+      val batt = batteryLevel.toDouble
+      var count = 0
+      var streak = true
+      for (k <- list.reverse) {
+        batteryLevel = { val attr = k.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
+        if (batteryLevel != "" && streak) {
+          var nBatt = batteryLevel.toDouble
+          if (nBatt == batt)
+            count += 1
+          else
+            streak = false
+        }
+      }
+      if (DEBUG && count > 0)
+        println("Found a prefix of " + count + " zero drain samples for the next batch.")
+      if (count > 0)
+        res ++= list.subList(list.length-count, list.length)
+    }
+    res
   }
 
   /**
@@ -130,6 +161,7 @@ object CaratDynamoDataAnalysis {
   def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
     tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
     stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
+    prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],
     dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
     /* 
        * FIXME: With incremental processing, the LAST sample or a few last samples
@@ -146,10 +178,12 @@ object CaratDynamoDataAnalysis {
     while (key != null) {
       println("Continuing from key=" + key)
       var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
+      if (prefixer != null)
+        results2 ++= prefixer(results)
       results = results2
       key = key2
       println("Got: " + results.size + " results.")
-
+      
       distRet = stepHandler(results, distRet)
     }
     distRet
