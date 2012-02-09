@@ -222,6 +222,10 @@ object CaratDynamoDataAnalysis {
     var apps: Seq[String] = Array[String]()
     var batt = 0.0
     var unplugged = false
+    
+    var negDrainSamples = 0
+    var abandonedSamples = 0
+    var chargingSamples = 0
 
     var oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
     for (k <- observations) {
@@ -256,17 +260,15 @@ object CaratDynamoDataAnalysis {
         if (batt - prevBatt >= 0.01 || prevBatt - batt >= 0.01) {
           if (prevBatt - batt < 0) {
             printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
+            negDrainSamples += oldObs.size
           } else {
             val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
               prevEvents.toArray, events.toArray, prevApps.toArray, apps)
-            if (r.rate() > ABNORMAL_RATE){
-              printf("Abnormally high rate %f for time1=%f time2=%f batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", r.rate(), prevD, d, batt, prevBatt, prevBatt - batt, events, apps)
-              println("All observations included for the abnormally high rate: " + "("+ oldObs.size+")")
-              for (j <- oldObs){
-                printf("uuid=%s time=%s batt=%s event=%s apps=%s\n", j._1, j._2, j._3, j._4, j._5, j._6.mkString(", "))
-              }
-            }
-            rates += r
+            if (considerRate(r, oldObs))
+              rates += r
+            else
+              abandonedSamples += oldObs.size  
+            
           }
           oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
           // Even if period was ignored, set new start date and starting battery
@@ -289,31 +291,44 @@ object CaratDynamoDataAnalysis {
           if (prevD != d) {
             if (prevBatt - batt >= 0) {
               val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
-              prevEvents.toArray, events.toArray, prevApps.toArray, apps)
-            if (r.rate() > ABNORMAL_RATE){
-              printf("Abnormally high rate %f for time1=%f time2=%f batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", r.rate(), prevD, d, batt, prevBatt, prevBatt - batt, events, apps)
-              println("All observations included for the abnormally high rate: " + "("+ oldObs.size+")")
-              for (j <- oldObs){
-                printf("uuid=%s time=%s batt=%s event=%s apps=%s\n", j._1, j._2, j._3, j._4, j._5, j._6.mkString(", "))
+                prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+              if (considerRate(r, oldObs))
+                rates += r
+              else
+                abandonedSamples += oldObs.size
+              if (r.rate() == 0) {
+                printf("Zero rate %f for time1=%f time2=%f batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", r.rate(), prevD, d, batt, prevBatt, prevBatt - batt, events, apps)
+                println("All observations included for the zero rate: " + "(" + oldObs.size + ")")
+                for (j <- oldObs) {
+                  printf("uuid=%s time=%s batt=%s event=%s apps=%s\n", j._1, j._2, j._3, j._4, j._5, j._6.mkString(", "))
+                }
               }
-            }else if (r.rate() == 0){
-              printf("Zero rate %f for time1=%f time2=%f batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", r.rate(), prevD, d, batt, prevBatt, prevBatt - batt, events, apps)
-              println("All observations included for the zero rate: " + "("+ oldObs.size+")")
-              for (j <- oldObs){
-                printf("uuid=%s time=%s batt=%s event=%s apps=%s\n", j._1, j._2, j._3, j._4, j._5, j._6.mkString(", "))
-              }
-            }
-            rates += r
-            } else
+            } else {
               printf("[last] prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
+              negDrainSamples += oldObs.size
+            }
             oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
           }
         }
         prevApps ++= apps
         prevEvents ++= events
-      }
+      } else
+        chargingSamples += 1
     }
+    printf("Abandoned %s charging samples, %s negative drain samples, and %s > %s drain samples\n", chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE)
     rates.toSeq
+  }
+
+  def considerRate(r: CaratRate, oldObs:ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
+    if (r.rate() > ABNORMAL_RATE) {
+      printf("Abandoning abnormally high rate %f for timediff=%f drain=%f events=%s\n", r.rate(), r.timeDiff, r.batteryDiff, r.getAllEvents()/*, r.getAllApps()*/)
+      println("All observations included for the abnormally high rate: " + "(" + oldObs.size + ")")
+      for (j <- oldObs) {
+        printf("uuid=%s time=%s batt=%s event=%s trigger=%s\n", j._1, j._2, j._3, j._4, j._5)
+      }
+      false
+    }else
+      true
   }
   
   /**
