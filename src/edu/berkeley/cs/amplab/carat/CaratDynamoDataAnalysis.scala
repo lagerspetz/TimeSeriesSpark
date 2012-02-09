@@ -121,7 +121,7 @@ object CaratDynamoDataAnalysis {
       distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid),
           DynamoDbDecoder.getItems(samplesTable, uuid, _),
           handleSamples(sc, _, os, model, _),
-          null,/*astZeroSamplesPrefixer,*/
+          lastZeroSamplesPrefixer,
           distRet)
     }
     distRet
@@ -293,7 +293,7 @@ object CaratDynamoDataAnalysis {
         if (DEBUG)
           printf("unplugged batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt - batt, events, apps)
         // take periods where battery life has changed
-        if (batt - prevBatt >= 0 || prevBatt - batt >= 0) {
+        if (batt - prevBatt > 0 || prevBatt - batt > 0) {
           if (prevBatt - batt < 0) {
             printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
             negDrainSamples += oldObs.size
