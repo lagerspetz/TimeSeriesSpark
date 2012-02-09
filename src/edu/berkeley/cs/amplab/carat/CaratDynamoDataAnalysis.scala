@@ -130,6 +130,7 @@ object CaratDynamoDataAnalysis {
   def lastZeroSamplesPrefixer(list: java.util.List[java.util.Map[String, AttributeValue]]) = {
     var res: java.util.List[java.util.Map[String, AttributeValue]] =
       new java.util.ArrayList[java.util.Map[String, AttributeValue]]
+    println("Prefixer started, last.batteryLevel = "+ list.last.get(sampleBatteryLevel))
 
     var batteryLevel = { val attr = list.last.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
     if (batteryLevel != "") {
