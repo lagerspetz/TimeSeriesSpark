@@ -121,7 +121,7 @@ object CaratDynamoDataAnalysis {
       distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid),
           DynamoDbDecoder.getItems(samplesTable, uuid, _),
           handleSamples(sc, _, os, model, _),
-          lastZeroSamplesPrefixer,
+          null,/*astZeroSamplesPrefixer,*/
           distRet)
     }
     distRet
