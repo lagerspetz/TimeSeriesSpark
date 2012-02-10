@@ -598,7 +598,12 @@ object CaratDynamoDataAnalysis {
       }
       
       distance = getDistanceNonCumulative(values, others)
+      val dAbsSigned = getDistanceAbs(values, others)
+      val dWeighted = getDistanceWeighted(values, others)
+      val (iOne, iTwo) = getCumulativeIntegrals(values, others)
 
+      println("distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s", distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne-iTwo))
+      
       if (distance >= 0 || !isBugOrHog) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
         if (DEBUG) {
@@ -681,7 +686,8 @@ object CaratDynamoDataAnalysis {
   }
 
   /**
-   * Get the distance from a regular, non-cumulative distribution.
+   * Get our own variant of the KS distance,
+   * where negative values are ignored, from a regular, non-cumulative distribution.
    * The cumulative distribution values are constructed on the fly and discarded afterwards.
    */
   def getDistanceNonCumulative(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
@@ -749,5 +755,184 @@ object CaratDynamoDataAnalysis {
         maxDistance = distance
     }
     maxDistance
+  }
+  
+  /**
+   * Get a signed distance variant of the KS metric from a regular, non-cumulative distribution.
+   * The cumulative distribution values are constructed on the fly and discarded afterwards.
+   */
+  def getDistanceAbs(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
+    // Definitions:
+    // result will be here
+    var maxDistance = -2.0
+    // represents previous value of distribution with a smaller starting value
+    var prevTwo = (-2.0, 0.0)
+    // represents next value of distribution with a smaller starting value
+    var nextTwo = prevTwo
+    // Guess which distribution has a smaller starting value
+    var smaller = one
+    var bigger = two
+
+    /* Swap if the above assignment was not the right guess: */
+    if (one.size > 0 && two.size > 0) {
+      if (one.head._1 > two.head._1) {
+        smaller = two
+        bigger = one
+      }
+    }
+
+    // use these to keep the cumulative distribution current value
+    var sumOne = 0.0
+    var sumTwo = 0.0
+
+    //println("one.size=" + one.size + " two.size=" + two.size)
+
+    // advance the smaller dist manually
+    var smallIter = smaller.iterator
+    // and the bigger automatically
+    for (k <- bigger) {
+      // current value of bigger dist
+      sumOne += k._2
+
+      // advance smaller past bigger, keep prev and next
+      // from either side of the current value of bigger
+      while (smallIter.hasNext && nextTwo._1 <= k._1) {
+        var temp = smallIter.next
+        sumTwo += temp._2
+
+        // assign cumulative dist value
+        nextTwo = (temp._1, sumTwo)
+        //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
+        if (nextTwo._1 <= k._1) {
+          prevTwo = nextTwo
+        }
+      }
+
+      /* now nextTwo >= k > prevTwo */
+
+      /* (NoApp - App) gives a high positive number
+         * if the app uses a more energy. This is because
+         * if the app distribution is shifted to the right,
+         * it has a high probability of running at a high drain rate,
+         * and so its cumulative dist value is lower, and NoApp
+         * has a higher value. Inverse for low energy usage. */
+      val distance = {
+        if (smaller != two)
+           sumOne - prevTwo._2
+          else
+            prevTwo._2 - sumOne
+      }
+      /* Absolute value comparison, but signed assignment:
+       * Calculates the greatest distance point, no matter if
+       * negative or positive, but keeps in mind the sign for
+       * the final result.
+       */
+      if (math.abs(distance) > math.abs(maxDistance))
+        maxDistance = distance
+    }
+    maxDistance
+  }
+  
+  /**
+   * Get the weighted distance: average of x values times the distance, from a non-cumulative distribution.
+   * The cumulative distribution values are constructed on the fly and discarded afterwards.
+   * 
+   * Calculates the weighted distance: average of x values times the distance.
+   */
+  def getDistanceWeighted(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
+    // Definitions:
+    // result will be here
+    var maxDistance = -2.0
+    // represents previous value of distribution with a smaller starting value
+    var prevTwo = (-2.0, 0.0)
+    // represents next value of distribution with a smaller starting value
+    var nextTwo = prevTwo
+    // Guess which distribution has a smaller starting value
+    var smaller = one
+    var bigger = two
+
+    /* Swap if the above assignment was not the right guess: */
+    if (one.size > 0 && two.size > 0) {
+      if (one.head._1 > two.head._1) {
+        smaller = two
+        bigger = one
+      }
+    }
+
+    // use these to keep the cumulative distribution current value
+    var sumOne = 0.0
+    var sumTwo = 0.0
+
+    //println("one.size=" + one.size + " two.size=" + two.size)
+
+    // advance the smaller dist manually
+    var smallIter = smaller.iterator
+    // and the bigger automatically
+    for (k <- bigger) {
+      // current value of bigger dist
+      sumOne += k._2
+
+      // advance smaller past bigger, keep prev and next
+      // from either side of the current value of bigger
+      while (smallIter.hasNext && nextTwo._1 <= k._1) {
+        var temp = smallIter.next
+        sumTwo += temp._2
+
+        // assign cumulative dist value
+        nextTwo = (temp._1, sumTwo)
+        //println("nextTwo._1=" + nextTwo._1 + " k._1=" + k._1)
+        if (nextTwo._1 <= k._1) {
+          prevTwo = nextTwo
+        }
+      }
+
+      /* now nextTwo >= k > prevTwo */
+
+      /* (NoApp - App) gives a high positive number
+         * if the app uses a more energy. This is because
+         * if the app distribution is shifted to the right,
+         * it has a high probability of running at a high drain rate,
+         * and so its cumulative dist value is lower, and NoApp
+         * has a higher value. Inverse for low energy usage. */
+      
+      /*
+       * Weighted distance: average of x values times the distance.
+       */
+      val distance = {
+        if (smaller != two)
+           (sumOne - prevTwo._2)*((k._1-prevTwo._2)/2)
+          else
+            (prevTwo._2 - sumOne)*((k._1-prevTwo._2)/2)
+      }
+      if (math.abs(distance) > math.abs(maxDistance))
+        maxDistance = distance
+    }
+    maxDistance
+  }
+
+  /**
+   * Get the cumulative integral values of both distributions.
+   *
+   */
+  def getCumulativeIntegrals(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
+    var integralOne = 0.0
+    var integralTwo = 0.0
+    
+    var old = 0.0
+    var sum = 0.0
+    for (k <- one) {
+      sum += k._2
+      integralOne += sum * (k._1 - old)
+      old = k._1
+    }
+
+    old = 0.0
+    sum = 0.0
+    for (k <- two) {
+      sum += k._2
+      integralTwo += sum * (k._1 - old)
+      old = k._1
+    }
+    (integralOne, integralTwo)
   }
 }

@@ -50,7 +50,7 @@ object LogPlotter extends App {
             nameparts.contains("BTServer") ||
             nameparts.contains("Skype") ||
             (nameparts.contains("2DEC") && tp == "jscore"))*/
-          plotDistributions(prob, probNeg, fname, "With "+ nameparts.substring(1), "Without " + nameparts.substring(1))
+        plotDistributions(prob, probNeg, fname, "With "+ nameparts.substring(1), "Without " + nameparts.substring(1), tp == "hog" || tp == "bug")
       }else if (arr.length == 1 && k == "probNeg"){
         neg = true
       }else if (arr.length == 2){
@@ -64,14 +64,37 @@ object LogPlotter extends App {
     }
   }
 
-  def plotDistributions(prob: TreeMap[Double, Double], probNeg: TreeMap[Double, Double], fname: String, t1:String, t2:String) {
+  def plotDistributions(prob: TreeMap[Double, Double], probNeg: TreeMap[Double, Double], fname: String, t1:String, t2:String, distanceCheck: Boolean = false) {
+    // hour
+    val mul = 3600
+    
+    var sum = 0.0
+    var cumulative = new TreeMap[Double, Double]
+    for (k <- prob){
+      sum += k._2
+      cumulative += ((k._1, sum))
+    }
+    
+    sum = 0.0
+    var cumulativeNeg = new TreeMap[Double, Double]
+    for (k <- probNeg){
+      sum += k._2
+      cumulativeNeg += ((k._1, sum))
+    }
+    
+    val xmax = math.max(prob.lastKey, probNeg.lastKey)
+    
+    cumulative+=((xmax, 1.0))
+    cumulativeNeg+=((xmax, 1.0))
+    
+    val distance = CaratDynamoDataAnalysis.getDistanceNonCumulative(prob, probNeg)
+    
+    if (!distanceCheck || distance > 0){
     val fname1 = fname + ".txt"
     val fname2 = fname + "_neg.txt"
     
     val fname3 = fname + "c.txt"
     val fname4 = fname + "c_neg.txt"
-    // hour
-    val mul = 3600
     
     val plotfile = new java.io.FileWriter(dir + "plotfile.txt")
     val plotfilec = new java.io.FileWriter(dir + "plotfilec.txt")
@@ -105,25 +128,6 @@ object LogPlotter extends App {
     val probNegDist = probNeg.map(x => {
       x._1 + " " + x._2
     })
-    
-    var sum = 0.0
-    var cumulative = new TreeMap[Double, Double]
-    for (k <- prob){
-      sum += k._2
-      cumulative += ((k._1, sum))
-    }
-    
-    sum = 0.0
-    var cumulativeNeg = new TreeMap[Double, Double]
-    for (k <- probNeg){
-      sum += k._2
-      cumulativeNeg += ((k._1, sum))
-    }
-    
-    val xmax = math.max(prob.lastKey, probNeg.lastKey)
-    
-    cumulative+=((xmax, 1.0))
-    cumulativeNeg+=((xmax, 1.0))
     
     var cumulativeDist = cumulative.map(x => {
       x._1 + " " + x._2
@@ -162,6 +166,7 @@ object LogPlotter extends App {
     while (line != null) {
       println(line)
       line = err_read.readLine()
+    }
     }
   }
 }
