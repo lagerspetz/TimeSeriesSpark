@@ -114,10 +114,7 @@ object CaratDynamoDataAnalysis {
       oses += os
 
       println("Handling reg:" + x)
-      /* 
-       * FIXME: With incremental processing, the LAST sample or a few last samples
-       * (as many as have a zero battery drain) should be re-used in the next batch. 
-       */
+
       distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid),
           DynamoDbDecoder.getItems(samplesTable, uuid, _),
           handleSamples(sc, _, os, model, _),
@@ -127,6 +124,13 @@ object CaratDynamoDataAnalysis {
     distRet
   }
   
+  /**
+   * Take a set of samples from Dynamo and return the last that have the same battery level.
+   * The returned samples are prepended to the next batch retrieved from Dynamo to even out
+   * high battery drain rates.
+   * 
+   * @return the last samples that have the same battery level.
+   */
   def lastZeroSamplesPrefixer(list: java.util.List[java.util.Map[String, AttributeValue]]) = {
     var res: java.util.List[java.util.Map[String, AttributeValue]] =
       new java.util.ArrayList[java.util.Map[String, AttributeValue]]
@@ -166,10 +170,6 @@ object CaratDynamoDataAnalysis {
     stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
     prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],
     dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
-    /* 
-       * FIXME: With incremental processing, the LAST sample or a few last samples
-       * (as many as have a zero battery drain) should be re-used in the next batch. 
-       */
     var finished = false
 
     var (key, results) = tableAndValueToKeyAndResults
@@ -179,8 +179,10 @@ object CaratDynamoDataAnalysis {
     distRet = stepHandler(results, dist)
 
     while (key != null) {
+      
       println("Continuing from key=" + key)
       var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
+      /* Re-use last zero-drain samples here, if any. */
       if (prefixer != null)
         results2 ++= prefixer(results)
       results = results2
@@ -356,6 +358,9 @@ object CaratDynamoDataAnalysis {
     rates.toSeq
   }
 
+  /**
+   * Check rate for abnormally high drain in a short time. Return true if the rate is not abnormally high.
+   */
   def considerRate(r: CaratRate, oldObs:ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
     if (r.rate() > ABNORMAL_RATE) {
       printf("Abandoning abnormally high rate %f for timediff=%f drain=%f events=%s\n", r.rate(), r.timeDiff, r.batteryDiff, r.getAllEvents()/*, r.getAllApps()*/)
@@ -369,7 +374,7 @@ object CaratDynamoDataAnalysis {
   }
   
   /**
-   * Create a probability function out of a set of CaratRates.
+   * Create a probability density function out of a set of CaratRates.
    */
   def prob(rates: Array[CaratRate]) = {
     var sum = 0.0
