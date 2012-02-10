@@ -602,7 +602,7 @@ object CaratDynamoDataAnalysis {
       val dWeighted = getDistanceWeighted(values, others)
       val (iOne, iTwo) = getCumulativeIntegrals(values, others)
 
-      println("distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s", distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne-iTwo))
+      printf("distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne-iTwo))
       
       if (distance >= 0 || !isBugOrHog) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
@@ -764,9 +764,9 @@ object CaratDynamoDataAnalysis {
   def getDistanceAbs(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
     // Definitions:
     // result will be here
-    var maxDistance = -2.0
+    var maxDistance = 0.0
     // represents previous value of distribution with a smaller starting value
-    var prevTwo = (-2.0, 0.0)
+    var prevTwo = (0.0, 0.0)
     // represents next value of distribution with a smaller starting value
     var nextTwo = prevTwo
     // Guess which distribution has a smaller starting value
@@ -842,9 +842,9 @@ object CaratDynamoDataAnalysis {
   def getDistanceWeighted(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
     // Definitions:
     // result will be here
-    var maxDistance = -2.0
+    var maxDistance = 0.0
     // represents previous value of distribution with a smaller starting value
-    var prevTwo = (-2.0, 0.0)
+    var prevTwo = (0.0, 0.0)
     // represents next value of distribution with a smaller starting value
     var nextTwo = prevTwo
     // Guess which distribution has a smaller starting value
