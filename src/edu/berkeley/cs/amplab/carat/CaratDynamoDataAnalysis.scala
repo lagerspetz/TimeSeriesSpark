@@ -900,9 +900,9 @@ object CaratDynamoDataAnalysis {
        */
       val distance = {
         if (smaller != two)
-           (sumOne - prevTwo._2)*((k._1-prevTwo._2)/2)
+           (sumOne - prevTwo._2)*((k._1-prevTwo._1)/2)
           else
-            (prevTwo._2 - sumOne)*((k._1-prevTwo._2)/2)
+            (prevTwo._2 - sumOne)*((k._1-prevTwo._1)/2)
       }
       if (math.abs(distance) > math.abs(maxDistance))
         maxDistance = distance

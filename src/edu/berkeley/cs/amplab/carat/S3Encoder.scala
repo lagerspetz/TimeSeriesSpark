@@ -31,7 +31,6 @@ object S3Encoder {
   def put(bucket:String, file: java.io.File) = {
     s3.putObject(bucket, file.getName(), file)
   }
-  
 
   def put(key: String) {
     out.close()
