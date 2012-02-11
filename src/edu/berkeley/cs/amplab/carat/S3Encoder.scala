@@ -11,14 +11,14 @@ import java.io.ObjectInputStream
 object S3Encoder {
   val cred = new PropertiesCredentials(S3Encoder.getClass().getResourceAsStream("/AwsCredentials.properties"))
   val s3 = new AmazonS3Client(cred)
-  val bucket = "carat.results"
-  var tempFile = File.createTempFile("aws-java-sdk-", ".bin")
+  val defaultBucket = "carat.results"
+  var tempFile = File.createTempFile("temp-appstore-icon-crawler-", ".bin")
   tempFile.deleteOnExit()
   var fos = new FileOutputStream(tempFile)
   var out = new ObjectOutputStream(fos)
 
   def initStream() {
-    tempFile = File.createTempFile("aws-java-sdk-", ".bin")
+    tempFile = File.createTempFile("temp-appstore-icon-crawler-", ".bin")
     tempFile.deleteOnExit()
     fos = new FileOutputStream(tempFile)
     out = new ObjectOutputStream(fos)
@@ -27,15 +27,26 @@ object S3Encoder {
   def write(obj: Any) {
     out.writeObject(obj)
   }
+  
+  def put(bucket:String, file: java.io.File) = {
+    s3.putObject(bucket, file.getName(), tempFile)
+  }
+  
 
   def put(key: String) {
+    out.close()
+    s3.putObject(defaultBucket, key, tempFile)
+    initStream()
+  }
+  
+  def put(bucket:String, key: String) {
     out.close()
     s3.putObject(bucket, key, tempFile)
     initStream()
   }
 
   def createFileFromObject(obj: Object) = {
-    val file = File.createTempFile("aws-java-sdk-", ".bin")
+    val file = File.createTempFile("temp-appstore-icon-crawler-", ".bin")
     file.deleteOnExit()
 
     val fos = new FileOutputStream(file)
