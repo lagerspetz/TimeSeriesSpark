@@ -16,7 +16,7 @@ object S3Decoder {
   var open = false
 
   def get(key: String) {
-    obj = S3Encoder.s3.getObject(S3Encoder.bucket, key)
+    obj = S3Encoder.s3.getObject(S3Encoder.defaultBucket, key)
     in = new ObjectInputStream(obj.getObjectContent())
     open = true
   }
@@ -37,7 +37,7 @@ object S3Decoder {
   }
   
   def main(args:Array[String]) {
-    val objs = S3Encoder.s3.listObjects(S3Encoder.bucket)
+    val objs = S3Encoder.s3.listObjects(S3Encoder.defaultBucket)
     val list = objs.getObjectSummaries()
     printList(list)
     
