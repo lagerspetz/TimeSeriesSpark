@@ -31,6 +31,6 @@ class UniformDist(val from:Double, val to:Double) extends Serializable{
   }
   
   def this(batt1:Double, batt2:Double, timeStart:Double, timeEnd:Double) = {
-    this((batt1 - batt2)/(timeEnd-timeStart), (batt1+5.0 - batt2)/(timeEnd-timeStart))
+    this((batt1 - batt2)*100.0/(timeEnd-timeStart), (batt1+0.05 - batt2)*100.0/(timeEnd-timeStart))
   }
 }

@@ -30,9 +30,13 @@ class CaratRate(var uuid:String, val os:String, val model:String,
   
   def isUniform() = rateRange != null
   
+  /* Should not be used to get exact values. */
   def rate() = {
     // batteryDiff is between 0 and 1, negative. Multiply by -100.0 to get 0 to 100, positive.
     // The unit for rate is percent per second.
+    if (isUniform){
+      rateRange.getEv()
+    }else
       batteryDiff * -100.0 / timeDiff
   }
   

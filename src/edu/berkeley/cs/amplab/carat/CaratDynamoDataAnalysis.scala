@@ -748,13 +748,15 @@ object CaratDynamoDataAnalysis {
       val evNeg = getEv(others)
 
       evDistance = evDiff(ev, evNeg)
+      if (DEBUG) {
+        val distance = getDistanceNonCumulative(values, others)
+        val dAbsSigned = getDistanceAbs(values, others)
+        val dWeighted = getDistanceWeighted(values, others)
+        val (iOne, iTwo) = getCumulativeIntegrals(values, others)
 
-      val distance = getDistanceNonCumulative(values, others)
-      val dAbsSigned = getDistanceAbs(values, others)
-      val dWeighted = getDistanceWeighted(values, others)
-      val (iOne, iTwo) = getCumulativeIntegrals(values, others)
-
-      printf("evDistance=%s distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", evDistance, distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne - iTwo))
+        printf("evDistance=%s distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", evDistance, distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne - iTwo))
+      } else
+        printf("evDistance=%s\n", evDistance)
 
       if (evDistance >= 0 || !isBugOrHog) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
