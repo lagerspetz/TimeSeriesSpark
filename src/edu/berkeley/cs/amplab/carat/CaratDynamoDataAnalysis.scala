@@ -579,11 +579,11 @@ object CaratDynamoDataAnalysis {
       "ubd",
       "wifid")
 
-    if (DEBUG) {
+    /*if (DEBUG) {
       val cc = allRates.collect()
       for (k <- cc)
         println(k)
-    }
+    }*/
 
     val apps = allRates.map(_.getAllApps()).collect()
 
@@ -740,7 +740,7 @@ object CaratDynamoDataAnalysis {
       val others = prob(flatTwo)
 
       if (DEBUG) {
-        debugNonZero(values.map(_._2), others.map(_._2), "prob")
+        //debugNonZero(values.map(_._2), others.map(_._2), "prob")
         plot(values, others)
       }
 
