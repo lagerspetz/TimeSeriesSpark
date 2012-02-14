@@ -46,12 +46,12 @@ object CaratDynamoDataAnalysis {
    */
   def main(args: Array[String]) {
     var master = "local[1]"
-    if (args != null && args.length >= 1){
+    if (args != null && args.length >= 1) {
       master = args(0)
-        if (args.length > 1 && args(1) == "DEBUG")
-          DEBUG = true
+      if (args.length > 1 && args(1) == "DEBUG")
+        DEBUG = true
     }
-      
+
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
     sys.exit(0)
@@ -73,13 +73,13 @@ object CaratDynamoDataAnalysis {
     allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
       DynamoDbDecoder.getAllItems(registrationTable, _),
       handleRegs(sc, _, _, allUuids, allOses, allModels), null, allRates)
-      
+
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
 
     if (allRates != null) {
-        analyzeRateData(allRates, allUuids, allOses, allModels)
+      analyzeRateData(allRates, allUuids, allOses, allModels)
     }
   }
 
@@ -96,9 +96,9 @@ object CaratDynamoDataAnalysis {
     // Remove duplicates caused by re-registrations:
     val regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
     regSet ++= regs.map(x => {
-      val uuid = {val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
-      val model = {val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
-      val os = {val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
+      val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
+      val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
+      val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
       (uuid, model, os)
     })
 
@@ -116,25 +116,25 @@ object CaratDynamoDataAnalysis {
       println("Handling reg:" + x)
 
       distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid),
-          DynamoDbDecoder.getItems(samplesTable, uuid, _),
-          handleSamples(sc, _, os, model, _),
-          lastZeroSamplesPrefixer,
-          distRet)
+        DynamoDbDecoder.getItems(samplesTable, uuid, _),
+        handleSamples(sc, _, os, model, _),
+        lastZeroSamplesPrefixer,
+        distRet)
     }
     distRet
   }
-  
+
   /**
    * Take a set of samples from Dynamo and return the last that have the same battery level.
    * The returned samples are prepended to the next batch retrieved from Dynamo to even out
    * high battery drain rates.
-   * 
+   *
    * @return the last samples that have the same battery level.
    */
   def lastZeroSamplesPrefixer(list: java.util.List[java.util.Map[String, AttributeValue]]) = {
     var res: java.util.List[java.util.Map[String, AttributeValue]] =
       new java.util.ArrayList[java.util.Map[String, AttributeValue]]
-    println("Prefixer started, last.batteryLevel = "+ list.last.get(sampleBatteryLevel))
+    println("Prefixer started, last.batteryLevel = " + list.last.get(sampleBatteryLevel))
 
     var batteryLevel = { val attr = list.last.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
     if (batteryLevel != "") {
@@ -156,7 +156,7 @@ object CaratDynamoDataAnalysis {
       if (DEBUG && count > 0)
         println("Found a prefix of " + count + " zero drain samples for the next batch.")
       if (count > 0)
-        res ++= list.subList(list.length-count, list.length)
+        res ++= list.subList(list.length - count, list.length)
     }
     res
   }
@@ -179,7 +179,7 @@ object CaratDynamoDataAnalysis {
     distRet = stepHandler(results, dist)
 
     while (key != null) {
-      
+
       println("Continuing from key=" + key)
       var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
       /* Re-use last zero-drain samples here, if any. */
@@ -188,7 +188,7 @@ object CaratDynamoDataAnalysis {
       results = results2
       key = key2
       println("Got: " + results.size + " results.")
-      
+
       distRet = stepHandler(results, distRet)
     }
     distRet
@@ -234,11 +234,93 @@ object CaratDynamoDataAnalysis {
         val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
-      rateMapper(os, model, mapped)
+      rateMapperPairwise(os, model, mapped)
     })
     if (rates != null)
       rateRdd = rateRdd.union(rates)
     rateRdd
+  }
+
+  /**
+   * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
+   * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
+   */
+  def rateMapperPairwise(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
+    val charge = "charging"
+    val discharge = "unplugged"
+    val blc = "batterylevelchanged"
+    // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
+    var prevD = 0.0
+    var prevBatt = 0.0
+    var prevEvent = ""
+    var prevState = ""
+    var prevApps: Seq[String] = Array[String]()
+
+    var d = 0.0
+    var batt = 0.0
+    var event = ""
+    var state = ""
+    var apps: Seq[String] = Array[String]()
+
+    var negDrainSamples = 0
+    var abandonedSamples = 0
+    var chargingSamples = 0
+
+    var rates = new ArrayBuffer[CaratRate]
+
+    for (k <- observations) {
+      d = k._2.toDouble
+      batt = k._3.toDouble
+      event = k._4.trim().toLowerCase()
+      state = k._5.trim().toLowerCase()
+      apps = k._6
+
+      if (state != charge) {
+        /* Record rates. First time fall through */
+        if (prevD != 0) {
+          if (prevBatt - batt < 0) {
+            printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
+            negDrainSamples += 1
+          } else {
+            /* now prevBatt - batt >= 0 */
+            if (prevEvent == blc && event == blc) {
+              /* Point rate */
+              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+                prevEvent, event, prevApps, apps)
+               if (r.rate() == 0){
+                // This should never happen
+                println("RATE ERROR: BatteryLevelChanged with zero rate: "+ r)
+              }
+              if (considerRate(r)) {
+                rates += r
+              } else {
+                abandonedSamples += 1
+              }
+            }else{
+              /* One endpoint not BLC, use uniform distribution rate */
+              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
+                prevEvent, event, prevApps, apps)
+               if (considerRate(r)) {
+                rates += r
+              } else {
+                 println("Abandoned uniform rate with abnormally high EV: "+ r)
+                abandonedSamples += 1
+              }
+            }
+          }
+        }
+      } else {
+        chargingSamples += 1
+      }
+      prevD = d
+      prevBatt = batt
+      prevEvent = event
+      prevState = state
+      prevApps = apps
+    }
+
+    printf("Abandoned %s charging samples, %s negative drain samples, and %s > %s drain samples\n", chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE)
+    rates.toSeq
   }
 
   /**
@@ -261,10 +343,45 @@ object CaratDynamoDataAnalysis {
     var apps: Seq[String] = Array[String]()
     var batt = 0.0
     var unplugged = false
-    
+
     var negDrainSamples = 0
     var abandonedSamples = 0
     var chargingSamples = 0
+
+    /**
+     * If a sample is taken as a result of a batteryStatusChange, then we can
+     * consider the battery reading to be exactly at the measured value (say,
+     * 90%). For any other trigger, however, the sample is actually implying
+     * a 5% range of values, each equally likely, a priori. Rather than
+     * treating these rates, therefore, as point value guesses dropped into
+     * the appropriate buckets, we should treat them as continuous
+     * probability distributions.
+     *
+     * For example, say we have two consecutive samples:
+     * 90% batteryStateChanged
+     * 85% locationChange
+     * The first value is exact. The second value is actually a uniform
+     * distribution between [80, 85]. (Actually, I've forgotten whether it
+     * rounds up or down.) Anyway, that means the battery change is also
+     * uniformly distributed [5, 10].
+     *
+     * You have these distributions even when two consecutive samples have
+     * the same battery reading:
+     * t_1 85% locationChange
+     * t_2 85% locationChange
+     * The rate here == [0, 5] / (t_2 - t_1)
+     *
+     * These only collapse to point values when both ends are
+     * batteryStatusChange triggers:
+     * 90% batteryStatusChange
+     * 85% batteryStatusChange
+     * We can compute an exact rate, which is to say a distribution that is a
+     * Dirac delta function at exactly this value.
+     *
+     * By the way, are we computing these rates based on the timestamps of
+     * the event causing the trigger, rather than the trigger delivery? The
+     * delivery may be delayed, so we should be doing the former.
+     */
 
     var oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
     for (k <- observations) {
@@ -275,11 +392,11 @@ object CaratDynamoDataAnalysis {
       events += k._5.trim().toLowerCase()
       apps = k._6
       if (DEBUG)
-        printf("batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt-batt, events, apps)
+        printf("batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt - batt, events, apps)
 
       if (events.contains(discharge)) {
         unplugged = true
-      }else if (events.contains(charge)){
+      } else if (events.contains(charge)) {
         unplugged = false
       }
 
@@ -292,7 +409,7 @@ object CaratDynamoDataAnalysis {
           prevD = d
           prevBatt = batt
         }
-        
+
         if (DEBUG)
           printf("unplugged batt=%f prevBatt=%f drain=%f events=%s apps=%s\n", batt, prevBatt, prevBatt - batt, events, apps)
         // take periods where battery life has changed
@@ -301,13 +418,21 @@ object CaratDynamoDataAnalysis {
             printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
             negDrainSamples += oldObs.size
           } else {
-            val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
-              prevEvents.toArray, events.toArray, prevApps.toArray, apps)
-            if (considerRate(r, oldObs))
-              rates += r
-            else
-              abandonedSamples += oldObs.size  
-            
+            if (events.last.equalsIgnoreCase("batteryStateChanged")) {
+              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+                prevEvents.toArray, events.toArray, prevApps.toArray, apps)
+              if (considerRate(r, oldObs))
+                rates += r
+              else
+                abandonedSamples += oldObs.size
+            } else {
+              /* Consider sample a range of rates */
+              /* Normally, each rate r will get a count of 1. This should get a count of 0.2,
+               * since it is a range of drain between 1 to 5 %.
+               */
+
+            }
+
           }
           oldObs = new ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]
           // Even if period was ignored, set new start date and starting battery
@@ -361,18 +486,33 @@ object CaratDynamoDataAnalysis {
   /**
    * Check rate for abnormally high drain in a short time. Return true if the rate is not abnormally high.
    */
-  def considerRate(r: CaratRate, oldObs:ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
+  def considerRate(r: CaratRate, oldObs: ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
     if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate %f for timediff=%f drain=%f events=%s\n", r.rate(), r.timeDiff, r.batteryDiff, r.getAllEvents()/*, r.getAllApps()*/)
+      printf("Abandoning abnormally high rate %f for timediff=%f drain=%f events=%s\n", r.rate(), r.timeDiff, r.batteryDiff, r.getAllEvents() /*, r.getAllApps()*/ )
       println("All observations included for the abnormally high rate: " + "(" + oldObs.size + ")")
       for (j <- oldObs) {
         printf("uuid=%s time=%s batt=%s event=%s trigger=%s\n", j._1, j._2, j._3, j._4, j._5)
       }
       false
-    }else
+    } else
       true
   }
-  
+
+  def considerRate(r: CaratRate) = {
+    if (r.isUniform()){
+      if (r.rateRange.getEv() > ABNORMAL_RATE) {
+        false
+      }else
+        true
+    }else{
+    if (r.rate() > ABNORMAL_RATE) {
+      printf("Abandoning abnormally high rate %f for timediff=%f drain=%f events=%s\n", r.rate(), r.timeDiff, r.batteryDiff, r.getAllEvents() /*, r.getAllApps()*/ )
+      false
+    } else
+      true
+    }
+  }
+
   /**
    * Create a probability density function out of a set of CaratRates.
    */
@@ -380,8 +520,17 @@ object CaratDynamoDataAnalysis {
     var sum = 0.0
     var buf = new TreeMap[Double, Double]
     for (d <- rates) {
-      var count = buf.get(d.rate).getOrElse(0.0) + 1.0
-      buf += ((d.rate, count))
+      if (d.isUniform()) {
+        val disc = d.rateRange.discretize(DECIMALS)
+        for (k <- disc) {
+          var count = buf.get(k).getOrElse(0.0) + 1.0 / disc.size
+          buf += ((k, count))
+        }
+      } else {
+        var count = buf.get(d.rate).getOrElse(0.0) + 1.0
+        buf += ((d.rate, count))
+      }
+      // sum increases by one in either case.
       sum += 1
     }
 
@@ -396,46 +545,46 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: Set[String], oses: Set[String], models: Set[String]) {
     /* Daemon apps, hardcoded for now */
-    var daemons:Set[String] = Set(
-    "BTServer",
-    "Carat",
-    "MobileMail",
-    "MobilePhone",
-    "MobileSafari",
-    "SpringBoard",
-    "UserEventAgent",
-    "aggregated",
-    "apsd",
-    "configd",
-    "dataaccessd",
-    "fseventsd",
-    "iapd",
-    "imagent",
-    "installd",
-    "kernel_task",
-    "launchd",
-    "locationd",
-    "lockdownd",
-    "lsd",
-    "mDNSResponder",
-    "mediaremoted",
-    "mediaserverd",
-    "networkd",
-    "notifyd",
-    "pasteboardd",
-    "powerd",
-    "sandboxd",
-    "securityd",
-    "syslogd",
-    "ubd",
-    "wifid")
-    
-    if (DEBUG){
+    var daemons: Set[String] = Set(
+      "BTServer",
+      "Carat",
+      "MobileMail",
+      "MobilePhone",
+      "MobileSafari",
+      "SpringBoard",
+      "UserEventAgent",
+      "aggregated",
+      "apsd",
+      "configd",
+      "dataaccessd",
+      "fseventsd",
+      "iapd",
+      "imagent",
+      "installd",
+      "kernel_task",
+      "launchd",
+      "locationd",
+      "lockdownd",
+      "lsd",
+      "mDNSResponder",
+      "mediaremoted",
+      "mediaserverd",
+      "networkd",
+      "notifyd",
+      "pasteboardd",
+      "powerd",
+      "sandboxd",
+      "securityd",
+      "syslogd",
+      "ubd",
+      "wifid")
+
+    if (DEBUG) {
       val cc = allRates.collect()
       for (k <- cc)
         println(k)
     }
-    
+
     val apps = allRates.map(_.getAllApps()).collect()
 
     var allApps = new HashSet[String]
@@ -448,7 +597,7 @@ object CaratDynamoDataAnalysis {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      println("Considering os os="+os)
+      println("Considering os os=" + os)
       writeTripletUngrouped(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _), false)
     }
 
@@ -456,25 +605,25 @@ object CaratDynamoDataAnalysis {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      println("Considering model model="+model)
+      println("Considering model model=" + model)
       writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _), false)
     }
-    
-    var allHogs =  new HashSet[String]
+
+    var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
       if (app != CARAT) {
         val filtered = allRates.filter(_.getAllApps().contains(app))
         val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
-        println("Considering hog app="+app)
+        println("Considering hog app=" + app)
         if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
-            DynamoDbDecoder.deleteItem(appsTable, app), true)){
+          DynamoDbDecoder.deleteItem(appsTable, app), true)) {
           // this is a hog
           allHogs += app
         }
       }
     }
-    
+
     var intersectEverReportedApps = new HashSet[String]
     var intersectPerSampleApps = new HashSet[String]
 
@@ -482,39 +631,38 @@ object CaratDynamoDataAnalysis {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       val tempApps = fromUuid.map(_.getAllApps()).collect()
-      
 
       var uuidApps = new HashSet[String]
-      var nonHogs =  new HashSet[String]
-      
+      var nonHogs = new HashSet[String]
+
       // Get all apps ever reported, also compute likely daemons
-      for (k <- tempApps){
+      for (k <- tempApps) {
         uuidApps ++= k
         if (intersectPerSampleApps.size == 0)
           intersectPerSampleApps = k
         else if (k.size > 0)
           intersectPerSampleApps = intersectPerSampleApps.intersect(k)
       }
-      
+
       //Another method to find likely daemons
-       if ( intersectEverReportedApps.size == 0)
-         intersectEverReportedApps = uuidApps
-       else if (uuidApps.size > 0)
-         intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
-      
+      if (intersectEverReportedApps.size == 0)
+        intersectEverReportedApps = uuidApps
+      else if (uuidApps.size > 0)
+        intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
+
       nonHogs ++= uuidApps
       nonHogs.removeAll(allHogs)
-      
+
       /* allApps has daemons removed, so this will result in daemons being removed from uuidApps. */
       uuidApps = uuidApps.intersect(allApps)
       if (uuidApps.size > 0)
         similarApps(allRates, uuid, uuidApps)
       //else
-        // Remove similar apps entry?
+      // Remove similar apps entry?
 
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
-      println("Considering jscore uuid="+uuid)
+      println("Considering jscore uuid=" + uuid)
       writeTripletUngrouped(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
@@ -522,9 +670,9 @@ object CaratDynamoDataAnalysis {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
           val appNotFromUuid = notFromUuid.filter(_.getAllApps().contains(app))
-          println("Considering bug app="+app +" uuid="+uuid)
+          println("Considering bug app=" + app + " uuid=" + uuid)
           writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
-              DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
+            DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
         }
       }
     }
@@ -537,9 +685,9 @@ object CaratDynamoDataAnalysis {
       println("New possible daemons (ever reported): " + intersectEverReportedApps)
     if (intersectPerSampleApps.size > 0)
       println("New possible daemons (per sample): " + intersectPerSampleApps)
-    if (removed.size > 0) 
+    if (removed.size > 0)
       println("Removed daemons (ever reported): " + removed)
-    if (removedPS.size > 0) 
+    if (removedPS.size > 0)
       println("Removed daemons (per sample): " + removedPS)
   }
 
@@ -554,26 +702,25 @@ object CaratDynamoDataAnalysis {
     val dissimilar = all.filter(_.getAllApps().intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    println("Considering similarApps uuid="+uuid)
+    println("Considering similarApps uuid=" + uuid)
     writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
   }
 
-  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, isBugOrHog: Boolean):Boolean = {
+  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, isBugOrHog: Boolean): Boolean = {
     writeTripletUngrouped(one, two,
       (xmax: Double, oneS: Seq[(Int, Double)], twoS: Seq[(Int, Double)],
         distance: Double, ev: Double, evNeg: Double) => {
         putFunction(xmax, oneS, twoS, distance)
-      },{ println("ERROR: Delete called for a non-bug non-hog!") },
+      }, { println("ERROR: Delete called for a non-bug non-hog!") },
       isBugOrHog)
   }
-  
+
   /**
    * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
    */
-  
-  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit, 
-      deleteFunction: => Unit,isBugOrHog: Boolean) = {
-  
+  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit,
+    deleteFunction: => Unit, isBugOrHog: Boolean) = {
+
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
@@ -581,75 +728,116 @@ object CaratDynamoDataAnalysis {
        */
     val flatOne = one.collect()
     val flatTwo = two.collect()
-    if (DEBUG){
+    if (DEBUG) {
       debugNonZero(flatOne.map(_.rate()), flatTwo.map(_.rate()), "rates")
     }
-    
-    var distance = 0.0
-    
+
+    var evDistance = 0.0
+
     println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
     if (flatOne.size > 0 && flatTwo.size > 0) {
       val values = prob(flatOne)
       val others = prob(flatTwo)
-      
-      if (DEBUG){
+
+      if (DEBUG) {
         debugNonZero(values.map(_._2), others.map(_._2), "prob")
         plot(values, others)
       }
-      
-      distance = getDistanceNonCumulative(values, others)
+
+      val ev = getEv(values)
+      val evNeg = getEv(others)
+
+      evDistance = evDiff(ev, evNeg)
+
+      val distance = getDistanceNonCumulative(values, others)
       val dAbsSigned = getDistanceAbs(values, others)
       val dWeighted = getDistanceWeighted(values, others)
       val (iOne, iTwo) = getCumulativeIntegrals(values, others)
 
-      printf("distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne-iTwo))
-      
-      if (distance >= 0 || !isBugOrHog) {
+      printf("evDistance=%s distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", evDistance, distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne - iTwo))
+
+      if (evDistance >= 0 || !isBugOrHog) {
         val (maxX, bucketed, bucketedNeg) = bucketDistributionsByX(values, others)
         if (DEBUG) {
           debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
         }
-        val ev = getEv(values)
-        val evNeg = getEv(others)
-        putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], distance, ev, evNeg)
-      }else if (distance < 0 && isBugOrHog){
+        putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], evDistance, ev, evNeg)
+      } else if (evDistance < 0 && isBugOrHog) {
         /* We should probably remove it in this case. */
         deleteFunction
       }
     }
-    isBugOrHog && distance > 0
+    isBugOrHog && evDistance > 0
   }
   
+  /**
+   *
+   * New metric: Use EV difference for hog and bug decisions.
+   * TODO: Variance and its use in the decision?
+   * Multimodal distributions -> EV does not match true energy usage profile?
+   * -> Use some variant of KS and EV difference ...
+   *
+   * E1 = without
+   * E2 = with
+   *
+   * m = 1 - E1 / E2
+   *
+   * 1 - 0.5 / 0.7
+   *
+   * 1 - 0.5 / 0.3
+   *
+   *
+   * m > 0 -> Hog
+   * m <= 0 -> not
+   *
+   */
+  def evDiff(evWith: Double, evWithout: Double) = {
+    1.0 - evWithout / evWith
+  }
+
+  /**
+   * Get the expected value of a probability distribution.
+   * The EV is x*y / sum(y), where sum(y) is 1 for a probability distribution.
+   */
   def getEv(values: TreeMap[Double, Double]) = {
     val m = values.map(x => {
       x._1 * x._2
     }).toSeq
     m.sum
   }
-  
-  def debugNonZero(one:Iterable[Double], two:Iterable[Double], kw1:String) {
+
+  /**
+   * Debug: Print non-zero values of two sets.
+   */
+  def debugNonZero(one: Iterable[Double], two: Iterable[Double], kw1: String) {
     debugNonZeroOne(one, kw1)
-    debugNonZeroOne(two, kw1+"Neg")
+    debugNonZeroOne(two, kw1 + "Neg")
   }
-  
-  def debugNonZeroOne(one:Iterable[Double], kw:String) {
-    if (DEBUG){
-        val nz = one.filter(_ > 0)
-        println("Nonzero " + kw +": " + nz.mkString(" ") + " sum="+nz.sum)
+
+    /**
+   * Debug: Print non-zero values of a set.
+   */
+  def debugNonZeroOne(one: Iterable[Double], kw: String) {
+    if (DEBUG) {
+      val nz = one.filter(_ > 0)
+      println("Nonzero " + kw + ": " + nz.mkString(" ") + " sum=" + nz.sum)
     }
   }
-  
-  def plot(values: TreeMap[Double, Double], others: TreeMap[Double, Double]){
+
+  /**
+   * Debug: Utility function that helps plotting distributions by outputting them one pair per line.
+   */
+  def plot(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) {
     println("prob")
     for (k <- values)
-      println(k._1 +" "+ k._2)
+      println(k._1 + " " + k._2)
     println("probNeg")
     for (k <- others)
-      println(k._1 +" "+ k._2)
+      println(k._1 + " " + k._2)
   }
-  
-   /**
-   * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions. 
+
+  /**
+   * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions.
    */
   def bucketDistributionsByX(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) = {
     var bucketed = new TreeMap[Int, Double]
@@ -661,27 +849,27 @@ object CaratDynamoDataAnalysis {
       val x = k._1 / xmax
       var bucket = (x * buckets).toInt
       if (bucket >= buckets)
-        bucket = buckets-1
+        bucket = buckets - 1
       var old = bucketed.get(bucket).getOrElse(0.0)
-      bucketed += ((bucket, old + k._2))
+      bucketed += ((bucket, nDecimal(old + k._2)))
     }
-    
-    for (k <- others){
+
+    for (k <- others) {
       val x = k._1 / xmax
       var bucket = (x * buckets).toInt
       if (bucket >= buckets)
-        bucket = buckets-1
+        bucket = buckets - 1
       var old = bucketedNeg.get(bucket).getOrElse(0.0)
-      bucketedNeg += ((bucket, old + k._2))
+      bucketedNeg += ((bucket, nDecimal(old + k._2)))
     }
-    
-    for (k <- 0 until buckets){
+
+    for (k <- 0 until buckets) {
       if (!bucketed.contains(k))
         bucketed += ((k, 0.0))
       if (!bucketedNeg.contains(k))
         bucketedNeg += ((k, 0.0))
     }
-    
+
     (xmax, bucketed, bucketedNeg)
   }
 
@@ -747,16 +935,16 @@ object CaratDynamoDataAnalysis {
          * has a higher value. Inverse for low energy usage. */
       val distance = {
         if (smaller != two)
-           sumOne - prevTwo._2
-          else
-            prevTwo._2 - sumOne
+          sumOne - prevTwo._2
+        else
+          prevTwo._2 - sumOne
       }
       if (distance > maxDistance)
         maxDistance = distance
     }
     maxDistance
   }
-  
+
   /**
    * Get a signed distance variant of the KS metric from a regular, non-cumulative distribution.
    * The cumulative distribution values are constructed on the fly and discarded afterwards.
@@ -818,9 +1006,9 @@ object CaratDynamoDataAnalysis {
          * has a higher value. Inverse for low energy usage. */
       val distance = {
         if (smaller != two)
-           sumOne - prevTwo._2
-          else
-            prevTwo._2 - sumOne
+          sumOne - prevTwo._2
+        else
+          prevTwo._2 - sumOne
       }
       /* Absolute value comparison, but signed assignment:
        * Calculates the greatest distance point, no matter if
@@ -832,11 +1020,11 @@ object CaratDynamoDataAnalysis {
     }
     maxDistance
   }
-  
+
   /**
    * Get the weighted distance: average of x values times the distance, from a non-cumulative distribution.
    * The cumulative distribution values are constructed on the fly and discarded afterwards.
-   * 
+   *
    * Calculates the weighted distance: average of x values times the distance.
    */
   def getDistanceWeighted(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
@@ -894,15 +1082,15 @@ object CaratDynamoDataAnalysis {
          * it has a high probability of running at a high drain rate,
          * and so its cumulative dist value is lower, and NoApp
          * has a higher value. Inverse for low energy usage. */
-      
+
       /*
        * Weighted distance: average of x values times the distance.
        */
       val distance = {
         if (smaller != two)
-           (sumOne - prevTwo._2)*((k._1-prevTwo._1)/2)
-          else
-            (prevTwo._2 - sumOne)*((k._1-prevTwo._1)/2)
+          (sumOne - prevTwo._2) * ((k._1 - prevTwo._1) / 2)
+        else
+          (prevTwo._2 - sumOne) * ((k._1 - prevTwo._1) / 2)
       }
       if (math.abs(distance) > math.abs(maxDistance))
         maxDistance = distance
@@ -917,7 +1105,7 @@ object CaratDynamoDataAnalysis {
   def getCumulativeIntegrals(one: TreeMap[Double, Double], two: TreeMap[Double, Double]) = {
     var integralOne = 0.0
     var integralTwo = 0.0
-    
+
     var old = 0.0
     var sum = 0.0
     for (k <- one) {
@@ -934,5 +1122,14 @@ object CaratDynamoDataAnalysis {
       old = k._1
     }
     (integralOne, integralTwo)
+  }
+  
+  def nDecimal(orig:Double) = {
+    var result = orig
+    var mul = 1
+    for (k <- 0 until DECIMALS)
+      mul *= 10
+    result = math.round(result*mul)
+    result/mul
   }
 }
