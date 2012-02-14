@@ -30,7 +30,7 @@ class CaratRate(var uuid:String, val os:String, val model:String,
     if (isUniform){
       rateRange.getEv()
     }else
-      (batt1 - batt2) * -100.0 / (time2 - time1)
+      (batt1 - batt2) * 100.0 / (time2 - time1)
   }
   
   def getAllApps() = {
