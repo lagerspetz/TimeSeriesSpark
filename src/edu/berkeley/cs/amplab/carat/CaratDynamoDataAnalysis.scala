@@ -468,8 +468,8 @@ object CaratDynamoDataAnalysis {
     }*/
 
     val apps = allRates.map(x => {
-      val sampleApps = x.allApps
-      sampleApps.removeAll(daemons)
+      var sampleApps = x.allApps
+      sampleApps --= daemons
       sampleApps
     }).collect()
 
@@ -520,9 +520,9 @@ object CaratDynamoDataAnalysis {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       val tempApps = fromUuid.map(x => {
-      val sampleApps = x.allApps
-      sampleApps.removeAll(daemons)
-      sampleApps.removeAll(allHogs)
+      var sampleApps = x.allApps
+      sampleApps --= daemons
+      sampleApps --= allHogs
       sampleApps
       }).collect()
 
@@ -567,8 +567,8 @@ object CaratDynamoDataAnalysis {
     }
     val removed = daemons -- intersectEverReportedApps
     val removedPS = daemons -- intersectPerSampleApps
-    intersectEverReportedApps.removeAll(daemons)
-    intersectPerSampleApps.removeAll(daemons)
+    intersectEverReportedApps --= daemons
+    intersectPerSampleApps --= daemons
     println("Daemons: " + daemons)
     if (intersectEverReportedApps.size > 0)
       println("New possible daemons (ever reported): " + intersectEverReportedApps)
