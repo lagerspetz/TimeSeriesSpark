@@ -125,7 +125,7 @@ object ProbUtil {
       !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
       val count2 = withoutDist.filter(x => {
       !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
-      //printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
+      printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
       bigtotal += count
       bigtotal2 += count2
       val old = bucketed.get(k).getOrElse(0.0) + count
@@ -137,11 +137,15 @@ object ProbUtil {
     /* Normalize dists */
     
     for (k <- 0 until buckets){
-      bucketed += ((k, bucketed.get(k).getOrElse(0.0)/bigtotal))
+      val norm = bucketed.get(k).getOrElse(0.0)/bigtotal
+      bucketed += ((k, norm))
+      printf("Norm Bucket %s: val=%s\n", k, norm)
     }
 
     for (k <- 0 until buckets) {
-      bucketedNeg += ((k, bucketedNeg.get(k).getOrElse(0.0) / bigtotal2))
+      val norm = bucketedNeg.get(k).getOrElse(0.0)/bigtotal2
+      bucketedNeg += ((k, norm))
+      printf("Norm Bucket %s: val2=%s\n", k, norm)
     }
     
     /* For collecting point measurements */
@@ -171,7 +175,9 @@ object ProbUtil {
     
     for (k <- 0 until buckets){
       val normalizedProb = bucketedPoint.get(k).getOrElse(0.0)/sum
-      bucketed += ((k, nDecimal((bucketed.get(k).getOrElse(0.0) + normalizedProb)/2.0, decimals)))
+      val old = bucketed.get(k).getOrElse(0.0)
+      bucketed += ((k, nDecimal((old + normalizedProb)/2.0, decimals)))
+      printf("Final Bucket %s: val=%s\n", k, nDecimal((old+normalizedProb)/2.0, decimals))
     }
     
     /* Collect point measurements into frequency buckets */
@@ -193,7 +199,9 @@ object ProbUtil {
     
     for (k <- 0 until buckets){
       val normalizedProb = bucketedNegPoint.get(k).getOrElse(0.0)/sum
-      bucketedNeg += ((k, nDecimal((bucketedNeg.get(k).getOrElse(0.0) + normalizedProb)/2.0, decimals)))
+      val old = bucketedNeg.get(k).getOrElse(0.0)
+      bucketedNeg += ((k, nDecimal((old + normalizedProb)/2.0, decimals)))
+      printf("Final BucketNeg %s: val=%s\n", k, nDecimal((old+normalizedProb)/2.0, decimals))
     }
 
     (xmax, bucketed, bucketedNeg)
