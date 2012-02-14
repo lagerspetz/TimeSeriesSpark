@@ -16,9 +16,9 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
        * 0.001, 0.002, ...
        * so 0.0005 can be used to
        * "expand" a point value's range. */
-      from -0.0005 <= x && x <= to + 0.0005
+      from -0.0005 <= x && x < to + 0.0005
     }else
-    from <= x && x <= to
+    from <= x && x < to
   }
   
   def getEv() = (from + to) / 2
@@ -50,6 +50,13 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
       1.0
     else
       1.0 / (to - from)
+  }
+  
+  def probAt(at: Double) = {
+    if (contains(at))
+      prob
+    else
+      0.0
   }
   
   def isPoint() = to == from

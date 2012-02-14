@@ -538,10 +538,25 @@ object CaratDynamoDataAnalysis {
       buf += ((k._1, k._2 / sum))
     buf
   }
-  
+
   /**
-   * Create a probability density function out of a set of UniformDists.
+   * Create a probability density function out of a set of CaratRates.
    */
+  def prob(rates: Array[Double]) = {
+    var sum = 0.0
+    var buf = new TreeMap[Double, Double]
+    for (d <- rates) {
+      var count = buf.get(d).getOrElse(0.0) + 1.0
+      buf += ((d, count))
+      // sum increases by one in either case.
+      sum += 1
+    }
+
+    for (k <- buf)
+      buf += ((k._1, k._2 / sum))
+    buf
+  }
+  
   def probUniform(rates: Array[UniformDist]) = {
     var sum = 0.0
     var min = 200.0
@@ -766,6 +781,7 @@ object CaratDynamoDataAnalysis {
     /* Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
        */
+    /*
     val flatOne = one.map(x => {
       if (x.isUniform())
         x.rateRange
@@ -778,17 +794,22 @@ object CaratDynamoDataAnalysis {
         else
           new UniformDist(x.rate, x.rate)
     }).collect()
+    */
+    
+    // For now, to keep values stable in the db cheat with distributions:
+     val flatOne = one.map(_.rate).collect()
+    val flatTwo = two.map(_.rate).collect()
     
     if (DEBUG) {
-      debugNonZeroUniform(flatOne, flatTwo, "rates")
+      debugNonZero(flatOne, flatTwo, "rates")
     }
 
     var evDistance = 0.0
 
     println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
     if (flatOne.size > 0 && flatTwo.size > 0) {
-      val values = probUniform(flatOne)
-      val others = probUniform(flatTwo)
+      val values = prob(flatOne)
+      val others = prob(flatTwo)
 
       if (DEBUG) {
         debugNonZero(values.map(_._2), others.map(_._2), "prob")
