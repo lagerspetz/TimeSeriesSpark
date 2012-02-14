@@ -628,10 +628,7 @@ object CaratDynamoDataAnalysis {
     // val flatOne = one.map(_.rate).collect()
     //val flatTwo = two.map(_.rate).collect()
     
-    /*if (DEBUG) {
-      ProbUtil.debugNonZero(flatOne, flatTwo, "rates")
-    }*/
-
+    
     var evDistance = 0.0
 
     println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
@@ -641,6 +638,10 @@ object CaratDynamoDataAnalysis {
     
     if (flatTwo.size < 10){
       println("Less than 10 rates in \"without\": " +flatTwo.mkString("\n"))
+    }
+    
+    if (DEBUG) {
+      ProbUtil.debugNonZero(flatOne.map(_.getEv), flatTwo.map(_.getEv), "rates")
     }
     
     if (flatOne.size > 0 && flatTwo.size > 0) {
