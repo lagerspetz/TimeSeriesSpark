@@ -8,7 +8,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.io.FileWriter
 import scala.collection.Seq
-import scala.collection.mutable.HashSet
+import scala.collection.immutable.HashSet
 import scala.collection.immutable.TreeMap
 import scala.collection.immutable.SortedMap
 import java.io.ObjectOutputStream
@@ -86,10 +86,11 @@ object S3DataAnalysis {
           prevBatt = batt
         }
         if (!pluggedIn) {
+          prevApps ++= apps
           // take periods where battery life has changed
           if (batt - prevBatt >= 1 || prevBatt - batt >= 1) {
             rates += new CaratRate(k._2(0), "1.0", "FakeFone", prevD, d, prevBatt, batt,
-              prevEvents.toArray, events, prevApps.toArray, apps)
+              prevEvents.toArray, events, prevApps)
             prevD = d
             prevBatt = batt
             // Reset, current apps and events added below
@@ -106,12 +107,11 @@ object S3DataAnalysis {
         if ((k == observations.last && !pluggedIn) || (!pluggedIn && events.contains("pluggedin"))) {
           if (prevD != d) {
             rates += new CaratRate(observations.last._2(0), "1.0", "FakeFone", prevD, d, prevBatt, batt,
-              prevEvents.toArray, events, prevApps.toArray, apps)
+              prevEvents.toArray, events, prevApps)
           }
         }
 
         if (!pluggedIn) {
-          prevApps ++= apps
           prevEvents ++= events
         }
 
@@ -163,7 +163,7 @@ object S3DataAnalysis {
     (rates._1, rates._2.filter(filter))
   }
 
-  def appFilter(rate: CaratRate, app: String) = rate.apps1.contains(app) || rate.apps2.contains(app)
+  def appFilter(rate: CaratRate, app: String) = rate.allApps.contains(app)
 
   def negativeAppFilter(rate: CaratRate, app: String) = !appFilter(rate, app)
 
@@ -211,7 +211,7 @@ object S3DataAnalysis {
     val apps = rateData.map(x => {
       var buf = new HashSet[String]
       for (k <- x._2) {
-        buf ++= k.getAllApps()
+        buf ++= k.allApps
       }
       buf
     }).collect()

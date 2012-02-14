@@ -5,8 +5,8 @@ import spark.SparkContext._
 import spark.timeseries._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
-import scala.collection.mutable.Set
-import scala.collection.mutable.HashSet
+import scala.collection.immutable.Set
+import scala.collection.immutable.HashSet
 import scala.collection.immutable.TreeMap
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
@@ -63,9 +63,9 @@ object CaratDynamoDataAnalysis {
 
   def analyzeData(sc: SparkContext) {
     // Unique uuIds, Oses, and Models from registrations.
-    val allUuids = new HashSet[String]
-    val allModels = new HashSet[String]
-    val allOses = new HashSet[String]
+    val allUuids = new scala.collection.mutable.HashSet[String]
+    val allModels = new scala.collection.mutable.HashSet[String]
+    val allOses = new scala.collection.mutable.HashSet[String]
 
     // Master RDD for all data.
     var allRates: spark.RDD[CaratRate] = null
@@ -88,13 +88,13 @@ object CaratDynamoDataAnalysis {
    * Samples matching each registration identifier are got, rates calculated from them, and combined with `dist`.
    * uuids, oses and models are filled during registration message handling. Returns the updated version of `dist`.
    */
-  def handleRegs(sc: SparkContext, regs: java.util.List[java.util.Map[String, AttributeValue]], dist: spark.RDD[CaratRate], uuids: Set[String], oses: Set[String], models: Set[String]) = {
+  def handleRegs(sc: SparkContext, regs: java.util.List[java.util.Map[String, AttributeValue]], dist: spark.RDD[CaratRate], uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) = {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
      */
 
     // Remove duplicates caused by re-registrations:
-    val regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
+    var regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
     regSet ++= regs.map(x => {
       val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
       val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
@@ -366,7 +366,6 @@ object CaratDynamoDataAnalysis {
    * Create a probability density function out of UniformDistances.
    */
   def probUniform(rates: Array[UniformDist]) = {
-    var sum = 0.0
     var min = 200.0
     var max = 0.0
     var buf = new TreeMap[Double, Double]
@@ -386,19 +385,39 @@ object CaratDynamoDataAnalysis {
     var mul = 1.0
     for (k <- 0 until DECIMALS)
       mul *= 10
-      
+    
+    var bigtotal = 0.0
     for (k <- f until to){
       val kreal = k/mul
       /* Get rates that contain the 3 decimal accurate value of k,
        * take their uniform probability, sum all of it up,
        * and place it in the k'th bucket in the TreeMap.*/
-      val count = rates.filter(_.contains(kreal)).map(_.prob()).sum
+      val count = rates.filter(x => {
+      !x.isPoint() && x.contains(kreal)}).map(_.prob()).sum
+      bigtotal += count
       var prev = buf.get(kreal).getOrElse(0.0) + count
       buf += ((kreal, prev))
     }
-
     for (k <- buf)
-      buf += ((k._1, k._2 / rates.size))
+      buf += ((k._1, k._2 / bigtotal))
+
+    val pointRates = rates.filter(_.isPoint)
+    
+    var sum = 0.0
+    var pointBuf = new TreeMap[Double, Double]
+    for (k <- pointRates){
+      val dec = ProbUtil.nDecimal(k.from, DECIMALS) 
+      var prev = pointBuf.get(dec).getOrElse(0.0) + 1.0
+      pointBuf += ((dec, prev))
+      sum += 1
+    }
+    
+    for (k <- pointBuf){
+      val nk = ((k._1,  k._2 / sum))
+      val prev = buf.get(k._1).getOrElse(0.0) + nk._2
+      buf += ((k._1, prev))
+    }
+    
     buf
   }
 
@@ -406,7 +425,7 @@ object CaratDynamoDataAnalysis {
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
   def analyzeRateData(allRates: RDD[CaratRate],
-    uuids: Set[String], oses: Set[String], models: Set[String]) {
+    uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
     /* Daemon apps, hardcoded for now */
     var daemons: Set[String] = Set(
       "BTServer",
@@ -448,17 +467,17 @@ object CaratDynamoDataAnalysis {
         println(k)
     }*/
 
-    val apps = allRates.map(_.getAllApps()).collect()
+    val apps = allRates.map(x => {
+      val sampleApps = x.allApps
+      sampleApps.removeAll(daemons)
+      sampleApps
+    }).collect()
 
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
       
     // mediaremoted does not get removed here, why?
-    allApps.removeAll(daemons)
-    for (k <- daemons)
-      if (allApps.contains(k))
-        allApps.remove(k)
     println("AllApps (no daemons): " + allApps)
 
     for (os <- oses) {
@@ -483,8 +502,8 @@ object CaratDynamoDataAnalysis {
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
       if (app != CARAT) {
-        val filtered = allRates.filter(_.getAllApps().contains(app))
-        val filteredNeg = allRates.filter(!_.getAllApps().contains(app))
+        val filtered = allRates.filter(_.allApps.contains(app))
+        val filteredNeg = allRates.filter(!_.allApps.contains(app))
         println("Considering hog app=" + app)
         if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
           DynamoDbDecoder.deleteItem(appsTable, app), true)) {
@@ -494,22 +513,26 @@ object CaratDynamoDataAnalysis {
       }
     }
 
-    var intersectEverReportedApps = new HashSet[String]
-    var intersectPerSampleApps = new HashSet[String]
+    var intersectEverReportedApps = new scala.collection.mutable.HashSet[String]
+    var intersectPerSampleApps = new scala.collection.mutable.HashSet[String]
 
     for (uuid <- uuids) {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
-      val tempApps = fromUuid.map(_.getAllApps()).collect()
+      val tempApps = fromUuid.map(x => {
+      val sampleApps = x.allApps
+      sampleApps.removeAll(daemons)
+      sampleApps.removeAll(allHogs)
+      sampleApps
+      }).collect()
 
-      var uuidApps = new HashSet[String]
-      var nonHogs = new HashSet[String]
+      var uuidApps = new scala.collection.mutable.HashSet[String]
 
       // Get all apps ever reported, also compute likely daemons
       for (k <- tempApps) {
         uuidApps ++= k
         if (intersectPerSampleApps.size == 0)
-          intersectPerSampleApps = k
+          intersectPerSampleApps ++= k
         else if (k.size > 0)
           intersectPerSampleApps = intersectPerSampleApps.intersect(k)
       }
@@ -520,11 +543,6 @@ object CaratDynamoDataAnalysis {
       else if (uuidApps.size > 0)
         intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
 
-      nonHogs ++= uuidApps
-      nonHogs.removeAll(allHogs)
-
-      /* allApps has daemons removed, so this will result in daemons being removed from uuidApps. */
-      uuidApps = uuidApps.intersect(allApps)
       if (uuidApps.size > 0)
         similarApps(allRates, uuid, uuidApps)
       //else
@@ -537,18 +555,18 @@ object CaratDynamoDataAnalysis {
           { println("ERROR: Delete called for a non-bug non-hog!") }, false)
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-      for (app <- nonHogs) {
+      for (app <- uuidApps) {
         if (app != CARAT) {
-          val appFromUuid = fromUuid.filter(_.getAllApps().contains(app))
-          val appNotFromUuid = notFromUuid.filter(_.getAllApps().contains(app))
+          val appFromUuid = fromUuid.filter(_.allApps.contains(app))
+          val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
           println("Considering bug app=" + app + " uuid=" + uuid)
           writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
             DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
         }
       }
     }
-    val removed = daemons.clone() -- intersectEverReportedApps
-    val removedPS = daemons.clone() -- intersectPerSampleApps
+    val removed = daemons -- intersectEverReportedApps
+    val removedPS = daemons -- intersectPerSampleApps
     intersectEverReportedApps.removeAll(daemons)
     intersectPerSampleApps.removeAll(daemons)
     println("Daemons: " + daemons)
@@ -566,11 +584,11 @@ object CaratDynamoDataAnalysis {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: Set[String]) {
+  def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: scala.collection.mutable.Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
-    val similar = all.filter(_.getAllApps().intersect(uuidApps).size >= sCount)
-    val dissimilar = all.filter(_.getAllApps().intersect(uuidApps).size < sCount)
+    val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
+    val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
     println("Considering similarApps uuid=" + uuid)
@@ -589,7 +607,7 @@ object CaratDynamoDataAnalysis {
     /* Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
        */
-    /*
+    
     val flatOne = one.map(x => {
       if (x.isUniform())
         x.rateRange
@@ -602,11 +620,10 @@ object CaratDynamoDataAnalysis {
         else
           new UniformDist(x.rate, x.rate)
     }).collect()
-    */
     
     // For now, to keep values stable in the db cheat with distributions:
-     val flatOne = one.map(_.rate).collect()
-    val flatTwo = two.map(_.rate).collect()
+    // val flatOne = one.map(_.rate).collect()
+    //val flatTwo = two.map(_.rate).collect()
     
     /*if (DEBUG) {
       ProbUtil.debugNonZero(flatOne, flatTwo, "rates")
@@ -616,8 +633,8 @@ object CaratDynamoDataAnalysis {
 
     println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
     if (flatOne.size > 0 && flatTwo.size > 0) {
-      val values = prob(flatOne)
-      val others = prob(flatTwo)
+      val values = probUniform(flatOne)
+      val others = probUniform(flatTwo)
 
       if (DEBUG) {
         ProbUtil.debugNonZero(values.map(_._2), others.map(_._2), "prob")
