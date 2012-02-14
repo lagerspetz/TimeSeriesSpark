@@ -488,7 +488,7 @@ object CaratDynamoDataAnalysis {
    */
   def considerRate(r: CaratRate, oldObs: ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
     if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate %f for timediff=%f drain=%f events=%s\n", r.rate(), r.timeDiff, r.batteryDiff, r.getAllEvents() /*, r.getAllApps()*/ )
+      printf("Abandoning abnormally high rate " + r)
       println("All observations included for the abnormally high rate: " + "(" + oldObs.size + ")")
       for (j <- oldObs) {
         printf("uuid=%s time=%s batt=%s event=%s trigger=%s\n", j._1, j._2, j._3, j._4, j._5)
@@ -506,7 +506,7 @@ object CaratDynamoDataAnalysis {
         true
     }else{
     if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate %f for timediff=%f drain=%f events=%s\n", r.rate(), r.timeDiff, r.batteryDiff, r.getAllEvents() /*, r.getAllApps()*/ )
+      printf("Abandoning abnormally high rate " + r)
       false
     } else
       true
@@ -536,6 +536,46 @@ object CaratDynamoDataAnalysis {
 
     for (k <- buf)
       buf += ((k._1, k._2 / sum))
+    buf
+  }
+  
+  /**
+   * Create a probability density function out of a set of UniformDists.
+   */
+  def probUniform(rates: Array[UniformDist]) = {
+    var sum = 0.0
+    var min = 200.0
+    var max = 0.0
+    var buf = new TreeMap[Double, Double]
+    /* Find min and max x*/
+    for (d <- rates) {
+      if (d.from < min)
+        min = d.from
+      if (d.to > max)
+        max = d.to
+    }
+    
+    /* Iterate from max to min in 3 decimal precision */
+    
+    val f = nInt(min)
+    val to = nInt(max)+1
+    
+    var mul = 1.0
+    for (k <- 0 until DECIMALS)
+      mul *= 10
+      
+    for (k <- f until to){
+      val kreal = k/mul
+      /* Get rates that contain the 3 decimal accurate value of k,
+       * take their uniform probability, sum all of it up,
+       * and place it in the k'th bucket in the TreeMap.*/
+      val count = rates.filter(_.contains(kreal)).map(_.prob()).sum
+      var prev = buf.get(kreal).getOrElse(0.0) + count
+      buf += ((kreal, count))
+    }
+
+    for (k <- buf)
+      buf += ((k._1, k._2 / rates.size))
     buf
   }
 
@@ -726,18 +766,29 @@ object CaratDynamoDataAnalysis {
     /* Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
        */
-    val flatOne = one.collect()
-    val flatTwo = two.collect()
+    val flatOne = one.map(x => {
+      if (x.isUniform())
+        x.rateRange
+        else
+          new UniformDist(x.rate, x.rate)
+    }).collect()
+    val flatTwo = two.map(x => {
+      if (x.isUniform())
+        x.rateRange
+        else
+          new UniformDist(x.rate, x.rate)
+    }).collect()
+    
     if (DEBUG) {
-      debugNonZero(flatOne.map(_.rate()), flatTwo.map(_.rate()), "rates")
+      debugNonZeroUniform(flatOne, flatTwo, "rates")
     }
 
     var evDistance = 0.0
 
     println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
     if (flatOne.size > 0 && flatTwo.size > 0) {
-      val values = prob(flatOne)
-      val others = prob(flatTwo)
+      val values = probUniform(flatOne)
+      val others = probUniform(flatTwo)
 
       if (DEBUG) {
         //debugNonZero(values.map(_._2), others.map(_._2), "prob")
@@ -814,6 +865,16 @@ object CaratDynamoDataAnalysis {
   def debugNonZero(one: Iterable[Double], two: Iterable[Double], kw1: String) {
     debugNonZeroOne(one, kw1)
     debugNonZeroOne(two, kw1 + "Neg")
+  }
+
+  def debugNonZeroUniform(one: Iterable[UniformDist], two: Iterable[UniformDist], kw1: String) {
+    if (DEBUG) {
+      println("Nonzero " + kw1 + ": " + one.mkString(" "))
+    }
+
+    if (DEBUG) {
+      println("Nonzero " + kw1 + "Neg: " + two.mkString(" "))
+    }
   }
 
     /**
@@ -1133,5 +1194,13 @@ object CaratDynamoDataAnalysis {
       mul *= 10
     result = math.round(result*mul)
     result/mul
+  }
+  
+   def nInt(orig:Double) = {
+    var mul = 1
+    for (k <- 0 until DECIMALS)
+      mul *= 10
+    val r = math.round(orig*mul)
+    r
   }
 }

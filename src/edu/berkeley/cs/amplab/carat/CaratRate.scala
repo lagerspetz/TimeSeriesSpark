@@ -5,27 +5,20 @@ import scala.collection.mutable.HashSet
  * Represents a rate measurement of Carat.
  */
 class CaratRate(var uuid:String, val os:String, val model:String,
-    val timeDiff:Double, val batteryDiff:Double,
+    val time1:Double, val time2:Double,
+    val batt1:Double, val batt2:Double, 
     val events1:Seq[String], val events2:Seq[String],
     val apps1:Seq[String], val apps2:Seq[String],
     val rateRange: UniformDist = null) extends Ordered[CaratRate] with Serializable{
- 
-  def this(uuid: String, os:String, model:String, time1: Long, time2:Long, battery1:Double, battery2:Double, events1:Seq[String], events2: Seq[String], apps1:Seq[String], apps2:Seq[String]){
-    this(uuid, os, model, time2-time1, battery2-battery1, events1, events2, apps1, apps2)
-  }
-  
-  def this(uuid: String, os:String, model:String, time1: Double, time2:Double, battery1:Double, battery2:Double, events1:Seq[String], events2: Seq[String], apps1:Seq[String], apps2:Seq[String]){
-    this(uuid, os, model, time2-time1, battery2-battery1, events1, events2, apps1, apps2)
-  }
   
     def this(uuid: String, os:String, model:String, time1: Double, time2:Double, battery1:Double, battery2:Double, events1: String, events2: String, apps1:Seq[String], apps2:Seq[String]){
-    this(uuid, os, model, time2-time1, battery2-battery1, events1.split(" "), events2.split(" "), apps1, apps2)
+    this(uuid, os, model, time1, time2, battery1, battery2, events1.split(" "), events2.split(" "), apps1, apps2)
   }
     
     def this(uuid: String, os:String, model:String, time1: Double, time2:Double, battery1:Double, battery2:Double,
         rateRng: UniformDist,
         events1: String, events2: String, apps1:Seq[String], apps2:Seq[String]){
-    this(uuid, os, model, time2-time1, battery2-battery1, events1.split(" "), events2.split(" "), apps1, apps2, rateRng)
+    this(uuid, os, model, time1, time2, battery1, battery2, events1.split(" "), events2.split(" "), apps1, apps2, rateRng)
   }
   
   def isUniform() = rateRange != null
@@ -37,7 +30,7 @@ class CaratRate(var uuid:String, val os:String, val model:String,
     if (isUniform){
       rateRange.getEv()
     }else
-      batteryDiff * -100.0 / timeDiff
+      (batt1 - batt2) * -100.0 / (time2 - time1)
   }
   
   def getAllApps() = {
@@ -67,6 +60,6 @@ class CaratRate(var uuid:String, val os:String, val model:String,
       "from " + rateRange.from +" to " + rateRange.to
     else
       rate
-    }+
+    }+" time1="+time1+" time2=" +time2+ " batt1=" + batt1 + " batt2=" + batt2 +
   " uuid="+uuid+" os="+os+" model="+model+" events="+getAllEvents()+ " apps="+getAllApps()
 }

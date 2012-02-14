@@ -339,8 +339,8 @@ still providing a number that means something.
 
     for (k <- values) {
       for (j <- k._2.sorted) {
-        println("uid=" + k._1 + " rate=" + j.rate() + " timediff=" + j.timeDiff +
-          " batterydiff=" + j.batteryDiff +
+        println("uid=" + k._1 + " rate=" + j.rate() + " timediff=" + (j.time2 - j.time1)+
+          " batterydiff=" + (j.batt1 - j.batt2)+
           " events1=" + j.events1.mkString(";") +
           " events2=" + j.events2.mkString(";") +
           " apps=" + j.getAllApps().mkString(";"))
