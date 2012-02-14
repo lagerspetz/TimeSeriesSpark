@@ -571,7 +571,7 @@ object CaratDynamoDataAnalysis {
        * and place it in the k'th bucket in the TreeMap.*/
       val count = rates.filter(_.contains(kreal)).map(_.prob()).sum
       var prev = buf.get(kreal).getOrElse(0.0) + count
-      buf += ((kreal, count))
+      buf += ((kreal, prev))
     }
 
     for (k <- buf)
@@ -791,9 +791,10 @@ object CaratDynamoDataAnalysis {
       val others = probUniform(flatTwo)
 
       if (DEBUG) {
-        //debugNonZero(values.map(_._2), others.map(_._2), "prob")
+        debugNonZero(values.map(_._2), others.map(_._2), "prob")
         plot(values, others)
-      }
+      }else
+        debugNonZero(values.map(_._2), others.map(_._2), "prob")
 
       val ev = getEv(values)
       val evNeg = getEv(others)
