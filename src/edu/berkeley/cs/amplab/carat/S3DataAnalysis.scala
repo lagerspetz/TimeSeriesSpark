@@ -90,7 +90,7 @@ object S3DataAnalysis {
           // take periods where battery life has changed
           if (batt - prevBatt >= 1 || prevBatt - batt >= 1) {
             rates += new CaratRate(k._2(0), "1.0", "FakeFone", prevD, d, prevBatt, batt,
-              prevEvents.toArray, events, prevApps)
+              prevEvents.toSeq, events, prevApps)
             prevD = d
             prevBatt = batt
             // Reset, current apps and events added below
@@ -107,7 +107,7 @@ object S3DataAnalysis {
         if ((k == observations.last && !pluggedIn) || (!pluggedIn && events.contains("pluggedin"))) {
           if (prevD != d) {
             rates += new CaratRate(observations.last._2(0), "1.0", "FakeFone", prevD, d, prevBatt, batt,
-              prevEvents.toArray, events, prevApps)
+              prevEvents.toSeq, events, prevApps)
           }
         }
 
