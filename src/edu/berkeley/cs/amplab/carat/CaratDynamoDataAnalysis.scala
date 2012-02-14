@@ -659,14 +659,14 @@ object CaratDynamoDataAnalysis {
       val evNeg = ProbUtil.getEv(bucketedNeg, maxX)
 
       evDistance = evDiff(ev, evNeg)
-      printf("evDistance=%s\n", evDistance)
+      printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
 
       if (DEBUG) {
         ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
       }
-      if (evDistance >= 0 || !isBugOrHog) {
+      if (evDistance > 0 || !isBugOrHog) {
         putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], evDistance, ev, evNeg)
-      } else if (evDistance < 0 && isBugOrHog) {
+      } else if (evDistance <= 0 && isBugOrHog) {
         /* We should probably remove it in this case. */
         deleteFunction
       }

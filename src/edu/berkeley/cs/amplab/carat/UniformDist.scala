@@ -32,7 +32,7 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
       start <= from && to < end
     }else
       (start <= from && from < end) ||
-      (from <= start && start < end)
+      (from <= start && start < to)
   }
   
   def getEv() = (from + to) / 2

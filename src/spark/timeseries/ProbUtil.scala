@@ -125,6 +125,7 @@ object ProbUtil {
       !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
       val count2 = withoutDist.filter(x => {
       !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      //printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
       bigtotal += count
       bigtotal2 += count2
       val old = bucketed.get(k).getOrElse(0.0) + count
