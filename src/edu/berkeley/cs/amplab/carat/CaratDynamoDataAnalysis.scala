@@ -243,7 +243,7 @@ object CaratDynamoDataAnalysis {
 
       if (state != charge) {
         /* Record rates. First time fall through */
-        if (prevD != 0) {
+        if (prevD != 0 && prevD != d) {
           if (prevBatt - batt < 0) {
             printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
             negDrainSamples += 1
