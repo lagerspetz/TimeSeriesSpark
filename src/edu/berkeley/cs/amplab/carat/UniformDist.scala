@@ -6,7 +6,7 @@ import scala.collection.immutable.TreeSet
  * For a battery measurement of 75 and 75, the actual drain can be from 0 to 5 %.
  * for 75 and 70, it can be from 0 to 10%.
  */
-class UniformDist(val from:Double, val to:Double) {
+class UniformDist(val from:Double, val to:Double) extends Serializable{
   
   def contains(x:Double) = from >= x && x <= to
   
