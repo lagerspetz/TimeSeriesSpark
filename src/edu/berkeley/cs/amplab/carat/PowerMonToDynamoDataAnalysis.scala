@@ -391,8 +391,12 @@ object PowerMonToDynamoDataAnalysis {
       }
       
       val (maxX, bucketed, bucketedNeg) = bucketDistributions(values, others)
+      
+      // FIXME: If this class is used again, calculate these 
+      val ev = 0.0
+      val ev2 = 0.0
 
-      DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance)
+      DynamoDbEncoder.put(table, keyName, keyValue, maxX, bucketed, bucketedNeg, distance, ev, ev2)
     }
   }
   
