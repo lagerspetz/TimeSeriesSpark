@@ -136,11 +136,11 @@ object ProbUtil {
     /* Normalize dists */
     
     for (k <- 0 until buckets){
-      bucketed += ((k, nDecimal(bucketed.get(k).getOrElse(0.0)/bigtotal, decimals)))
+      bucketed += ((k, bucketed.get(k).getOrElse(0.0)/bigtotal))
     }
 
     for (k <- 0 until buckets) {
-      bucketedNeg += ((k, nDecimal(bucketedNeg.get(k).getOrElse(0.0) / bigtotal2, decimals)))
+      bucketedNeg += ((k, bucketedNeg.get(k).getOrElse(0.0) / bigtotal2))
     }
     
     /* For collecting point measurements */
@@ -159,15 +159,18 @@ object ProbUtil {
       if (bucket >= buckets)
         bucket = buckets - 1
       var old = bucketedPoint.get(bucket).getOrElse(0.0)
-      bucketedPoint += ((bucket, nDecimal(old + 1, decimals)))
+      bucketedPoint += ((bucket, old + 1))
       sum += 1
     }
     
-     /* Normalize and add to bucketed */
+     /* Normalize and add to bucketed.
+      * Divide the result by 2, since we have now two probability dists that sum up to 1.
+      * Only cut down "exact" values to 3 decimals at the latest point, here.
+      */
     
     for (k <- 0 until buckets){
-      val normalizedProb = nDecimal(bucketedPoint.get(k).getOrElse(0.0)/sum, decimals)
-      bucketed += ((k, bucketed.get(k).getOrElse(0.0) + normalizedProb))
+      val normalizedProb = bucketedPoint.get(k).getOrElse(0.0)/sum
+      bucketed += ((k, nDecimal((bucketed.get(k).getOrElse(0.0) + normalizedProb)/2.0, decimals)))
     }
     
     /* Collect point measurements into frequency buckets */
@@ -178,15 +181,18 @@ object ProbUtil {
       if (bucket >= buckets)
         bucket = buckets - 1
       var old = bucketedNegPoint.get(bucket).getOrElse(0.0)
-      bucketedNegPoint += ((bucket, nDecimal(old + 1, decimals)))
+      bucketedNegPoint += ((bucket, old + 1))
       sum += 1
     }
     
-    /* Normalize and add to bucketedNeg */
+    /* Normalize and add to bucketedNeg.
+     * Divide the result by 2, since we have now two probability dists that sum up to 1.
+     * Only cut down "exact" values to 3 decimals at the latest point, here. 
+     */
     
     for (k <- 0 until buckets){
-      val normalizedProb = nDecimal(bucketedNegPoint.get(k).getOrElse(0.0)/sum, decimals)
-      bucketedNeg += ((k, bucketedNeg.get(k).getOrElse(0.0) + normalizedProb))
+      val normalizedProb = bucketedNegPoint.get(k).getOrElse(0.0)/sum
+      bucketedNeg += ((k, nDecimal((bucketedNeg.get(k).getOrElse(0.0) + normalizedProb)/2.0, decimals)))
     }
 
     (xmax, bucketed, bucketedNeg)
