@@ -3,6 +3,7 @@ package edu.berkeley.cs.amplab.carat
 import scala.io.Source
 import scala.collection.immutable.TreeMap
 import scala.sys.process._
+import spark.timeseries.ProbUtil
 
 object LogPlotter extends App {
 
@@ -90,7 +91,7 @@ object LogPlotter extends App {
     cumulative += ((xmax, 1.0))
     cumulativeNeg += ((xmax, 1.0))
 
-    val distance = CaratDynamoDataAnalysis.getDistanceNonCumulative(prob, probNeg)
+    val distance = ProbUtil.getDistanceNonCumulative(prob, probNeg)
 
     if (!distanceCheck || distance > 0) {
       val fname1 = fname + ".txt"
