@@ -8,7 +8,18 @@ import scala.collection.immutable.TreeSet
  */
 class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] with Serializable{
   
-  def contains(x:Double) = from >= x && x <= to
+  def contains(x:Double) = {
+    if (from == to){
+      /* kludge for point values:
+       * with 3 decimals,
+       * granularity is
+       * 0.001, 0.002, ...
+       * so 0.0005 can be used to
+       * "expand" a point value's range. */
+      from -0.0005 <= x && x <= to + 0.0005
+    }else
+    from <= x && x <= to
+  }
   
   def getEv() = (from + to) / 2
 
@@ -34,7 +45,14 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
     this((batt1 - batt2)*100.0/(timeEnd-timeStart), (batt1+0.05 - batt2)*100.0/(timeEnd-timeStart))
   }
   
-  def prob() = 1.0 / (to - from)
+  def prob() = {
+    if (to == from)
+      1.0
+    else
+      1.0 / (to - from)
+  }
+  
+  def isPoint() = to == from
 
   def compare(that: UniformDist) = {
     if (this.from < that.from)
