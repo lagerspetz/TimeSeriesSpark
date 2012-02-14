@@ -230,6 +230,7 @@ object CaratDynamoDataAnalysis {
     var negDrainSamples = 0
     var abandonedSamples = 0
     var chargingSamples = 0
+    var zeroBLCSamples = 0
 
     var rates = new ArrayBuffer[CaratRate]
 
@@ -252,14 +253,16 @@ object CaratDynamoDataAnalysis {
               /* Point rate */
               val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
                 prevEvent, event, prevApps, apps)
-               if (r.rate() == 0){
+              if (r.rate() == 0) {
                 // This should never happen
-                println("RATE ERROR: BatteryLevelChanged with zero rate: "+ r)
-              }
-              if (considerRate(r)) {
-                rates += r
+                println("RATE ERROR: BatteryLevelChanged with zero rate: " + r)
+                zeroBLCSamples += 1
               } else {
-                abandonedSamples += 1
+                if (considerRate(r)) {
+                  rates += r
+                } else {
+                  abandonedSamples += 1
+                }
               }
             }else{
               /* One endpoint not BLC, use uniform distribution rate */
@@ -284,7 +287,7 @@ object CaratDynamoDataAnalysis {
       prevApps = apps
     }
 
-    printf("Abandoned %s charging samples, %s negative drain samples, and %s > %s drain samples\n", chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE)
+    printf("Abandoned %s charging samples, %s negative drain samples, %s > %s drain samples, and %s zero drain BLC samples\n", chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE, zeroBLCSamples)
     rates.toSeq
   }
 
@@ -632,6 +635,14 @@ object CaratDynamoDataAnalysis {
     var evDistance = 0.0
 
     println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
+    if (flatOne.size < 10){
+      println("Less than 10 rates in \"with\": " +flatOne.mkString("\n"))
+    }
+    
+    if (flatTwo.size < 10){
+      println("Less than 10 rates in \"without\": " +flatTwo.mkString("\n"))
+    }
+    
     if (flatOne.size > 0 && flatTwo.size > 0) {
       val values = probUniform(flatOne)
       val others = probUniform(flatTwo)
