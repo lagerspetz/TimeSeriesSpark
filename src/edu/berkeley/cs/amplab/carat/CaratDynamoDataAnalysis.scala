@@ -653,7 +653,8 @@ object CaratDynamoDataAnalysis {
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
       println("Considering os os=" + os)
-      writeTripletUngrouped(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _), false)
+      writeTripletUngrouped(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _, _, _),
+          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
     }
 
     for (model <- models) {
@@ -661,7 +662,8 @@ object CaratDynamoDataAnalysis {
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
       println("Considering model model=" + model)
-      writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _), false)
+      writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _, _, _),
+          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
     }
 
     var allHogs = new HashSet[String]
@@ -718,7 +720,8 @@ object CaratDynamoDataAnalysis {
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
       println("Considering jscore uuid=" + uuid)
-      writeTripletUngrouped(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, uuidApps.toSeq), false)
+      writeTripletUngrouped(fromUuid, notFromUuid, DynamoDbEncoder.put(resultsTable, resultKey, uuid, _, _, _, _, _, _, uuidApps.toSeq),
+          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- nonHogs) {
@@ -758,16 +761,8 @@ object CaratDynamoDataAnalysis {
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
     println("Considering similarApps uuid=" + uuid)
-    writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _), false)
-  }
-
-  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double) => Unit, isBugOrHog: Boolean): Boolean = {
-    writeTripletUngrouped(one, two,
-      (xmax: Double, oneS: Seq[(Int, Double)], twoS: Seq[(Int, Double)],
-        distance: Double, ev: Double, evNeg: Double) => {
-        putFunction(xmax, oneS, twoS, distance)
-      }, { println("ERROR: Delete called for a non-bug non-hog!") },
-      isBugOrHog)
+    writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _, _, _), 
+        { println("ERROR: Delete called for a non-bug non-hog!") }, false)
   }
 
   /**

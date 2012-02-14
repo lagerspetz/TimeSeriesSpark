@@ -30,18 +30,24 @@ object DynamoDbEncoder {
   def put(table: String, keyName: String, keyValue: String,
     maxX: Double,
     prob1: Seq[(Int, Double)], prob2: Seq[(Int, Double)],
-    distance: Double, uuidApps: Seq[String] = new HashSet[String].toSeq) {
+    distance: Double,
+    ev:Double, evNeg: Double,
+    uuidApps: Seq[String] = new HashSet[String].toSeq) {
     if (uuidApps.size > 0)
       put(table, (keyName, keyValue), (xmax, maxX),
         (prob, prob1.map(x => { x._1 + ";" + x._2 })),
         (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
         (distanceField, distance),
+        (expectedValue, ev),
+        (expectedValueNeg, evNeg),
         (apps, uuidApps))
     else
       put(table, (keyName, keyValue), (xmax, maxX),
         (prob, prob1.map(x => { x._1 + ";" + x._2 })),
         (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
-        (distanceField, distance))
+        (distanceField, distance),
+        (expectedValue, ev),
+        (expectedValueNeg, evNeg))
   }
   
   def put(table: String, keyName: String, keyValue: String,
