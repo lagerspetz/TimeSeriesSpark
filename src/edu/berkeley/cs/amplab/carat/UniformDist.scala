@@ -21,6 +21,20 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
     from <= x && x < to
   }
   
+   def overlaps(start:Double, end:Double) = {
+    if (from == to){
+      /* kludge for point values:
+       * with 3 decimals,
+       * granularity is
+       * 0.001, 0.002, ...
+       * so 0.0005 can be used to
+       * "expand" a point value's range. */
+      start <= from && to < end
+    }else
+      (start <= from && from < end) ||
+      (from <= start && start < end)
+  }
+  
   def getEv() = (from + to) / 2
 
   /**

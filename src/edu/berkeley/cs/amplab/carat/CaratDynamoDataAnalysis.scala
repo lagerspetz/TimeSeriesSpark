@@ -644,18 +644,6 @@ object CaratDynamoDataAnalysis {
     }
     
     if (flatOne.size > 0 && flatTwo.size > 0) {
-      val values = probUniform(flatOne)
-      val others = probUniform(flatTwo)
-
-      if (DEBUG) {
-        ProbUtil.debugNonZero(values.map(_._2), others.map(_._2), "prob")
-        //ProbUtil.plot(values, others)
-      }
-
-      val ev = ProbUtil.getEv(values)
-      val evNeg = ProbUtil.getEv(others)
-
-      evDistance = evDiff(ev, evNeg)
       /*if (DEBUG) {
         val distance = getDistanceNonCumulative(values, others)
         val dAbsSigned = getDistanceAbs(values, others)
@@ -664,13 +652,19 @@ object CaratDynamoDataAnalysis {
 
         printf("evDistance=%s distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", evDistance, distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne - iTwo))
       } else*/
-        printf("evDistance=%s\n", evDistance)
 
+      val (maxX, bucketed, bucketedNeg) = ProbUtil.bucketDistributionsByX(flatOne, flatTwo, buckets, DECIMALS)
+
+      val ev = ProbUtil.getEv(bucketed, maxX)
+      val evNeg = ProbUtil.getEv(bucketedNeg, maxX)
+
+      evDistance = evDiff(ev, evNeg)
+      printf("evDistance=%s\n", evDistance)
+
+      if (DEBUG) {
+        ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
+      }
       if (evDistance >= 0 || !isBugOrHog) {
-        val (maxX, bucketed, bucketedNeg) = ProbUtil.bucketDistributionsByX(values, others, buckets, DECIMALS)
-        if (DEBUG) {
-          ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
-        }
         putFunction(maxX, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], evDistance, ev, evNeg)
       } else if (evDistance < 0 && isBugOrHog) {
         /* We should probably remove it in this case. */

@@ -1,6 +1,7 @@
 package spark.timeseries
 
 import scala.collection.immutable.TreeMap
+import edu.berkeley.cs.amplab.carat.UniformDist
 
 /**
  * Various utilities for probability distribution processing.
@@ -14,6 +15,17 @@ object ProbUtil {
   def getEv(values: TreeMap[Double, Double]) = {
     val m = values.map(x => {
       x._1 * x._2
+    }).toSeq
+    m.sum
+  }
+  
+    /**
+   * Get the expected value of a probability distribution.
+   * The EV is x*y / sum(y), where sum(y) is 1 for a probability distribution.
+   */
+  def getEv(values: TreeMap[Int, Double], xmax: Double) = {
+    val m = values.map(x => {
+      (x._1)*(xmax/values.size) * x._2
     }).toSeq
     m.sum
   }
@@ -78,6 +90,103 @@ object ProbUtil {
         bucketed += ((k, 0.0))
       if (!bucketedNeg.contains(k))
         bucketedNeg += ((k, 0.0))
+    }
+
+    (xmax, bucketed, bucketedNeg)
+  }
+  
+  /**
+   * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions.
+   */
+  def bucketDistributionsByX(withDist: Array[UniformDist], withoutDist: Array[UniformDist], buckets: Int, decimals: Int) = {
+    var bucketed = new TreeMap[Int, Double]
+    var bucketedNeg = new TreeMap[Int, Double]
+
+    var xmax = 0.0
+    /* Find min and max x*/
+    for (d <- withDist) {
+      if (d.to > xmax)
+        xmax = d.to
+    }
+    
+    for (d <- withoutDist) {
+      if (d.to > xmax)
+        xmax = d.to
+    }
+    
+    var bigtotal = 0.0
+    var bigtotal2 = 0.0
+    
+     /* Iterate over buckets and discretize ranges that fall into them */
+    for (k <- 0 until buckets) {
+      val bucketStart = k * xmax/buckets
+      val bucketEnd = bucketStart + xmax/buckets
+      val count = withDist.filter(x => {
+      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      val count2 = withoutDist.filter(x => {
+      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      bigtotal += count
+      bigtotal2 += count2
+      val old = bucketed.get(k).getOrElse(0.0) + count
+      val old2 = bucketedNeg.get(k).getOrElse(0.0) + count2
+      bucketed += ((k, old))
+      bucketedNeg += ((k, old2))
+    }
+    
+    /* Normalize dists */
+    
+    for (k <- 0 until buckets){
+      bucketed += ((k, nDecimal(bucketed.get(k).getOrElse(0.0)/bigtotal, decimals)))
+    }
+
+    for (k <- 0 until buckets) {
+      bucketedNeg += ((k, nDecimal(bucketedNeg.get(k).getOrElse(0.0) / bigtotal2, decimals)))
+    }
+    
+    /* For collecting point measurements */
+    var bucketedPoint = new TreeMap[Int, Double]
+    var bucketedNegPoint = new TreeMap[Int, Double]
+    
+    var withPoint = withDist.filter(_.isPoint).map(_.from)
+    var withoutPoint = withoutDist.filter(_.isPoint).map(_.from)
+    
+    /* Collect point measurements into frequency buckets */
+    
+    var sum = 0.0
+    for (k <- withPoint) {
+      val x = k / xmax
+      var bucket = (x * buckets).toInt
+      if (bucket >= buckets)
+        bucket = buckets - 1
+      var old = bucketedPoint.get(bucket).getOrElse(0.0)
+      bucketedPoint += ((bucket, nDecimal(old + 1, decimals)))
+      sum += 1
+    }
+    
+     /* Normalize and add to bucketed */
+    
+    for (k <- 0 until buckets){
+      val normalizedProb = nDecimal(bucketedPoint.get(k).getOrElse(0.0)/sum, decimals)
+      bucketed += ((k, bucketed.get(k).getOrElse(0.0) + normalizedProb))
+    }
+    
+    /* Collect point measurements into frequency buckets */
+    sum = 0.0
+    for (k <- withoutPoint) {
+      val x = k / xmax
+      var bucket = (x * buckets).toInt
+      if (bucket >= buckets)
+        bucket = buckets - 1
+      var old = bucketedNegPoint.get(bucket).getOrElse(0.0)
+      bucketedNegPoint += ((bucket, nDecimal(old + 1, decimals)))
+      sum += 1
+    }
+    
+    /* Normalize and add to bucketedNeg */
+    
+    for (k <- 0 until buckets){
+      val normalizedProb = nDecimal(bucketedNegPoint.get(k).getOrElse(0.0)/sum, decimals)
+      bucketedNeg += ((k, bucketedNeg.get(k).getOrElse(0.0) + normalizedProb))
     }
 
     (xmax, bucketed, bucketedNeg)
