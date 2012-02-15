@@ -121,15 +121,21 @@ object ProbUtil {
     for (k <- 0 until buckets) {
       val bucketStart = k * xmax/buckets
       val bucketEnd = bucketStart + xmax/buckets
+      
       val count = withDist.filter(x => {
       !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      
       val count2 = withoutDist.filter(x => {
       !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      
       printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
+      
       bigtotal += count
       bigtotal2 += count2
+      
       val old = bucketed.get(k).getOrElse(0.0) + count
       val old2 = bucketedNeg.get(k).getOrElse(0.0) + count2
+      
       bucketed += ((k, old))
       bucketedNeg += ((k, old2))
     }
@@ -199,7 +205,7 @@ object ProbUtil {
         bucketedNeg += ((k, nDecimal((old2 + normalizedProb2)/2.0, decimals)))
       }else
         bucketedNeg += ((k, nDecimal(old2+normalizedProb2, decimals)))
-      printf("Final BucketNeg %s: val=%s val2=%s\n", k, bucketed.get(k), bucketedNeg.get(k))
+      printf("Final Bucket %s: old1=%s norm1=%s val=%s old2=%s norm2=%s val2=%s\n", k, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
     }
 
     (xmax, bucketed, bucketedNeg)
