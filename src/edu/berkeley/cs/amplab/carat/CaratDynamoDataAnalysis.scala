@@ -654,11 +654,11 @@ object CaratDynamoDataAnalysis {
         printf("evDistance=%s distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", evDistance, distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne - iTwo))
       } else*/
 
-      val (maxX, bucketed, bucketedNeg) = ProbUtil.bucketDistributionsByX(flatOne, flatTwo, buckets, DECIMALS)
+      val (maxX, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.bucketDistributionsByX(flatOne, flatTwo, buckets, DECIMALS)
 
-      val ev = ProbUtil.getEv(bucketed, maxX)
+      /*val ev = ProbUtil.getEv(bucketed, maxX)
       val evNeg = ProbUtil.getEv(bucketedNeg, maxX)
-
+       */
       evDistance = evDiff(ev, evNeg)
       printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
 

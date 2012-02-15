@@ -189,6 +189,9 @@ object ProbUtil {
       * Do not normalize already normal buckets that have only discrete or only continuous values.
       */
     
+    var ev1 = 0.0
+    var ev2 = 0.0
+    
     for (k <- 0 until buckets){
       val normalizedProb1 = { if (sum1 > 0)
           bucketedPoint.get(k).getOrElse(0.0)/sum1
@@ -215,9 +218,11 @@ object ProbUtil {
       }else
         bucketedNeg += ((k, nDecimal(old2+normalizedProb2, decimals)))
       printf("Final Bucket %s: old1=%s norm1=%s val=%s old2=%s norm2=%s val2=%s\n", k, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
+      ev1 += (k+0.5)/buckets * xmax * bucketed.get(k).getOrElse(0.0)
+      ev2 += (k+0.5)/buckets * xmax * bucketedNeg.get(k).getOrElse(0.0)
     }
 
-    (xmax, bucketed, bucketedNeg)
+    (xmax, bucketed, bucketedNeg, ev1, ev2)
   }
 
   /**
