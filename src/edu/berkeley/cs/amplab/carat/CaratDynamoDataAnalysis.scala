@@ -231,6 +231,7 @@ object CaratDynamoDataAnalysis {
     var abandonedSamples = 0
     var chargingSamples = 0
     var zeroBLCSamples = 0
+    var allZeroSamples = 0
 
     var rates = new ArrayBuffer[CaratRate]
 
@@ -247,7 +248,11 @@ object CaratDynamoDataAnalysis {
           if (prevBatt - batt < 0) {
             printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
             negDrainSamples += 1
-          } else {
+          } else if (prevBatt == 0 && batt == 0){
+            /* Assume simulator, ignore */
+            printf("prevBatt %s batt %s (uuid=%s) for observation %s\n", prevBatt, batt, k._1, k)
+            allZeroSamples += 1
+          }else {
             /* now prevBatt - batt >= 0 */
             if (prevEvent == blc && event == blc) {
               /* Point rate */
@@ -287,7 +292,7 @@ object CaratDynamoDataAnalysis {
       prevApps = apps
     }
 
-    printf("Abandoned %s charging samples, %s negative drain samples, %s > %s drain samples, and %s zero drain BLC samples\n", chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE, zeroBLCSamples)
+    printf("Abandoned %s all zero, %s charging, %s negative drain, %s > %s drain, %s zero drain BLC samples.\n", allZeroSamples, chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE, zeroBLCSamples)
     rates.toSeq
   }
 
@@ -431,16 +436,12 @@ object CaratDynamoDataAnalysis {
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
     /* Daemon apps, hardcoded for now */
     var daemons: Set[String] = Set(
-      "BTServer",
-      "Carat",
-      "MobileMail",
-      "MobilePhone",
-      "MobileSafari",
-      "SpringBoard",
-      "UserEventAgent",
       "aggregated",
       "apsd",
+      "BTServer",
+      "Carat",
       "configd",
+      "calaccessd",
       "dataaccessd",
       "fseventsd",
       "iapd",
@@ -448,21 +449,31 @@ object CaratDynamoDataAnalysis {
       "installd",
       "kernel_task",
       "launchd",
+      "librariand",
       "locationd",
       "lockdownd",
       "lsd",
       "mDNSResponder",
       "mediaremoted",
       "mediaserverd",
+      "MobileMail",
+      "MobilePhone",
+      "MobileSafari",
       "networkd",
       "notifyd",
       "pasteboardd",
       "powerd",
       "sandboxd",
       "securityd",
+      "SpringBoard",
       "syslogd",
       "ubd",
-      "wifid")
+      "UserEventAgent",
+      "wifid",
+      "WindowServer", "dynamic_pager", "logind", "fontd", 
+      "warmd", "coreservicesd", "autofsd", "warmd_agent",
+      "filecoordination", "mds", "hidd", "kextd", "diskarbitrationd",
+      "mdworker")
 
     /*if (DEBUG) {
       val cc = allRates.collect()
