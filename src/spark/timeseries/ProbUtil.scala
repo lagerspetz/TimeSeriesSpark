@@ -25,7 +25,7 @@ object ProbUtil {
    */
   def getEv(values: TreeMap[Int, Double], xmax: Double) = {
     val m = values.map(x => {
-      (x._1)*(xmax/values.size) * x._2
+      (x._1+0.5)*(xmax/values.size) * x._2
     }).toSeq
     m.sum
   }
