@@ -190,15 +190,24 @@ object ProbUtil {
       */
     
     for (k <- 0 until buckets){
-      val normalizedProb1 = bucketedPoint.get(k).getOrElse(0.0)/sum1
+      val normalizedProb1 = { if (sum1 > 0)
+          bucketedPoint.get(k).getOrElse(0.0)/sum1
+        else
+          0
+      }
       val old1 = bucketed.get(k).getOrElse(0.0)
       
       if (normalizedProb1 > 0 && old1 > 0){
         bucketed += ((k, nDecimal((old1 + normalizedProb1)/2.0, decimals)))
       }else
         bucketed += ((k, nDecimal(old1+normalizedProb1, decimals)))
-    
-      val normalizedProb2 = bucketedNegPoint.get(k).getOrElse(0.0)/sum2
+
+      val normalizedProb2 = {
+        if (sum2 > 0)
+          bucketedNegPoint.get(k).getOrElse(0.0) / sum2
+        else
+          0
+      }
       val old2 = bucketedNeg.get(k).getOrElse(0.0)
       
       if (normalizedProb2 > 0 && old2 > 0){
