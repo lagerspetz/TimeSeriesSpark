@@ -139,13 +139,10 @@ object ProbUtil {
     for (k <- 0 until buckets){
       val norm = bucketed.get(k).getOrElse(0.0)/bigtotal
       bucketed += ((k, norm))
-      printf("Norm Bucket %s: val=%s\n", k, norm)
-    }
-
-    for (k <- 0 until buckets) {
-      val norm = bucketedNeg.get(k).getOrElse(0.0)/bigtotal2
-      bucketedNeg += ((k, norm))
-      printf("Norm Bucket %s: val2=%s\n", k, norm)
+      
+      val norm2 = bucketedNeg.get(k).getOrElse(0.0)/bigtotal2
+      bucketedNeg += ((k, norm2))
+      printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
     }
     
     /* For collecting point measurements */
@@ -157,7 +154,7 @@ object ProbUtil {
     
     /* Collect point measurements into frequency buckets */
     
-    var sum = 0.0
+    var sum1 = 0.0
     for (k <- withPoint) {
       val x = k / xmax
       var bucket = (x * buckets).toInt
@@ -165,23 +162,11 @@ object ProbUtil {
         bucket = buckets - 1
       var old = bucketedPoint.get(bucket).getOrElse(0.0)
       bucketedPoint += ((bucket, old + 1))
-      sum += 1
-    }
-    
-     /* Normalize and add to bucketed.
-      * Divide the result by 2, since we have now two probability dists that sum up to 1.
-      * Only cut down "exact" values to 3 decimals at the latest point, here.
-      */
-    
-    for (k <- 0 until buckets){
-      val normalizedProb = bucketedPoint.get(k).getOrElse(0.0)/sum
-      val old = bucketed.get(k).getOrElse(0.0)
-      bucketed += ((k, nDecimal((old + normalizedProb)/2.0, decimals)))
-      printf("Final Bucket %s: val=%s\n", k, nDecimal((old+normalizedProb)/2.0, decimals))
+      sum1 += 1
     }
     
     /* Collect point measurements into frequency buckets */
-    sum = 0.0
+    var sum2 = 0.0
     for (k <- withoutPoint) {
       val x = k / xmax
       var bucket = (x * buckets).toInt
@@ -189,19 +174,32 @@ object ProbUtil {
         bucket = buckets - 1
       var old = bucketedNegPoint.get(bucket).getOrElse(0.0)
       bucketedNegPoint += ((bucket, old + 1))
-      sum += 1
+      sum2 += 1
     }
     
-    /* Normalize and add to bucketedNeg.
-     * Divide the result by 2, since we have now two probability dists that sum up to 1.
-     * Only cut down "exact" values to 3 decimals at the latest point, here. 
-     */
+     /* Normalize and add to bucketed and bucketedNeg.
+      * Divide the result by 2, since we have now two probability dists that sum up to 1.
+      * Only cut down "exact" values to 3 decimals at the latest point, here.
+      * Do not normalize already normal buckets that have only discrete or only continuous values.
+      */
     
     for (k <- 0 until buckets){
-      val normalizedProb = bucketedNegPoint.get(k).getOrElse(0.0)/sum
-      val old = bucketedNeg.get(k).getOrElse(0.0)
-      bucketedNeg += ((k, nDecimal((old + normalizedProb)/2.0, decimals)))
-      printf("Final BucketNeg %s: val=%s\n", k, nDecimal((old+normalizedProb)/2.0, decimals))
+      val normalizedProb1 = bucketedPoint.get(k).getOrElse(0.0)/sum1
+      val old1 = bucketed.get(k).getOrElse(0.0)
+      
+      if (normalizedProb1 > 0 && old1 > 0){
+        bucketed += ((k, nDecimal((old1 + normalizedProb1)/2.0, decimals)))
+      }else
+        bucketed += ((k, nDecimal(old1+normalizedProb1, decimals)))
+    
+      val normalizedProb2 = bucketedNegPoint.get(k).getOrElse(0.0)/sum2
+      val old2 = bucketedNeg.get(k).getOrElse(0.0)
+      
+      if (normalizedProb2 > 0 && old2 > 0){
+        bucketedNeg += ((k, nDecimal((old2 + normalizedProb2)/2.0, decimals)))
+      }else
+        bucketedNeg += ((k, nDecimal(old2+normalizedProb2, decimals)))
+      printf("Final BucketNeg %s: val=%s val2=%s\n", k, bucketed.get(k), bucketedNeg.get(k))
     }
 
     (xmax, bucketed, bucketedNeg)
