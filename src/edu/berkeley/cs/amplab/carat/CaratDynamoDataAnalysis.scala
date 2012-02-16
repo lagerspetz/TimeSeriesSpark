@@ -722,7 +722,7 @@ object CaratDynamoDataAnalysis {
         if (temp == 0)
           0
         else
-          dists.filter(_ > temp).size / dists.size
+          ProbUtil.nDecimal(dists.filter(_ > temp).size*1.0 / dists.size, DECIMALS)
       }
       val distWith = distsWithUuid.get(k).getOrElse(null)
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
