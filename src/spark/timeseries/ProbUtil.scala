@@ -277,14 +277,13 @@ object ProbUtil {
     
      /* Iterate over buckets and discretize ranges that fall into them */
     for (k <- 0 until buckets) {
-      var upperBoundary = xmax / (math.pow(logbase, buckets - k - 1))
       val bucketStart = {
         if (k == 0)
           0.0
         else
           xmax / (math.pow(logbase, buckets - k))
       }
-      val bucketEnd = upperBoundary
+      val bucketEnd = xmax / (math.pow(logbase, buckets - k - 1))
       
       val count = withDist.filter(x => {
       !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
