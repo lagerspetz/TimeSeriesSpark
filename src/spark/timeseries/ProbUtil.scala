@@ -224,6 +224,190 @@ object ProbUtil {
 
     (xmax, bucketed, bucketedNeg, ev1, ev2)
   }
+  
+  /**
+   * Bucket given distributions into `buckets` buckets, that have log sizes
+   * (smaller at the low end) and return the maximum x value and the bucketed distributions.
+   * 
+   * Suggested parameters: buckets = 100, smallestBucket = 0.0001, decimals = 3 or 4
+   * 
+     * For a smallest bucket upper boundary of 0.0001,
+     * the maximum battery consumption that falls into
+     * it would use the iPhone battery in 11.5 days.
+     * This is unrealistic. A 0.0005 % /s
+     * usage falls into the 87th bucket,
+     * and drains the battery in 2.5 days. This is more realistic.
+     * As the buckets go to the right, higher and higher usage is
+     * bucketed, with a larger bucket size, making heavy usage with even a 
+     * high variance fall into the same bucket. 
+     * 
+     */
+  def logBucketDistributionsByX(withDist: Array[UniformDist], withoutDist: Array[UniformDist], buckets:Int, smallestBucket:Double, decimals: Int) = {
+    var bucketed = new TreeMap[Int, Double]
+    var bucketedNeg = new TreeMap[Int, Double]
+
+    var xmax = 0.0
+    /* Find min and max x*/
+    for (d <- withDist) {
+      if (d.to > xmax)
+        xmax = d.to
+    }
+    
+    for (d <- withoutDist) {
+      if (d.to > xmax)
+        xmax = d.to
+    }
+    
+    
+    
+    /* xmax / (logBase^buckets) > smallestBucket
+     * <=> logBase^buckets * smallestBucket < xmax
+     * <=> logBase^buckets < xmax / smallestBucket
+     * log (logbase) * buckets < log (xmax/smallestBucket)
+     * logbase < e^(log(xmax/smallestBucket) / buckets)
+     */
+    
+    val logbase = math.pow(math.E, math.log(xmax/smallestBucket) / buckets)
+    
+    /** TODO: Finish this...
+     */
+    
+    var bigtotal = 0.0
+    var bigtotal2 = 0.0
+    
+     /* Iterate over buckets and discretize ranges that fall into them */
+    for (k <- 0 until buckets) {
+      var upperBoundary = xmax / (math.pow(logbase, buckets - k - 1))
+      val bucketStart = {
+        if (k == 0)
+          0.0
+        else
+          xmax / (math.pow(logbase, buckets - k))
+      }
+      val bucketEnd = upperBoundary
+      
+      val count = withDist.filter(x => {
+      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      
+      val count2 = withoutDist.filter(x => {
+      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      
+      printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
+      
+      bigtotal += count
+      bigtotal2 += count2
+      
+      val old = bucketed.get(k).getOrElse(0.0) + count
+      val old2 = bucketedNeg.get(k).getOrElse(0.0) + count2
+      
+      bucketed += ((k, old))
+      bucketedNeg += ((k, old2))
+    }
+    
+    /* Normalize dists */
+    
+    for (k <- 0 until buckets){
+      val norm = bucketed.get(k).getOrElse(0.0)/bigtotal
+      bucketed += ((k, norm))
+      
+      val norm2 = bucketedNeg.get(k).getOrElse(0.0)/bigtotal2
+      bucketedNeg += ((k, norm2))
+      printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
+    }
+    
+    /* For collecting point measurements */
+    var bucketedPoint = new TreeMap[Int, Double]
+    var bucketedNegPoint = new TreeMap[Int, Double]
+    
+    var withPoint = withDist.filter(_.isPoint).map(_.from)
+    var withoutPoint = withoutDist.filter(_.isPoint).map(_.from)
+    
+    /* Collect point measurements into frequency buckets */
+    
+    var sum1 = 0.0
+    for (k <- withPoint) {
+      var bucketDouble = math.log(xmax / k) / math.log(logbase)
+      val bucket = {
+        if (bucketDouble >= buckets)
+          buckets - 1
+        else if (bucketDouble < 0)
+          0
+        else
+          bucketDouble.toInt
+      }
+
+      var old = bucketedPoint.get(bucket).getOrElse(0.0)
+      bucketedPoint += ((bucket, old + 1))
+      sum1 += 1
+    }
+    
+    /* Collect point measurements into frequency buckets */
+    var sum2 = 0.0
+    for (k <- withoutPoint) {
+       var bucketDouble = math.log(xmax / k) / math.log(logbase)
+      val bucket = {
+        if (bucketDouble >= buckets)
+          buckets - 1
+        else if (bucketDouble < 0)
+          0
+        else
+          bucketDouble.toInt
+      }
+      var old = bucketedNegPoint.get(bucket).getOrElse(0.0)
+      bucketedNegPoint += ((bucket, old + 1))
+      sum2 += 1
+    }
+    
+     /* Normalize and add to bucketed and bucketedNeg.
+      * Divide the result by 2, since we have now two probability dists that sum up to 1.
+      * Only cut down "exact" values to 3 decimals at the latest point, here.
+      * Do not normalize already normal buckets that have only discrete or only continuous values.
+      */
+    
+    var ev1 = 0.0
+    var ev2 = 0.0
+    
+    for (k <- 0 until buckets){
+      val normalizedProb1 = { if (sum1 > 0)
+          bucketedPoint.get(k).getOrElse(0.0)/sum1
+        else
+          0
+      }
+      val old1 = bucketed.get(k).getOrElse(0.0)
+      
+      if (normalizedProb1 > 0 && old1 > 0){
+        bucketed += ((k, nDecimal((old1 + normalizedProb1)/2.0, decimals)))
+      }else
+        bucketed += ((k, nDecimal(old1+normalizedProb1, decimals)))
+
+      val normalizedProb2 = {
+        if (sum2 > 0)
+          bucketedNegPoint.get(k).getOrElse(0.0) / sum2
+        else
+          0
+      }
+      val old2 = bucketedNeg.get(k).getOrElse(0.0)
+      
+      if (normalizedProb2 > 0 && old2 > 0){
+        bucketedNeg += ((k, nDecimal((old2 + normalizedProb2)/2.0, decimals)))
+      }else
+        bucketedNeg += ((k, nDecimal(old2+normalizedProb2, decimals)))
+      printf("Final Bucket %s: old1=%s norm1=%s val=%s old2=%s norm2=%s val2=%s\n", k, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
+      
+      var bucketEnd = xmax / (math.pow(logbase, buckets - k - 1))
+      val bucketStart = {
+        if (k == 0)
+          0.0
+        else
+          xmax / (math.pow(logbase, buckets - k))
+      }
+      
+      ev1 += (bucketEnd - bucketStart)/2 * bucketed.get(k).getOrElse(0.0)
+      ev2 += (bucketEnd - bucketStart)/2 * bucketedNeg.get(k).getOrElse(0.0)
+    }
+
+    (xmax, bucketed, bucketedNeg, ev1, ev2)
+  }
 
   /**
    * Get our own variant of the KS distance,

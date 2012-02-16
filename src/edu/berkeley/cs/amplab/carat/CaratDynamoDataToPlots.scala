@@ -29,7 +29,7 @@ import com.amazonaws.services.dynamodb.model.AttributeValue
  * @author Eemil Lagerspetz
  */
 
-object CaratDynamoDataAnalysis {
+object CaratDynamoDataToPlots {
   /**
    * We do not store hogs or bugs with negative distance values.
    */
@@ -476,16 +476,6 @@ object CaratDynamoDataAnalysis {
       "filecoordination", "mds", "hidd", "kextd", "diskarbitrationd",
       "mdworker")
 
-    /**
-     * uuid distributions, xmax, ev and evNeg
-     */
-    var distsWithUuid = new TreeMap[String, TreeMap[Int, Double]]
-    var distsWithoutUuid = new TreeMap[String, TreeMap[Int, Double]]
-    /* xmax, ev, evNeg */
-    var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
-    /* evDistances*/
-    var evDistanceByUuid = new TreeMap[String, Double]
-
     /*if (DEBUG) {
       val cc = allRates.collect()
       for (k <- cc)
@@ -510,8 +500,7 @@ object CaratDynamoDataAnalysis {
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
       println("Considering os os=" + os)
-      writeTripletUngrouped(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _, _, _),
-          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+      writeTripletUngrouped("iOs " + os, "Other versions", fromOs, notFromOs, false)
     }
 
     for (model <- models) {
@@ -519,8 +508,7 @@ object CaratDynamoDataAnalysis {
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
       println("Considering model model=" + model)
-      writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _, _, _),
-          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+      writeTripletUngrouped(model, "Other models", fromModel, notFromModel, false)
     }
 
     var allHogs = new HashSet[String]
@@ -530,8 +518,7 @@ object CaratDynamoDataAnalysis {
         val filtered = allRates.filter(_.allApps.contains(app))
         val filteredNeg = allRates.filter(!_.allApps.contains(app))
         println("Considering hog app=" + app)
-        if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
-          DynamoDbDecoder.deleteItem(appsTable, app), true)) {
+        if (writeTripletUngrouped("Hog " + app, "Other apps", filtered, filteredNeg, true)) {
           // this is a hog
           allHogs += app
         }
@@ -576,28 +563,18 @@ object CaratDynamoDataAnalysis {
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
       println("Considering jscore uuid=" + uuid)
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(fromUuid, notFromUuid)
-      if (bucketed != null && bucketedNeg != null) {
-        distsWithUuid += ((uuid, bucketed))
-        distsWithoutUuid += ((uuid, bucketedNeg))
-        parametersByUuid += ((uuid, (xmax, ev, evNeg)))
-        evDistanceByUuid += ((uuid, evDistance))
-      }
-      
+      writeTripletUngrouped("Profile for " + uuid, "Other users", fromUuid, notFromUuid, false)
+
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- uuidApps) {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
           println("Considering bug app=" + app + " uuid=" + uuid)
-          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
-            DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
+          writeTripletUngrouped("Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, true)
         }
       }
     }
-    
-    writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid)
-    
     val removed = daemons -- intersectEverReportedApps
     val removedPS = daemons -- intersectPerSampleApps
     intersectEverReportedApps --= daemons
@@ -625,16 +602,19 @@ object CaratDynamoDataAnalysis {
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
     println("Considering similarApps uuid=" + uuid)
-    writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _, _, _), 
-        { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+    writeTripletUngrouped("Similar users with " + uuid, "Dissimilar users", similar, dissimilar, false)
   }
 
-  def getDistanceAndDistributions(one: RDD[CaratRate], two: RDD[CaratRate]) = {
-      // probability distribution: r, count/sumCount
+  /**
+   * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
+   */
+  def writeTripletUngrouped(title:String, titleNeg:String, one: RDD[CaratRate], two: RDD[CaratRate], isBugOrHog: Boolean) = {
+
+    // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
-     * both distributions into n buckets, averaging inside a bucket
-     */
+       * both distributions into n buckets, averaging inside a bucket
+       */
     
     val flatOne = one.map(x => {
       if (x.isUniform())
@@ -649,86 +629,47 @@ object CaratDynamoDataAnalysis {
           new UniformDist(x.rate, x.rate)
     }).collect()
     
+    // For now, to keep values stable in the db cheat with distributions:
+    // val flatOne = one.map(_.rate).collect()
+    //val flatTwo = two.map(_.rate).collect()
+    
+    
     var evDistance = 0.0
 
-    if (flatOne.size > 0 && flatTwo.size > 0) {
-      println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
-      if (flatOne.size < 10) {
-        println("Less than 10 rates in \"with\": " + flatOne.mkString("\n"))
-      }
-
-      if (flatTwo.size < 10) {
-        println("Less than 10 rates in \"without\": " + flatTwo.mkString("\n"))
-      }
-
-      if (DEBUG) {
-        ProbUtil.debugNonZero(flatOne.map(_.getEv), flatTwo.map(_.getEv), "rates")
-      }
+    println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
+    if (flatOne.size < 10){
+      println("Less than 10 rates in \"with\": " +flatOne.mkString("\n"))
+    }
     
-      val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, buckets, smallestBucket, DECIMALS)
+    if (flatTwo.size < 10){
+      println("Less than 10 rates in \"without\": " +flatTwo.mkString("\n"))
+    }
+    
+    if (DEBUG) {
+      ProbUtil.debugNonZero(flatOne.map(_.getEv), flatTwo.map(_.getEv), "rates")
+    }
+    
+    if (flatOne.size > 0 && flatTwo.size > 0) {
+      /*if (DEBUG) {
+        val distance = getDistanceNonCumulative(values, others)
+        val dAbsSigned = getDistanceAbs(values, others)
+        val dWeighted = getDistanceWeighted(values, others)
+        val (iOne, iTwo) = getCumulativeIntegrals(values, others)
 
+        printf("evDistance=%s distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", evDistance, distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne - iTwo))
+      } else*/
+
+      val (maxX, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, buckets, smallestBucket, DECIMALS)
+
+      /*val ev = ProbUtil.getEv(bucketed, maxX)
+      val evNeg = ProbUtil.getEv(bucketedNeg, maxX)
+       */
       evDistance = evDiff(ev, evNeg)
       printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
 
-      if (DEBUG) {
-        ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
-      }
-      
-      (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
-    }else
-      (0.0, null, null, 0.0, 0.0, 0.0)
-  }
-
-  /**
-   * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
-   */
-  def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit,
-    deleteFunction: => Unit, isBugOrHog: Boolean) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(one, two)
-    if (bucketed != null && bucketedNeg != null) {
-      if (evDistance > 0 || !isBugOrHog) {
-        putFunction(xmax, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], evDistance, ev, evNeg)
-      } else if (evDistance <= 0 && isBugOrHog) {
-        /* We should probably remove it in this case. */
-        deleteFunction
-      }
+      plot(title, titleNeg, maxX, bucketed, bucketedNeg, ev, evNeg, evDistance)
     }
     isBugOrHog && evDistance > 0
-  }
-
-   /**
-     * The J-Score is the % of people with worse = higher energy use.
-     * therefore, it is the size of the set of evDistances that are higher than mine,
-     * compared to the size of the user base.
-     * Note that the server side multiplies the JScore by 100, and we store it here
-     * as a fraction.
-     */
-  def writeJScores(distsWithUuid: TreeMap[String, TreeMap[Int, Double]],
-    distsWithoutUuid: TreeMap[String, TreeMap[Int, Double]],
-    parametersByUuid: TreeMap[String, (Double, Double, Double)],
-    evDistanceByUuid: TreeMap[String, Double]) {
-    val dists = evDistanceByUuid.map(_._2).toSeq.sorted
-
-    for (k <- distsWithUuid.keys) {
-      val (xmax, ev, evNeg) = parametersByUuid.get(k).getOrElse((0.0, 0.0, 0.0))
-      
-      /**
-       * jscore is the % of people with worse = higher energy use.
-       * therefore, it is the size of the set of evDistances that are higher than mine,
-       * compared to the size of the user base.
-       */
-      val jscore = {
-        val temp = evDistanceByUuid.get(k).getOrElse(0.0)
-        if (temp == 0)
-          0
-        else
-          dists.filter(_ > temp).size / dists.size
-      }
-      val distWith = distsWithUuid.get(k).getOrElse(null)
-      val distWithout = distsWithoutUuid.get(k).getOrElse(null)
-      DynamoDbEncoder.put(resultsTable, resultKey, k, xmax, distWith.toArray[(Int, Double)], distWithout.toArray[(Int, Double)], jscore, ev, evNeg)
-    }
-    //DynamoDbEncoder.put(xmax, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], jScore, ev, evNeg)
   }
   
   /**
@@ -742,5 +683,16 @@ object CaratDynamoDataAnalysis {
    */
   def evDiff(evWith: Double, evWithout: Double) = {
     1.0 - evWithout / evWith
+  }
+  
+  /* TODO: Generate a gnuplot-readable plot file of the bucketed distribution.
+   * Create folders plots/data plots/plotfiles
+   * Save it as "plots/data/titleWith-titleWithout".txt.
+   * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
+   */
+  def plot(titleWith:String, titleWithout:String, xmax: Double,
+      bucketsWith:TreeMap[Int, Double], bucketsWithout:TreeMap[Int, Double],
+      evWith: Double, evWithout:Double, evDistance:Double){
+    
   }
 }
