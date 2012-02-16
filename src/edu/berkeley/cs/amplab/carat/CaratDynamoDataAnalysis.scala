@@ -485,6 +485,8 @@ object CaratDynamoDataAnalysis {
     var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
     /* evDistances*/
     var evDistanceByUuid = new TreeMap[String, Double]
+    
+    var appsByUuid = new TreeMap[String, scala.collection.mutable.HashSet[String]]
 
     /*if (DEBUG) {
       val cc = allRates.collect()
@@ -583,6 +585,7 @@ object CaratDynamoDataAnalysis {
         parametersByUuid += ((uuid, (xmax, ev, evNeg)))
         evDistanceByUuid += ((uuid, evDistance))
       }
+      appsByUuid += ((uuid, uuidApps))
       
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- uuidApps) {
@@ -596,7 +599,7 @@ object CaratDynamoDataAnalysis {
       }
     }
     
-    writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid)
+    writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
     
     val removed = daemons -- intersectEverReportedApps
     val removedPS = daemons -- intersectPerSampleApps
@@ -706,7 +709,8 @@ object CaratDynamoDataAnalysis {
   def writeJScores(distsWithUuid: TreeMap[String, TreeMap[Int, Double]],
     distsWithoutUuid: TreeMap[String, TreeMap[Int, Double]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
-    evDistanceByUuid: TreeMap[String, Double]) {
+    evDistanceByUuid: TreeMap[String, Double],
+    appsByUuid: TreeMap[String, scala.collection.mutable.HashSet[String]]) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
@@ -726,7 +730,11 @@ object CaratDynamoDataAnalysis {
       }
       val distWith = distsWithUuid.get(k).getOrElse(null)
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
-      DynamoDbEncoder.put(resultsTable, resultKey, k, xmax, distWith.toArray[(Int, Double)], distWithout.toArray[(Int, Double)], jscore, ev, evNeg)
+      val apps = appsByUuid.get(k).getOrElse(null)
+      if (distWith != null && distWithout != null && apps != null)
+        DynamoDbEncoder.put(resultsTable, resultKey, k, xmax, distWith.toArray[(Int, Double)], distWithout.toArray[(Int, Double)], jscore, ev, evNeg, apps.toSeq)
+      else
+        printf("Error: Could not save jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
     //DynamoDbEncoder.put(xmax, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], jScore, ev, evNeg)
   }
