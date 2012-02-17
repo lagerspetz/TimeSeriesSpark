@@ -430,7 +430,7 @@ object ProbUtil {
   /** Sanity check prob distribution */
   def sanityCheck(bucketed: TreeMap[Int, Double]) = {
     val sum = bucketed.map(_._2).sum
-    (sum >= 0.999 && sum <= 1.001, sum)
+    (sum >= 0.99 && sum <= 1.01, sum)
   }
 
   /**
