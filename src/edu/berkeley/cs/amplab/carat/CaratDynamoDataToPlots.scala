@@ -10,8 +10,8 @@ import scala.collection.immutable.HashSet
 import scala.collection.immutable.TreeMap
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
-import java.util.Date
 import java.io.File
+import java.text.SimpleDateFormat
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -43,6 +43,10 @@ object CaratDynamoDataToPlots {
   var DEBUG = false
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
+  
+  val dfs = "yyyy-MM-dd"
+  val df = new SimpleDateFormat(dfs)
+  val dateString = "plots"+df.format(System.currentTimeMillis())
 
   /**
    * Main program entry point.
@@ -380,21 +384,17 @@ object CaratDynamoDataToPlots {
       distWith: TreeMap[Int, Double], distWithout: TreeMap[Int, Double],
       ev:Double, evNeg:Double, evDistance:Double, apps: Seq[String] = null) {
     printf("Plotting %s vs %s, distance=%s, evWith=%s evWithout=%s\n", title, titleNeg, evDistance, ev, evNeg)
-    val d = new Date().toString()
-    if (plotFile(d, title, title, titleNeg)){
-    writeData(d, title, distWith, xmax)
-    writeData(d, titleNeg, distWithout, xmax)
-    plotData(d, title)
-    }else{
-      println("Could not plot " + title + " because could not create directories.")
-    }
+    plotFile(dateString, title, title, titleNeg)
+    writeData(dateString, title, distWith, xmax)
+    writeData(dateString, titleNeg, distWithout, xmax)
+    plotData(dateString, title)
   }
   
   val DATA_DIR = "data"
   val PLOTS = "plots"
   val PLOTFILES = "plotfiles"
 
-  def plotFile(dir: String, name: String, t1: String, t2: String) ={
+  def plotFile(dir: String, name: String, t1: String, t2: String) = {
     val pdir = dir + "/" + PLOTS + "/"
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
@@ -424,7 +424,6 @@ object CaratDynamoDataToPlots {
         }
       }
     }
-    false
   }
   
   def writeData(dir:String, name:String, dist: TreeMap[Int, Double], xmax:Double){
