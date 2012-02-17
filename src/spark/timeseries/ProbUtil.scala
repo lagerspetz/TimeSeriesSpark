@@ -344,7 +344,7 @@ object ProbUtil {
           bucketDouble.toInt
       }
       var old = bucketedPoint.get(bucket).getOrElse(0.0)
-      println("With Point value %s bucket %s count %s" + k, bucket, old+1)
+      printf("With Point value %s bucket %s count %s\b", k, bucket, old+1)
       bucketedPoint += ((bucket, old + 1))
       sum1 += 1
     }
@@ -363,7 +363,7 @@ object ProbUtil {
           bucketDouble.toInt
       }
       var old = bucketedNegPoint.get(bucket).getOrElse(0.0)
-      println("Without Point value %s bucket %s count %s" + k, bucket, old+1)
+      printf("Without Point value %s bucket %s count %s\n", k, bucket, old+1)
       bucketedNegPoint += ((bucket, old + 1))
       
       sum2 += 1
