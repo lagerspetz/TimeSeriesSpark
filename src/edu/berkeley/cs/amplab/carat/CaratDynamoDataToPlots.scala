@@ -46,7 +46,7 @@ object CaratDynamoDataToPlots {
   
   val dfs = "yyyy-MM-dd"
   val df = new SimpleDateFormat(dfs)
-  val dateString = "plots"+df.format(System.currentTimeMillis())
+  val dateString = "plots-"+df.format(System.currentTimeMillis())
 
   /**
    * Main program entry point.
@@ -459,7 +459,7 @@ object CaratDynamoDataToPlots {
     if (!f.isDirectory() && !f.mkdirs())
       println("Failed to create " + f + " for plots!")
     else {
-      val temp = Runtime.getRuntime().exec("gnuplot " + gdir + title + ".gnuplot")
+      val temp = Runtime.getRuntime().exec("gnuplot \"" + gdir + title + ".gnuplot\"")
       val err_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getErrorStream()))
       var line = err_read.readLine()
       while (line != null) {
