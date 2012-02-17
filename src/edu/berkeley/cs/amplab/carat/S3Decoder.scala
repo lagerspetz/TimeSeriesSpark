@@ -14,6 +14,11 @@ object S3Decoder {
   var obj: com.amazonaws.services.s3.model.S3Object = null
   var in: ObjectInputStream = null
   var open = false
+  
+  def has(bucket:String, key: String) = {
+    val res = S3Encoder.s3.listObjects(bucket, key)
+    !res.getObjectSummaries().isEmpty()
+  }
 
   def get(key: String) {
     obj = S3Encoder.s3.getObject(S3Encoder.defaultBucket, key)

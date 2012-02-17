@@ -39,8 +39,10 @@ object S3IconStorage {
       def accept(pathname:File) = pathname.getName().endsWith(".jpg")
     })
     for (app <- files) {
-      println("Storing icon for "+app.getName)
-      S3Encoder.put(bucket, app)
+      if (!S3Decoder.has(bucket, app.getName())){
+        println("Storing icon for "+app.getName)
+        S3Encoder.put(bucket, app)
+      }
     }
   }
 }
