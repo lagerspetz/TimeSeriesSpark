@@ -375,6 +375,9 @@ object ProbUtil {
     var ev1 = 0.0
     var ev2 = 0.0
     
+    var checksum1 = 0.0
+    var checksum2 = 0.0
+    
     for (k <- 0 until buckets){
        val bucketStart = {
         if (k == 0)
@@ -409,7 +412,9 @@ object ProbUtil {
         bucketedNeg += ((k, nDecimal((old2 + normalizedProb2)/2.0, decimals)))
       }else
         bucketedNeg += ((k, nDecimal(old2+normalizedProb2, decimals)))
-      printf("Final Bucket %s: old1=%s norm1=%s val=%s old2=%s norm2=%s val2=%s\n", k, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
+        checksum1 += bucketed.get(k).getOrElse(0.0)
+        checksum2 += bucketedNeg.get(k).getOrElse(0.0)
+      printf("Final Bucket %s: s1=%s s2=%s old1=%s norm1=%s val=%s old2=%s norm2=%s val2=%s\n", k, checksum1, checksum2, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
       
       ev1 += (bucketEnd - bucketStart)/2 * bucketed.get(k).getOrElse(0.0)
       ev2 += (bucketEnd - bucketStart)/2 * bucketedNeg.get(k).getOrElse(0.0)

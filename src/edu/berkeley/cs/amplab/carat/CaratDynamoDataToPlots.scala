@@ -58,6 +58,13 @@ object CaratDynamoDataToPlots {
       if (args.length > 1 && args(1) == "DEBUG")
         DEBUG = true
     }
+    
+    // turn off INFO logging for spark:
+    System.setProperty("hadoop.root.logger", "WARN,console")
+    // This is misspelled in the spark jar log4j.properties:
+    System.setProperty("log4j.threshhold", "WARN")
+    // Include correct spelling to make sure
+    System.setProperty("log4j.threshold", "WARN")
 
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
