@@ -334,7 +334,7 @@ object ProbUtil {
     
     var sum1 = 0.0
     for (k <- withPoint) {
-      var bucketDouble = math.log(xmax / k) / math.log(logbase)
+      val bucketDouble = 100 - math.log(xmax / k) / math.log(logbase)
       val bucket = {
         if (bucketDouble >= buckets)
           buckets - 1
@@ -352,7 +352,7 @@ object ProbUtil {
     /* Collect point measurements into frequency buckets */
     var sum2 = 0.0
     for (k <- withoutPoint) {
-       var bucketDouble = math.log(xmax / k) / math.log(logbase)
+      val bucketDouble = 100 - math.log(xmax / k) / math.log(logbase)
       val bucket = {
         if (bucketDouble >= buckets)
           buckets - 1
