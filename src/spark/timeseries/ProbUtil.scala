@@ -343,8 +343,8 @@ object ProbUtil {
         else
           bucketDouble.toInt
       }
-
       var old = bucketedPoint.get(bucket).getOrElse(0.0)
+      println("With Point value %s bucket %s count %s" + k, bucket, old+1)
       bucketedPoint += ((bucket, old + 1))
       sum1 += 1
     }
@@ -352,6 +352,7 @@ object ProbUtil {
     /* Collect point measurements into frequency buckets */
     var sum2 = 0.0
     for (k <- withoutPoint) {
+      
       val bucketDouble = 100 - math.log(xmax / k) / math.log(logbase)
       val bucket = {
         if (bucketDouble >= buckets)
@@ -362,7 +363,9 @@ object ProbUtil {
           bucketDouble.toInt
       }
       var old = bucketedNegPoint.get(bucket).getOrElse(0.0)
+      println("Without Point value %s bucket %s count %s" + k, bucket, old+1)
       bucketedNegPoint += ((bucket, old + 1))
+      
       sum2 += 1
     }
     
