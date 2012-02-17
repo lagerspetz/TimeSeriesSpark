@@ -277,7 +277,7 @@ object ProbUtil {
     var bigtotal = 0.0
     var bigtotal2 = 0.0
     
-     /* Iterate over buckets and discretize ranges that fall into them */
+     /* Iterate over buckets and add fractions of ranges that fall into them */
     for (k <- 0 until buckets) {
       val bucketStart = {
         if (k == 0)
@@ -321,6 +321,16 @@ object ProbUtil {
       val norm2 = old /bigtotal2
       bucketedNeg += ((k, norm2))
       printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
+    }
+   
+    if (bigtotal > 0){
+      val contSum = bucketed.map(_._2).sum
+      assert(contSum <= 1.01 && contSum >= 0.99, "Continuous value \"with\" distribution should sum up to 1 when normalized: " + contSum)
+    }
+    
+    if (bigtotal2 > 0){
+      val contSum = bucketedNeg.map(_._2).sum
+      assert(contSum <= 1.01 && contSum >= 0.99, "Continuous value \"without\" distribution should sum up to 1 when normalized: " + contSum)
     }
     
     /* For collecting point measurements */

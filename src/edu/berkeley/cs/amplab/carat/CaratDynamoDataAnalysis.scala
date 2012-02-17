@@ -261,7 +261,7 @@ object CaratDynamoDataAnalysis {
                 prevEvent, event, prevApps, apps)
               if (r.rate() == 0) {
                 // This should never happen
-                println("RATE ERROR: BatteryLevelChanged with zero rate: " + r)
+                println("RATE ERROR: BatteryLevelChanged with zero rate: " + r.toString(false))
                 zeroBLCSamples += 1
               } else {
                 if (considerRate(r)) {
@@ -277,7 +277,7 @@ object CaratDynamoDataAnalysis {
                if (considerRate(r)) {
                 rates += r
               } else {
-                 println("Abandoned uniform rate with abnormally high EV: "+ r)
+                 println("Abandoned uniform rate with abnormally high EV: "+ r.toString(false))
                 abandonedSamples += 1
               }
             }
@@ -320,7 +320,7 @@ object CaratDynamoDataAnalysis {
         true
     }else{
     if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate " + r)
+      printf("Abandoning abnormally high rate " + r.toString(false))
       false
     } else
       true
