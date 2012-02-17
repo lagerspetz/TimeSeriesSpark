@@ -287,13 +287,9 @@ object ProbUtil {
       }
       val bucketEnd = xmax / (math.pow(logbase, buckets - k - 1))
       
-      val count = withDist.filter(x => {
-      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
+      val count = withDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
       
-      val count2 = withoutDist.filter(x => {
-      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
-      
-      printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
+      val count2 = withoutDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
       
       bigtotal += count
       bigtotal2 += count2
@@ -301,13 +297,15 @@ object ProbUtil {
       val old = bucketed.get(k).getOrElse(0.0) + count
       val old2 = bucketedNeg.get(k).getOrElse(0.0) + count2
       
+      printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, old, old2)
+      
       bucketed += ((k, old))
       bucketedNeg += ((k, old2))
     }
     
-    /* Normalize dists */
+    /* Normalize dists: */
     
-    for (k <- 0 until buckets){
+   for (k <- 0 until buckets){
       val bucketStart = {
         if (k == 0)
           0.0

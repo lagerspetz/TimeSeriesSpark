@@ -34,6 +34,22 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
       (start <= from && from < end) ||
       (from <= start && start < to)
   }
+
+  def probOverlap(start: Double, end: Double) = {
+    if (!overlaps(start, end)) {
+      0.0
+    } else if (isPoint()) {
+      1.0
+    } else {
+      val lowerBound = { if (start > from) start else from }
+      assert(lowerBound >= from, "lowerBound should be within the range")
+      val upperBound = { if (end < to) end else to }
+      assert(upperBound <= to, "upperBound should be within the range")
+      val p = (upperBound - lowerBound) * prob
+      assert(p <= prob, "probOverlap should not be greater than prob")
+      p
+    }
+  }
   
   def getEv() = (from + to) / 2
 
