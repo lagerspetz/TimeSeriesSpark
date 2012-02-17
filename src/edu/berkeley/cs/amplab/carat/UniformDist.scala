@@ -46,7 +46,7 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
       val upperBound = { if (end < to) end else to }
       assert(upperBound <= to, "upperBound should be within the range")
       val p = (upperBound - lowerBound) * prob
-      assert(p <= prob, "probOverlap should not be greater than prob")
+      assert(p <= prob, "probOverlap should not be greater than prob:" + p + ", " + prob)
       p
     }
   }
