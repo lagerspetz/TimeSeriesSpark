@@ -415,7 +415,7 @@ object ProbUtil {
         checksum1 += bucketed.get(k).getOrElse(0.0)
         checksum2 += bucketedNeg.get(k).getOrElse(0.0)
       
-      printf("Final Bucket %s: s1=%4f s2=%4f old1=%4f norm1=%4f val=%4f old2=%4f norm2=%4f val2=%4f\n", k, checksum1, checksum2, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
+      printf("Final Bucket %s: s1=%4f s2=%4f old1=%4f norm1=%4f val=%4f old2=%4f norm2=%4f val2=%4f\n", k, checksum1, checksum2, old1, normalizedProb1, bucketed.get(k).getOrElse(0.0), old2, normalizedProb2, bucketedNeg.get(k).getOrElse(0.0))
       
       ev1 += (bucketEnd - bucketStart)/2 * bucketed.get(k).getOrElse(0.0)
       ev2 += (bucketEnd - bucketStart)/2 * bucketedNeg.get(k).getOrElse(0.0)
