@@ -374,6 +374,11 @@ object ProbUtil {
       * Only cut down "exact" values to 3 decimals at the latest point, here.
       * Do not normalize already normal buckets that have only discrete or only continuous values.
       */
+    val pointSum = bucketedPoint.map(_._2).sum / sum1
+    val pointNegSum = bucketedNegPoint.map(_._2).sum / sum2
+    
+    assert(pointSum <= 1.01 && pointSum >= 0.99, "Point value \"with\" distribution should sum up to 1 when normalized: " + pointSum)
+    assert(pointNegSum <= 1.01 && pointSum >= 0.99, "Point value \"without\" distribution should sum up to 1 when normalized." + pointNegSum)
     
     var ev1 = 0.0
     var ev2 = 0.0
