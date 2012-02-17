@@ -247,11 +247,11 @@ object CaratDynamoDataAnalysis {
         /* Record rates. First time fall through */
         if (prevD != 0 && prevD != d) {
           if (prevBatt - batt < 0) {
-            printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
+            printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
             negDrainSamples += 1
           } else if (prevBatt == 0 && batt == 0){
             /* Assume simulator, ignore */
-            printf("prevBatt %s batt %s (uuid=%s) for observation %s\n", prevBatt, batt, k._1, k)
+            printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
             allZeroSamples += 1
           }else {
             /* now prevBatt - batt >= 0 */
