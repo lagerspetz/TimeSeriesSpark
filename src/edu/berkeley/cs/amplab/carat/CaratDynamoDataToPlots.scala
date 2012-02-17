@@ -10,6 +10,8 @@ import scala.collection.immutable.HashSet
 import scala.collection.immutable.TreeMap
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
+import java.util.Date
+import java.io.File
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -71,9 +73,9 @@ object CaratDynamoDataToPlots {
     // Master RDD for all data.
     var allRates: spark.RDD[CaratRate] = null
 
-    allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+    allRates = CaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
       DynamoDbDecoder.getAllItems(registrationTable, _),
-      handleRegs(sc, _, _, allUuids, allOses, allModels), false, allRates)
+      CaratDynamoDataAnalysis.handleRegs(sc, _, _, allUuids, allOses, allModels), false, allRates)
 
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
@@ -83,353 +85,7 @@ object CaratDynamoDataToPlots {
       analyzeRateData(allRates, allUuids, allOses, allModels)
     }
   }
-
-  /**
-   * Handles a set of registration messages from the Carat DynamoDb.
-   * Samples matching each registration identifier are got, rates calculated from them, and combined with `dist`.
-   * uuids, oses and models are filled during registration message handling. Returns the updated version of `dist`.
-   */
-  def handleRegs(sc: SparkContext, regs: java.util.List[java.util.Map[String, AttributeValue]], dist: spark.RDD[CaratRate], uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) = {
-    /* FIXME: I would like to do this in parallel, but that would not let me re-use
-     * all the data for the other uuids, resulting in n^2 execution time.
-     */
-
-    // Remove duplicates caused by re-registrations:
-    var regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
-    regSet ++= regs.map(x => {
-      val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
-      val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
-      val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
-      (uuid, model, os)
-    })
-
-    var distRet: spark.RDD[CaratRate] = dist
-    for (x <- regSet) {
-      val uuid = x._1
-      val model = x._2
-      val os = x._3
-
-      // Collect all uuids, models and oses in the same loop
-      uuids += uuid
-      models += model
-      oses += os
-
-      println("Handling reg:" + x)
-
-      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid),
-        DynamoDbDecoder.getItems(samplesTable, uuid, _),
-        handleSamples(sc, _, os, model, _),
-        true,
-        distRet)
-    }
-    distRet
-  }
-
-  /**
-   * Generic Carat DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
-   * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
-   */
-  def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
-    tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
-    stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
-    prefix:Boolean,/*prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],*/
-    dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
-    var finished = false
-
-    var (key, results) = tableAndValueToKeyAndResults
-    println("Got: " + results.size + " results.")
-
-    var distRet: spark.RDD[CaratRate] = null
-    distRet = stepHandler(results, dist)
-
-    while (key != null) {
-
-      println("Continuing from key=" + key)
-      var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
-      /* Re-use last zero-drain samples here, if any.
-       * Not used now; taking the final sample is enough. */
-      /*if (prefixer != null)
-        results2.prepend(... ++= prefixer(results))*/
-      results2.prepend(results.last)
-      results = results2
-      key = key2
-      println("Got: " + results.size + " results.")
-
-      distRet = stepHandler(results, distRet)
-    }
-    distRet
-  }
-
-  /**
-   * Process a bunch of samples, assumed to be in order by uuid and timestamp.
-   * will return an RDD of CaratRates. Samples need not be from the same uuid.
-   */
-  def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]], os: String, model: String, rates: RDD[CaratRate]) = {
-    if (DEBUG)
-      if (samples.size < 100) {
-        for (x <- samples) {
-          for (k <- x) {
-            if (k._2.isInstanceOf[Seq[String]])
-              print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ") ")
-            else
-              print(k + " ")
-          }
-          println()
-        }
-      }
-
-    var rateRdd = sc.parallelize[CaratRate]({
-      val mapped = samples.map(x => {
-        /* See properties in package.scala for data keys. */
-        val uuid = x.get(sampleKey).getS()
-        val apps = x.get(sampleProcesses).getSS().map(w => {
-          if (w == null)
-            ""
-          else {
-            val s = w.split(";")
-            if (s.size > 1)
-              s(1).trim
-            else
-              ""
-          }
-        })
-
-        val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
-        val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
-        val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
-        val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
-        (uuid, time, batteryLevel, event, batteryState, apps)
-      })
-      rateMapperPairwise(os, model, mapped)
-    })
-    if (rates != null)
-      rateRdd = rateRdd.union(rates)
-    rateRdd
-  }
-
-  /**
-   * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
-   * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
-   */
-  def rateMapperPairwise(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
-    val charge = "charging"
-    val discharge = "unplugged"
-    val blc = "batterylevelchanged"
-    // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
-    var prevD = 0.0
-    var prevBatt = 0.0
-    var prevEvent = ""
-    var prevState = ""
-    var prevApps: Seq[String] = Array[String]()
-
-    var d = 0.0
-    var batt = 0.0
-    var event = ""
-    var state = ""
-    var apps: Seq[String] = Array[String]()
-
-    var negDrainSamples = 0
-    var abandonedSamples = 0
-    var chargingSamples = 0
-    var zeroBLCSamples = 0
-    var allZeroSamples = 0
-
-    var rates = new ArrayBuffer[CaratRate]
-
-    for (k <- observations) {
-      d = k._2.toDouble
-      batt = k._3.toDouble
-      event = k._4.trim().toLowerCase()
-      state = k._5.trim().toLowerCase()
-      apps = k._6
-
-      if (state != charge) {
-        /* Record rates. First time fall through */
-        if (prevD != 0 && prevD != d) {
-          if (prevBatt - batt < 0) {
-            printf("prevBatt %s batt %s for observation %s\n", prevBatt, batt, k)
-            negDrainSamples += 1
-          } else if (prevBatt == 0 && batt == 0){
-            /* Assume simulator, ignore */
-            printf("prevBatt %s batt %s (uuid=%s) for observation %s\n", prevBatt, batt, k._1, k)
-            allZeroSamples += 1
-          }else {
-            /* now prevBatt - batt >= 0 */
-            if (prevEvent == blc && event == blc) {
-              /* Point rate */
-              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
-                prevEvent, event, prevApps, apps)
-              if (r.rate() == 0) {
-                // This should never happen
-                println("RATE ERROR: BatteryLevelChanged with zero rate: " + r)
-                zeroBLCSamples += 1
-              } else {
-                if (considerRate(r)) {
-                  rates += r
-                } else {
-                  abandonedSamples += 1
-                }
-              }
-            }else{
-              /* One endpoint not BLC, use uniform distribution rate */
-              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
-                prevEvent, event, prevApps, apps)
-               if (considerRate(r)) {
-                rates += r
-              } else {
-                 println("Abandoned uniform rate with abnormally high EV: "+ r)
-                abandonedSamples += 1
-              }
-            }
-          }
-        }
-      } else {
-        chargingSamples += 1
-      }
-      prevD = d
-      prevBatt = batt
-      prevEvent = event
-      prevState = state
-      prevApps = apps
-    }
-
-    printf("Abandoned %s all zero, %s charging, %s negative drain, %s > %s drain, %s zero drain BLC samples.\n", allZeroSamples, chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE, zeroBLCSamples)
-    rates.toSeq
-  }
-
-  /**
-   * Check rate for abnormally high drain in a short time. Return true if the rate is not abnormally high.
-   */
-  def considerRate(r: CaratRate, oldObs: ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
-    if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate " + r)
-      println("All observations included for the abnormally high rate: " + "(" + oldObs.size + ")")
-      for (j <- oldObs) {
-        printf("uuid=%s time=%s batt=%s event=%s trigger=%s\n", j._1, j._2, j._3, j._4, j._5)
-      }
-      false
-    } else
-      true
-  }
-
-  def considerRate(r: CaratRate) = {
-    if (r.isUniform()){
-      if (r.rateRange.getEv() > ABNORMAL_RATE) {
-        false
-      }else
-        true
-    }else{
-    if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate " + r)
-      false
-    } else
-      true
-    }
-  }
-
-  /**
-   * Create a probability density function out of a set of CaratRates.
-   */
-  def prob(rates: Array[CaratRate]) = {
-    var sum = 0.0
-    var buf = new TreeMap[Double, Double]
-    for (d <- rates) {
-      if (d.isUniform()) {
-        val disc = d.rateRange.discretize(DECIMALS)
-        for (k <- disc) {
-          var count = buf.get(k).getOrElse(0.0) + 1.0 / disc.size
-          buf += ((k, count))
-        }
-      } else {
-        var count = buf.get(d.rate).getOrElse(0.0) + 1.0
-        buf += ((d.rate, count))
-      }
-      // sum increases by one in either case.
-      sum += 1
-    }
-
-    for (k <- buf)
-      buf += ((k._1, k._2 / sum))
-    buf
-  }
-
-  /**
-   * Create a probability density function out of Doubles.
-   */
-  def prob(rates: Array[Double]) = {
-    var sum = 0.0
-    var buf = new TreeMap[Double, Double]
-    for (d <- rates) {
-      var count = buf.get(d).getOrElse(0.0) + 1.0
-      buf += ((d, count))
-      // sum increases by one in either case.
-      sum += 1
-    }
-
-    for (k <- buf)
-      buf += ((k._1, k._2 / sum))
-    buf
-  }
   
-  /**
-   * Create a probability density function out of UniformDistances.
-   */
-  def probUniform(rates: Array[UniformDist]) = {
-    var min = 200.0
-    var max = 0.0
-    var buf = new TreeMap[Double, Double]
-    /* Find min and max x*/
-    for (d <- rates) {
-      if (d.from < min)
-        min = d.from
-      if (d.to > max)
-        max = d.to
-    }
-    
-    /* Iterate from max to min in 3 decimal precision */
-    
-    val f = ProbUtil.nInt(min, DECIMALS)
-    val to = ProbUtil.nInt(max, DECIMALS)+1
-    
-    var mul = 1.0
-    for (k <- 0 until DECIMALS)
-      mul *= 10
-    
-    var bigtotal = 0.0
-    for (k <- f until to){
-      val kreal = k/mul
-      /* Get rates that contain the 3 decimal accurate value of k,
-       * take their uniform probability, sum all of it up,
-       * and place it in the k'th bucket in the TreeMap.*/
-      val count = rates.filter(x => {
-      !x.isPoint() && x.contains(kreal)}).map(_.prob()).sum
-      bigtotal += count
-      var prev = buf.get(kreal).getOrElse(0.0) + count
-      buf += ((kreal, prev))
-    }
-    for (k <- buf)
-      buf += ((k._1, k._2 / bigtotal))
-
-    val pointRates = rates.filter(_.isPoint)
-    
-    var sum = 0.0
-    var pointBuf = new TreeMap[Double, Double]
-    for (k <- pointRates){
-      val dec = ProbUtil.nDecimal(k.from, DECIMALS) 
-      var prev = pointBuf.get(dec).getOrElse(0.0) + 1.0
-      pointBuf += ((dec, prev))
-      sum += 1
-    }
-    
-    for (k <- pointBuf){
-      val nk = ((k._1,  k._2 / sum))
-      val prev = buf.get(k._1).getOrElse(0.0) + nk._2
-      buf += ((k._1, prev))
-    }
-    
-    buf
-  }
-
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
@@ -476,6 +132,17 @@ object CaratDynamoDataToPlots {
       "filecoordination", "mds", "hidd", "kextd", "diskarbitrationd",
       "mdworker")
 
+    /**
+     * uuid distributions, xmax, ev and evNeg
+     */
+    var distsWithUuid = new TreeMap[String, TreeMap[Int, Double]]
+    var distsWithoutUuid = new TreeMap[String, TreeMap[Int, Double]]
+    /* xmax, ev, evNeg */
+    var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
+    /* evDistances*/
+    var evDistanceByUuid = new TreeMap[String, Double]
+    
+    var appsByUuid = new TreeMap[String, scala.collection.mutable.HashSet[String]]
     /*if (DEBUG) {
       val cc = allRates.collect()
       for (k <- cc)
@@ -499,16 +166,14 @@ object CaratDynamoDataToPlots {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      println("Considering os os=" + os)
-      writeTripletUngrouped("iOs " + os, "Other versions", fromOs, notFromOs, false)
+      plotDists("iOs " + os, "Other versions", fromOs, notFromOs, false)
     }
 
     for (model <- models) {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      println("Considering model model=" + model)
-      writeTripletUngrouped(model, "Other models", fromModel, notFromModel, false)
+      plotDists(model, "Other models", fromModel, notFromModel, false)
     }
 
     var allHogs = new HashSet[String]
@@ -517,8 +182,7 @@ object CaratDynamoDataToPlots {
       if (app != CARAT) {
         val filtered = allRates.filter(_.allApps.contains(app))
         val filteredNeg = allRates.filter(!_.allApps.contains(app))
-        println("Considering hog app=" + app)
-        if (writeTripletUngrouped("Hog " + app, "Other apps", filtered, filteredNeg, true)) {
+        if (plotDists("Hog " + app, "Other apps", filtered, filteredNeg, true)) {
           // this is a hog
           allHogs += app
         }
@@ -562,19 +226,27 @@ object CaratDynamoDataToPlots {
 
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
-      println("Considering jscore uuid=" + uuid)
-      writeTripletUngrouped("Profile for " + uuid, "Other users", fromUuid, notFromUuid, false)
+      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(fromUuid, notFromUuid)
+      if (bucketed != null && bucketedNeg != null) {
+        distsWithUuid += ((uuid, bucketed))
+        distsWithoutUuid += ((uuid, bucketedNeg))
+        parametersByUuid += ((uuid, (xmax, ev, evNeg)))
+        evDistanceByUuid += ((uuid, evDistance))
+      }
+      appsByUuid += ((uuid, uuidApps))
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- uuidApps) {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-          println("Considering bug app=" + app + " uuid=" + uuid)
-          writeTripletUngrouped("Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, true)
+          plotDists("Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, true)
         }
       }
     }
+    
+    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
+    
     val removed = daemons -- intersectEverReportedApps
     val removedPS = daemons -- intersectPerSampleApps
     intersectEverReportedApps --= daemons
@@ -601,98 +273,195 @@ object CaratDynamoDataToPlots {
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    println("Considering similarApps uuid=" + uuid)
-    writeTripletUngrouped("Similar users with " + uuid, "Dissimilar users", similar, dissimilar, false)
+    plotDists("Similar users with " + uuid, "Dissimilar users", similar, dissimilar, false)
   }
 
-  /**
-   * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
-   */
-  def writeTripletUngrouped(title:String, titleNeg:String, one: RDD[CaratRate], two: RDD[CaratRate], isBugOrHog: Boolean) = {
+  def getDistanceAndDistributions(one: RDD[CaratRate], two: RDD[CaratRate]) = {
 
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
        * both distributions into n buckets, averaging inside a bucket
        */
-    
+
     val flatOne = one.map(x => {
       if (x.isUniform())
         x.rateRange
-        else
-          new UniformDist(x.rate, x.rate)
+      else
+        new UniformDist(x.rate, x.rate)
     }).collect()
     val flatTwo = two.map(x => {
       if (x.isUniform())
         x.rateRange
-        else
-          new UniformDist(x.rate, x.rate)
+      else
+        new UniformDist(x.rate, x.rate)
     }).collect()
-    
-    // For now, to keep values stable in the db cheat with distributions:
-    // val flatOne = one.map(_.rate).collect()
-    //val flatTwo = two.map(_.rate).collect()
-    
-    
+
     var evDistance = 0.0
 
-    println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
-    if (flatOne.size < 10){
-      println("Less than 10 rates in \"with\": " +flatOne.mkString("\n"))
-    }
-    
-    if (flatTwo.size < 10){
-      println("Less than 10 rates in \"without\": " +flatTwo.mkString("\n"))
-    }
-    
-    if (DEBUG) {
-      ProbUtil.debugNonZero(flatOne.map(_.getEv), flatTwo.map(_.getEv), "rates")
-    }
-    
     if (flatOne.size > 0 && flatTwo.size > 0) {
-      /*if (DEBUG) {
-        val distance = getDistanceNonCumulative(values, others)
-        val dAbsSigned = getDistanceAbs(values, others)
-        val dWeighted = getDistanceWeighted(values, others)
-        val (iOne, iTwo) = getCumulativeIntegrals(values, others)
+      println("rates=" + flatOne.size + " ratesNeg=" + flatTwo.size)
+      if (flatOne.size < 10) {
+        println("Less than 10 rates in \"with\": " + flatOne.mkString("\n"))
+      }
 
-        printf("evDistance=%s distance=%s signed KS distance=%s X-weighted distance=%s Integrals=%s, %s, Integral difference(With-Without)=%s\n", evDistance, distance, dAbsSigned, dWeighted, iOne, iTwo, (iOne - iTwo))
-      } else*/
+      if (flatTwo.size < 10) {
+        println("Less than 10 rates in \"without\": " + flatTwo.mkString("\n"))
+      }
 
-      val (maxX, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, buckets, smallestBucket, DECIMALS)
+      if (DEBUG) {
+        ProbUtil.debugNonZero(flatOne.map(_.getEv), flatTwo.map(_.getEv), "rates")
+      }
 
-      /*val ev = ProbUtil.getEv(bucketed, maxX)
-      val evNeg = ProbUtil.getEv(bucketedNeg, maxX)
-       */
-      evDistance = evDiff(ev, evNeg)
+      val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, buckets, smallestBucket, DECIMALS)
+
+      evDistance = CaratDynamoDataAnalysis.evDiff(ev, evNeg)
       printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
 
-      plot(title, titleNeg, maxX, bucketed, bucketedNeg, ev, evNeg, evDistance)
-    }
-    isBugOrHog && evDistance > 0
+      (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
+    } else
+      (0.0, null, null, 0.0, 0.0, 0.0)
   }
-  
-  /**
-   * New metric: Use EV difference for hog and bug decisions.
-   * TODO: Variance and its use in the decision?
-   * Multimodal distributions -> EV does not match true energy usage profile?
-   * m = 1 - evWith / evWithout
-   *
-   * m > 0 -> Hog
-   * m <= 0 -> not
-   */
-  def evDiff(evWith: Double, evWithout: Double) = {
-    1.0 - evWithout / evWith
-  }
-  
+
   /* TODO: Generate a gnuplot-readable plot file of the bucketed distribution.
    * Create folders plots/data plots/plotfiles
    * Save it as "plots/data/titleWith-titleWithout".txt.
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
-  def plot(titleWith:String, titleWithout:String, xmax: Double,
-      bucketsWith:TreeMap[Int, Double], bucketsWithout:TreeMap[Int, Double],
-      evWith: Double, evWithout:Double, evDistance:Double){
-    
+  def plotDists(title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], isBugOrHog: Boolean) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(one, two)
+
+    if (bucketed != null && bucketedNeg != null) {
+      plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
+    }
+    isBugOrHog && evDistance > 0
+  }
+
+   /**
+     * The J-Score is the % of people with worse = higher energy use.
+     * therefore, it is the size of the set of evDistances that are higher than mine,
+     * compared to the size of the user base.
+     * Note that the server side multiplies the JScore by 100, and we store it here
+     * as a fraction.
+     */
+  def plotJScores(distsWithUuid: TreeMap[String, TreeMap[Int, Double]],
+    distsWithoutUuid: TreeMap[String, TreeMap[Int, Double]],
+    parametersByUuid: TreeMap[String, (Double, Double, Double)],
+    evDistanceByUuid: TreeMap[String, Double],
+    appsByUuid: TreeMap[String, scala.collection.mutable.HashSet[String]]) {
+    val dists = evDistanceByUuid.map(_._2).toSeq.sorted
+
+    for (k <- distsWithUuid.keys) {
+      val (xmax, ev, evNeg) = parametersByUuid.get(k).getOrElse((0.0, 0.0, 0.0))
+      
+      /**
+       * jscore is the % of people with worse = higher energy use.
+       * therefore, it is the size of the set of evDistances that are higher than mine,
+       * compared to the size of the user base.
+       */
+      val jscore = {
+        val temp = evDistanceByUuid.get(k).getOrElse(0.0)
+        if (temp == 0)
+          0
+        else
+          ProbUtil.nDecimal(dists.filter(_ > temp).size*1.0 / dists.size, DECIMALS)
+      }
+      val distWith = distsWithUuid.get(k).getOrElse(null)
+      val distWithout = distsWithoutUuid.get(k).getOrElse(null)
+      val apps = appsByUuid.get(k).getOrElse(null)
+      if (distWith != null && distWithout != null && apps != null)
+        plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, apps.toSeq)
+      else
+        printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
+    }
+  }
+  
+  def plot(title: String, titleNeg: String, xmax:Double,
+      distWith: TreeMap[Int, Double], distWithout: TreeMap[Int, Double],
+      ev:Double, evNeg:Double, evDistance:Double, apps: Seq[String] = null) {
+    printf("Plotting %s vs %s, distance=%s, evWith=%s evWithout=%s\n", title, titleNeg, evDistance, ev, evNeg)
+    val d = new Date().toString()
+    if (plotFile(d, title, title, titleNeg)){
+    writeData(d, title, distWith, xmax)
+    writeData(d, titleNeg, distWithout, xmax)
+    plotData(d, title)
+    }else{
+      println("Could not plot " + title + " because could not create directories.")
+    }
+  }
+  
+  val DATA_DIR = "data"
+  val PLOTS = "plots"
+  val PLOTFILES = "plotfiles"
+
+  def plotFile(dir: String, name: String, t1: String, t2: String) ={
+    val pdir = dir + "/" + PLOTS + "/"
+    val gdir = dir + "/" + PLOTFILES + "/"
+    val ddir = dir + "/" + DATA_DIR + "/"
+    var f = new File(pdir)
+    if (!f.isDirectory() || !f.mkdirs())
+      println("Failed to create " + f + " for plots!")
+    else {
+      f = new File(gdir)
+      if (!f.isDirectory() || !f.mkdirs())
+        println("Failed to create " + f + " for plots!")
+      else {
+        f = new File(ddir)
+        if (!f.isDirectory() || !f.mkdirs())
+          println("Failed to create " + f + " for plots!")
+        else {
+          val plotfile = new java.io.FileWriter(gdir + name + ".gnuplot")
+          plotfile.write("set term postscript eps enhanced color 'Arial' 24\nset xtics out\n" +
+            "set size 1.93,1.1\n" +
+            "set logscale x\n" +
+            "set xlabel \"Battery drain % / s\"\n" +
+            "set ylabel \"Probability\"\n")
+          plotfile.write("set output \"" + pdir + name + ".eps\"\n")
+          plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" lw 2 title \"" + t1 + "\", " +
+            "\"" + ddir + t2 + ".txt\" using 1:2 with linespoints lt rgb \"#007777\" lw 2 title \"" + t2 + "\"\n")
+          plotfile.close
+          true
+        }
+      }
+    }
+    false
+  }
+  
+  def writeData(dir:String, name:String, dist: TreeMap[Int, Double], xmax:Double){
+    val logbase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
+    val ddir = dir + "/" + DATA_DIR + "/"
+    var f = new File(ddir)
+    if (!f.isDirectory() || !f.mkdirs())
+      println("Failed to create " + f + " for plots!")
+    else {
+      val datafile = new java.io.FileWriter(ddir + name + ".txt")
+
+      val data = dist.map(x => {
+        val bucketStart = {
+          if (x._1 == 0)
+            0.0
+          else
+            xmax / (math.pow(logbase, buckets - x._1))
+        }
+        val bucketEnd = xmax / (math.pow(logbase, buckets - x._1 - 1))
+        
+        (bucketStart+bucketEnd)/2 +" "+ x._2
+      })
+      
+      for (k <- data)
+        datafile.write(k +"\n")
+      datafile.close
+    }
+  }
+
+  def plotData(dir: String, title: String) {
+    val gdir = dir + "/" + PLOTFILES + "/"
+    val temp = Runtime.getRuntime().exec("gnuplot " + gdir + title + ".gnuplot")
+    val err_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getErrorStream()))
+    var line = err_read.readLine()
+    while (line != null) {
+      println(line)
+      line = err_read.readLine()
+    }
   }
 }

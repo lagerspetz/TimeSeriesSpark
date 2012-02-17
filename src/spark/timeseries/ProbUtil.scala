@@ -225,6 +225,8 @@ object ProbUtil {
     (xmax, bucketed, bucketedNeg, ev1, ev2)
   }
   
+  def getLogBase(buckets:Int, smallestBucket:Double, xmax:Double) = math.pow(math.E, math.log(xmax/smallestBucket) / buckets)
+  
   /**
    * Bucket given distributions into `buckets` buckets, that have log sizes
    * (smaller at the low end) and return the maximum x value and the bucketed distributions.
@@ -267,7 +269,7 @@ object ProbUtil {
      * logbase < e^(log(xmax/smallestBucket) / buckets)
      */
     
-    val logbase = math.pow(math.E, math.log(xmax/smallestBucket) / buckets)
+    val logbase = getLogBase(buckets, smallestBucket, xmax)
     
     /** TODO: Finish this...
      */
@@ -306,10 +308,19 @@ object ProbUtil {
     /* Normalize dists */
     
     for (k <- 0 until buckets){
-      val norm = bucketed.get(k).getOrElse(0.0)/bigtotal
+      val bucketStart = {
+        if (k == 0)
+          0.0
+        else
+          xmax / (math.pow(logbase, buckets - k))
+      }
+      val bucketEnd = xmax / (math.pow(logbase, buckets - k - 1))
+      var old = bucketed.get(k).getOrElse(0.0)
+      val norm = old / (((bucketEnd - bucketStart)/xmax) * 100 * bigtotal)
       bucketed += ((k, norm))
       
-      val norm2 = bucketedNeg.get(k).getOrElse(0.0)/bigtotal2
+      old = bucketedNeg.get(k).getOrElse(0.0)
+      val norm2 = old /(((bucketEnd - bucketStart)/xmax) * 100 * bigtotal2)
       bucketedNeg += ((k, norm2))
       printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
     }
@@ -367,8 +378,17 @@ object ProbUtil {
     var ev2 = 0.0
     
     for (k <- 0 until buckets){
-      val normalizedProb1 = { if (sum1 > 0)
-          bucketedPoint.get(k).getOrElse(0.0)/sum1
+       val bucketStart = {
+        if (k == 0)
+          0.0
+        else
+          xmax / (math.pow(logbase, buckets - k))
+      }
+      val bucketEnd = xmax / (math.pow(logbase, buckets - k - 1))
+      
+      val normalizedProb1 = {
+        if (sum1 > 0)
+          bucketedPoint.get(k).getOrElse(0.0)/(((bucketEnd - bucketStart)/xmax) * 100 * sum1)
         else
           0
       }
@@ -381,7 +401,7 @@ object ProbUtil {
 
       val normalizedProb2 = {
         if (sum2 > 0)
-          bucketedNegPoint.get(k).getOrElse(0.0) / sum2
+          bucketedNegPoint.get(k).getOrElse(0.0)/(((bucketEnd - bucketStart)/xmax) * 100 * sum2)
         else
           0
       }
@@ -392,14 +412,6 @@ object ProbUtil {
       }else
         bucketedNeg += ((k, nDecimal(old2+normalizedProb2, decimals)))
       printf("Final Bucket %s: old1=%s norm1=%s val=%s old2=%s norm2=%s val2=%s\n", k, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
-      
-      var bucketEnd = xmax / (math.pow(logbase, buckets - k - 1))
-      val bucketStart = {
-        if (k == 0)
-          0.0
-        else
-          xmax / (math.pow(logbase, buckets - k))
-      }
       
       ev1 += (bucketEnd - bucketStart)/2 * bucketed.get(k).getOrElse(0.0)
       ev2 += (bucketEnd - bucketStart)/2 * bucketedNeg.get(k).getOrElse(0.0)
