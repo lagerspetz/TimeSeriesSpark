@@ -399,15 +399,15 @@ object CaratDynamoDataToPlots {
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(pdir)
-    if (!f.isDirectory() || !f.mkdirs())
+    if (!f.isDirectory() && !f.mkdirs())
       println("Failed to create " + f + " for plots!")
     else {
       f = new File(gdir)
-      if (!f.isDirectory() || !f.mkdirs())
+      if (!f.isDirectory() && !f.mkdirs())
         println("Failed to create " + f + " for plots!")
       else {
         f = new File(ddir)
-        if (!f.isDirectory() || !f.mkdirs())
+        if (!f.isDirectory() && !f.mkdirs())
           println("Failed to create " + f + " for plots!")
         else {
           val plotfile = new java.io.FileWriter(gdir + name + ".gnuplot")
@@ -431,7 +431,7 @@ object CaratDynamoDataToPlots {
     val logbase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(ddir)
-    if (!f.isDirectory() || !f.mkdirs())
+    if (!f.isDirectory() && !f.mkdirs())
       println("Failed to create " + f + " for plots!")
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
@@ -456,12 +456,17 @@ object CaratDynamoDataToPlots {
 
   def plotData(dir: String, title: String) {
     val gdir = dir + "/" + PLOTFILES + "/"
-    val temp = Runtime.getRuntime().exec("gnuplot " + gdir + title + ".gnuplot")
-    val err_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getErrorStream()))
-    var line = err_read.readLine()
-    while (line != null) {
-      println(line)
-      line = err_read.readLine()
+    val f = new File(gdir)
+    if (!f.isDirectory() && !f.mkdirs())
+      println("Failed to create " + f + " for plots!")
+    else {
+      val temp = Runtime.getRuntime().exec("gnuplot " + gdir + title + ".gnuplot")
+      val err_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getErrorStream()))
+      var line = err_read.readLine()
+      while (line != null) {
+        println(line)
+        line = err_read.readLine()
+      }
     }
   }
 }
