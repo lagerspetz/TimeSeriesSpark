@@ -416,8 +416,21 @@ object ProbUtil {
       ev1 += (bucketEnd - bucketStart)/2 * bucketed.get(k).getOrElse(0.0)
       ev2 += (bucketEnd - bucketStart)/2 * bucketedNeg.get(k).getOrElse(0.0)
     }
+    
+    val (sane, sanitySum1) = sanityCheck(bucketed)
+      if (!sane)
+        throw new Error("Bucketed sums up to "+sanitySum1+"!")
+    val (sane2, sanitySum2) = sanityCheck(bucketedNeg)
+    if (!sane2)
+      throw new Error("BucketedNeg sums up to " + sanitySum2 + "!")
 
     (xmax, bucketed, bucketedNeg, ev1, ev2)
+  }
+  
+  /** Sanity check prob distribution */
+  def sanityCheck(bucketed: TreeMap[Int, Double]) = {
+    val sum = bucketed.map(_._2).sum
+    (sum >= 0.999 && sum <= 1.001, sum)
   }
 
   /**
