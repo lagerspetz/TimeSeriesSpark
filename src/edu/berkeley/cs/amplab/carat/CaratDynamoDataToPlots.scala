@@ -390,18 +390,20 @@ object CaratDynamoDataToPlots {
   def plot(title: String, titleNeg: String, xmax:Double,
       distWith: TreeMap[Int, Double], distWithout: TreeMap[Int, Double],
       ev:Double, evNeg:Double, evDistance:Double, apps: Seq[String] = null) {
-    printf("Plotting %s vs %s, distance=%s, evWith=%s evWithout=%s\n", title, titleNeg, evDistance, ev, evNeg)
-    plotFile(dateString, title, title, titleNeg)
-    writeData(dateString, title, distWith, xmax)
-    writeData(dateString, titleNeg, distWithout, xmax)
-    plotData(dateString, title)
+    val evTitle = title + " ev="+ProbUtil.nDecimal(ev, 3)
+    val evTitleNeg = titleNeg + " ev=" + ProbUtil.nDecimal(evNeg, 3)
+    printf("Plotting %s vs %s, distance=%s, evWith=%s evWithout=%s\n", evTitle, evTitleNeg, evDistance, ev, evNeg)
+    plotFile(dateString, title, evTitle, evTitleNeg, xmax)
+    writeData(dateString, evTitle, distWith, xmax)
+    writeData(dateString, evTitleNeg, distWithout, xmax)
+    plotData(dateString, evTitle)
   }
   
   val DATA_DIR = "data"
   val PLOTS = "plots"
   val PLOTFILES = "plotfiles"
 
-  def plotFile(dir: String, name: String, t1: String, t2: String) = {
+  def plotFile(dir: String, name: String, t1: String, t2: String, xmax:Double) = {
     val pdir = dir + "/" + PLOTS + "/"
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
@@ -421,6 +423,7 @@ object CaratDynamoDataToPlots {
           plotfile.write("set term postscript eps enhanced color 'Arial' 24\nset xtics out\n" +
             "set size 1.93,1.1\n" +
             "set logscale x\n" +
+            "set xrange [0:"+(xmax+1)+"]" +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           plotfile.write("set output \"" + pdir + name + ".eps\"\n")
