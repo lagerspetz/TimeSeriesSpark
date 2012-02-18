@@ -396,7 +396,7 @@ object CaratDynamoDataToPlots {
     plotFile(dateString, title, evTitle, evTitleNeg, xmax)
     writeData(dateString, evTitle, distWith, xmax)
     writeData(dateString, evTitleNeg, distWithout, xmax)
-    plotData(dateString, evTitle)
+    plotData(dateString, title)
   }
   
   val DATA_DIR = "data"
