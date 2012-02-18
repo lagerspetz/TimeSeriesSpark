@@ -56,23 +56,19 @@ class CaratRate(var uuid:String, val os:String, val model:String,
   }
 
   def toString(verbose: Boolean = false): String = {
-    if (verbose)
-      toString
-    else
-      "CaratRate rate=" + {
-        if (isUniform)
-          "from " + rateRange.from + " to " + rateRange.to
+    "CaratRate " + {
+      if (isUniform)
+        "from %4f to %4f".format(rateRange.from, rateRange.to)
+      else
+        "%4f".format(rate)
+    } + " time1=%4f time2=%4f batt1=%4.2f batt2=%4.2f uuid=%s os=%s model=%s events=%s %s".format(time1, time2, batt1, batt2,
+      uuid, os, model, getAllEvents(), {
+        if (verbose)
+          "apps=%s".format(allApps)
         else
-          rate
-      } + " time1=" + time1 + " time2=" + time2 + " batt1=" + batt1 + " batt2=" + batt2 +
-        " uuid=" + uuid + " os=" + os + " model=" + model + " events=" + getAllEvents() + " " + allApps.size + " apps"
+          "%d apps".format(allApps.size)
+      })
   }
   
-  override def toString() = "CaratRate rate="+{
-    if(isUniform)
-      "from " + rateRange.from +" to " + rateRange.to
-    else
-      rate
-    }+" time1="+time1+" time2=" +time2+ " batt1=" + batt1 + " batt2=" + batt2 +
-  " uuid="+uuid+" os="+os+" model="+model+" events="+getAllEvents()+ " apps="+allApps
+  override def toString() = toString(true)
 }
