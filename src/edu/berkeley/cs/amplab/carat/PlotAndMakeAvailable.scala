@@ -6,10 +6,15 @@ object PlotAndMakeAvailable extends App {
     
   // rm -rf /mnt/www/plots/*.eps
   val f = new File(plotwww)
-  val flist = f.listFiles(new java.io.FilenameFilter(){
-    def accept(dir:File, name:String) = name.endsWith(".eps") 
-  })
+  val flist = f.listFiles
   for (k <- flist){
+    if (k.isDirectory()){
+      val klist = k.listFiles(new java.io.FilenameFilter() {
+        def accept(dir: File, name: String) = name.endsWith(".eps")
+      })
+      for (j <- klist)
+        j.delete()
+    }
     k.delete()
   }
 

@@ -51,6 +51,11 @@ object CaratDynamoDataToPlots {
   val DATA_DIR = "data"
   val PLOTS = "plots"
   val PLOTFILES = "plotfiles"
+    
+    val BUGS = "bugs"
+      val HOGS = "hogs"
+        val SIM = "similarApps"
+          val UUIDS = "uuIds"
   
   /**
    * Main program entry point.
@@ -433,7 +438,7 @@ object CaratDynamoDataToPlots {
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)
-            plotfile.write("set output \"" + plotDirectory + "/" + name + ".eps\"\n")
+            plotfile.write("set output \"" + plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + ".eps\"\n")
           else
             plotfile.write("set output \"" + pdir + name + ".eps\"\n")
           plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" lw 2 title \"" + t1.replace("~", "\\\\~").replace("_", "\\\\_") +
@@ -444,6 +449,29 @@ object CaratDynamoDataToPlots {
           true
         }
       }
+    }
+  }
+
+  def assignSubDir(plotDirectory: String, name: String) = {
+    val p = new File(plotDirectory)
+    if (!p.isDirectory() && !p.mkdirs()) {
+      ""
+    } else {
+      val dir = name.substring(0, 4) match {
+        case "Bug" => { BUGS }
+        case "Hog" => { HOGS }
+        case "Pro" => { UUIDS }
+        case "Sim" => { SIM }
+        case _ => ""
+      }
+      if (dir.length() > 0) {
+        val d = new File(p, dir)
+        if (!d.isDirectory() && !d.mkdirs())
+          ""
+        else
+          dir + "/"
+      }else
+        ""
     }
   }
   

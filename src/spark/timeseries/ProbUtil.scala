@@ -2,11 +2,12 @@ package spark.timeseries
 
 import scala.collection.immutable.TreeMap
 import edu.berkeley.cs.amplab.carat.UniformDist
+import spark.Logging
 
 /**
  * Various utilities for probability distribution processing.
  */
-object ProbUtil {
+object ProbUtil extends Logging{
 
   /**
    * Get the expected value of a probability distribution.
@@ -128,7 +129,7 @@ object ProbUtil {
       val count = withDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
       val count2 = withoutDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
 
-      printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
+      logDebug("Bucket %s from %s to %s: count1=%s count2=%s\n".format(k, bucketStart, bucketEnd, count, count2))
 
       bigtotal += count
       bigtotal2 += count2
@@ -178,7 +179,7 @@ object ProbUtil {
       ev1 += (k + 0.5) / buckets * xmax * bucketed.get(k).getOrElse(0.0)
       ev2 += (k + 0.5) / buckets * xmax * bucketedNeg.get(k).getOrElse(0.0)
 
-      printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
+      logDebug("Norm Bucket %s: val=%s val2=%s\n".format(k, norm, norm2))
     }
 
     (xmax, bucketed, bucketedNeg, ev1, ev2)
@@ -255,7 +256,7 @@ object ProbUtil {
       val old = bucketed.get(k).getOrElse(0.0) + count
       val old2 = bucketedNeg.get(k).getOrElse(0.0) + count2
 
-      printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, old, old2)
+      logDebug("Bucket %s from %s to %s: count1=%s count2=%s\n".format(k, bucketStart, bucketEnd, old, old2))
 
       bucketed += ((k, old))
       bucketedNeg += ((k, old2))
@@ -277,7 +278,7 @@ object ProbUtil {
           bucketDouble.toInt
       }
       var old = bucketed.get(bucket).getOrElse(0.0)
-      printf("With Point value %s bucket %s count %s\b", k, bucket, old + 1)
+      logDebug("With Point value %s bucket %s count %s\n".format(k, bucket, old + 1))
       bucketed += ((bucket, old + 1))
       bigtotal += 1
     }
@@ -293,7 +294,7 @@ object ProbUtil {
           bucketDouble.toInt
       }
       var old = bucketedNeg.get(bucket).getOrElse(0.0)
-      printf("Without Point value %s bucket %s count %s\n", k, bucket, old + 1)
+      logDebug("Without Point value %s bucket %s count %s\n".format(k, bucket, old + 1))
       bucketedNeg += ((bucket, old + 1))
       bigtotal2 += 1
     }
@@ -323,7 +324,7 @@ object ProbUtil {
       bucketedNeg += ((k, nDecimal(norm2, decimals)))
       checksum1 += norm
       checksum2 += norm2
-      printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
+      logDebug("Norm Bucket %s: val=%4.4f val2=%4.4f\n".format(k, norm, norm2))
       ev1 += (bucketEnd - bucketStart) / 2 * bucketed.get(k).getOrElse(0.0)
       ev2 += (bucketEnd - bucketStart) / 2 * bucketedNeg.get(k).getOrElse(0.0)
     }
