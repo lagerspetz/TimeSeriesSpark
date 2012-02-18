@@ -667,8 +667,8 @@ object CaratDynamoDataAnalysis {
       if (DEBUG) {
         ProbUtil.debugNonZero(flatOne.map(_.getEv), flatTwo.map(_.getEv), "rates")
       }
-    
-      val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.bucketDistributionsByX(flatOne, flatTwo, buckets, DECIMALS)
+      // Log bucketing:
+      val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, buckets, smallestBucket, DECIMALS)
 
       evDistance = evDiff(ev, evNeg)
       printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)

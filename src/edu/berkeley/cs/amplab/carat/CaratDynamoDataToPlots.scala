@@ -400,8 +400,8 @@ object CaratDynamoDataToPlots {
   def plot(title: String, titleNeg: String, xmax:Double,
       distWith: TreeMap[Int, Double], distWithout: TreeMap[Int, Double],
       ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, apps: Seq[String] = null) {
-    val evTitle = title.replace("~", "\\\\~").replace("_", "\\\\_") + " ev="+ProbUtil.nDecimal(ev, 3)
-    val evTitleNeg = titleNeg.replace("~", "\\\\~").replace("_", "\\\\_") + " ev=" + ProbUtil.nDecimal(evNeg, 3)
+    val evTitle = title + " ev="+ProbUtil.nDecimal(ev, 3)
+    val evTitleNeg = titleNeg + " ev=" + ProbUtil.nDecimal(evNeg, 3)
     printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
     writeData(dateString, evTitle, distWith, xmax)
@@ -436,8 +436,10 @@ object CaratDynamoDataToPlots {
             plotfile.write("set output \"" + plotDirectory + "/" + name + ".eps\"\n")
           else
             plotfile.write("set output \"" + pdir + name + ".eps\"\n")
-          plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" lw 2 title \"" + t1 + "\", " +
-            "\"" + ddir + t2 + ".txt\" using 1:2 with linespoints lt rgb \"#007777\" lw 2 title \"" + t2 + "\"\n")
+          plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" lw 2 title \"" + t1.replace("~", "\\\\~").replace("_", "\\\\_") +
+              "\", " +
+            "\"" + ddir + t2 + ".txt\" using 1:2 with linespoints lt rgb \"#007777\" lw 2 title \"" + t2.replace("~", "\\\\~").replace("_", "\\\\_")
+            + "\"\n")
           plotfile.close
           true
         }
