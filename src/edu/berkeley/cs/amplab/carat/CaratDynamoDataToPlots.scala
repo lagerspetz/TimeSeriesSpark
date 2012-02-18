@@ -423,7 +423,7 @@ object CaratDynamoDataToPlots {
           plotfile.write("set term postscript eps enhanced color 'Arial' 24\nset xtics out\n" +
             "set size 1.93,1.1\n" +
             "set logscale x\n" +
-            "set xrange [0:"+(xmax+1)+"]" +
+            "set xrange [0:"+(xmax+1)+"]\n" +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           plotfile.write("set output \"" + pdir + name + ".eps\"\n")
