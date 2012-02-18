@@ -342,7 +342,7 @@ object CaratDynamoDataToPlots {
   def plotDists(title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], isBugOrHog: Boolean) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(one, two)
 
-    if (bucketed != null && bucketedNeg != null) {
+    if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
     }
     isBugOrHog && evDistance > 0
