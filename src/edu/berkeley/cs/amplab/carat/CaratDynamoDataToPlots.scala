@@ -387,9 +387,11 @@ object CaratDynamoDataToPlots {
     }
   }
   
-  def plot(title: String, titleNeg: String, xmax:Double,
+  def plot(titleS: String, titleNegS: String, xmax:Double,
       distWith: TreeMap[Int, Double], distWithout: TreeMap[Int, Double],
       ev:Double, evNeg:Double, evDistance:Double, apps: Seq[String] = null) {
+    val title = titleS.replace("~", "\\\\~").replace("_", "\\\\_")
+    val titleNeg = titleNegS.replace("~", "\\\\~").replace("_", "\\\\_")
     val evTitle = title + " ev="+ProbUtil.nDecimal(ev, 3)
     val evTitleNeg = titleNeg + " ev=" + ProbUtil.nDecimal(evNeg, 3)
     printf("Plotting %s vs %s, distance=%s, evWith=%s evWithout=%s\n", evTitle, evTitleNeg, evDistance, ev, evNeg)
