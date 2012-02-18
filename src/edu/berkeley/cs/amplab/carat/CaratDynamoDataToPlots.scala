@@ -52,6 +52,11 @@ object CaratDynamoDataToPlots {
   val PLOTS = "plots"
   val PLOTFILES = "plotfiles"
     
+  val Bug ="Bug"
+    val Hog = "Hog"
+      val Sim = "Sim"
+        val Pro ="Pro"
+    
     val BUGS = "bugs"
       val HOGS = "hogs"
         val SIM = "similarApps"
@@ -342,7 +347,7 @@ object CaratDynamoDataToPlots {
       val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, buckets, smallestBucket, DECIMALS)
 
       evDistance = CaratDynamoDataAnalysis.evDiff(ev, evNeg)
-      printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
+      //printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
 
       (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
     } else
@@ -457,11 +462,11 @@ object CaratDynamoDataToPlots {
     if (!p.isDirectory() && !p.mkdirs()) {
       ""
     } else {
-      val dir = name.substring(0, 4) match {
-        case "Bug" => { BUGS }
-        case "Hog" => { HOGS }
-        case "Pro" => { UUIDS }
-        case "Sim" => { SIM }
+      val dir = name.substring(0, 3) match {
+        case Bug => { BUGS }
+        case Hog => { HOGS }
+        case Pro => { UUIDS }
+        case Sim => { SIM }
         case _ => ""
       }
       if (dir.length() > 0) {

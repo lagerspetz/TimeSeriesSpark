@@ -44,19 +44,7 @@ object ProbUtil extends Logging{
    */
   def debugNonZeroOne(one: Iterable[Double], kw: String) {
     val nz = one.filter(_ > 0)
-    println("Nonzero " + kw + ": " + nz.mkString(" ") + " sum=" + nz.sum)
-  }
-
-  /**
-   * Debug: Utility function that helps plotting distributions by outputting them one pair per line.
-   */
-  def plot(values: TreeMap[Double, Double], others: TreeMap[Double, Double]) {
-    println("prob")
-    for (k <- values)
-      println(k._1 + " " + k._2)
-    println("probNeg")
-    for (k <- others)
-      println(k._1 + " " + k._2)
+    logDebug("Nonzero " + kw + ": " + nz.mkString(" ") + " sum=" + nz.sum)
   }
 
   /**
