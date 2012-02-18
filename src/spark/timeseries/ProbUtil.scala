@@ -18,14 +18,14 @@ object ProbUtil {
     }).toSeq
     m.sum
   }
-  
-    /**
+
+  /**
    * Get the expected value of a probability distribution.
    * The EV is x*y / sum(y), where sum(y) is 1 for a probability distribution.
    */
   def getEv(values: TreeMap[Int, Double], xmax: Double) = {
     val m = values.map(x => {
-      (x._1+0.5)*(xmax/values.size) * x._2
+      (x._1 + 0.5) * (xmax / values.size) * x._2
     }).toSeq
     m.sum
   }
@@ -94,7 +94,7 @@ object ProbUtil {
 
     (xmax, bucketed, bucketedNeg)
   }
-  
+
   /**
    * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions.
    */
@@ -108,143 +108,102 @@ object ProbUtil {
       if (d.to > xmax)
         xmax = d.to
     }
-    
+
     for (d <- withoutDist) {
       if (d.to > xmax)
         xmax = d.to
     }
-    
+
     var bigtotal = 0.0
     var bigtotal2 = 0.0
-    
-     /* Iterate over buckets and discretize ranges that fall into them */
+
+    var withPoint = withDist.filter(_.isPoint).map(_.from)
+    var withoutPoint = withoutDist.filter(_.isPoint).map(_.from)
+
+    /* Iterate over buckets and put uniform values into them */
     for (k <- 0 until buckets) {
-      val bucketStart = k * xmax/buckets
-      val bucketEnd = bucketStart + xmax/buckets
-      
-      val count = withDist.filter(x => {
-      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
-      
-      val count2 = withoutDist.filter(x => {
-      !x.isPoint() && x.overlaps(bucketStart, bucketEnd)}).map(_.prob()).sum
-      
+      val bucketStart = k * xmax / buckets
+      val bucketEnd = bucketStart + xmax / buckets
+
+      val count = withDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
+      val count2 = withoutDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
+
       printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, count, count2)
-      
+
       bigtotal += count
       bigtotal2 += count2
-      
+
       val old = bucketed.get(k).getOrElse(0.0) + count
       val old2 = bucketedNeg.get(k).getOrElse(0.0) + count2
-      
+
       bucketed += ((k, old))
       bucketedNeg += ((k, old2))
     }
-    
-    /* Normalize dists */
-    
-    for (k <- 0 until buckets){
-      val norm = bucketed.get(k).getOrElse(0.0)/bigtotal
-      bucketed += ((k, norm))
-      
-      val norm2 = bucketedNeg.get(k).getOrElse(0.0)/bigtotal2
-      bucketedNeg += ((k, norm2))
-      printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
-    }
-    
-    /* For collecting point measurements */
-    var bucketedPoint = new TreeMap[Int, Double]
-    var bucketedNegPoint = new TreeMap[Int, Double]
-    
-    var withPoint = withDist.filter(_.isPoint).map(_.from)
-    var withoutPoint = withoutDist.filter(_.isPoint).map(_.from)
-    
-    /* Collect point measurements into frequency buckets */
-    
-    var sum1 = 0.0
+
+    /* Add point measurements */
+
     for (k <- withPoint) {
       val x = k / xmax
       var bucket = (x * buckets).toInt
       if (bucket >= buckets)
         bucket = buckets - 1
-      var old = bucketedPoint.get(bucket).getOrElse(0.0)
-      bucketedPoint += ((bucket, old + 1))
-      sum1 += 1
+      var old = bucketed.get(bucket).getOrElse(0.0)
+      bucketed += ((bucket, old + 1))
+      bigtotal += 1
     }
-    
-    /* Collect point measurements into frequency buckets */
-    var sum2 = 0.0
+
+    /* Add point measurements */
     for (k <- withoutPoint) {
       val x = k / xmax
       var bucket = (x * buckets).toInt
       if (bucket >= buckets)
         bucket = buckets - 1
-      var old = bucketedNegPoint.get(bucket).getOrElse(0.0)
-      bucketedNegPoint += ((bucket, old + 1))
-      sum2 += 1
+      var old = bucketedNeg.get(bucket).getOrElse(0.0)
+      bucketedNeg += ((bucket, old + 1))
+      bigtotal2 += 1
     }
-    
-     /* Normalize and add to bucketed and bucketedNeg.
-      * Divide the result by 2, since we have now two probability dists that sum up to 1.
-      * Only cut down "exact" values to 3 decimals at the latest point, here.
-      * Do not normalize already normal buckets that have only discrete or only continuous values.
-      */
-    
+
     var ev1 = 0.0
     var ev2 = 0.0
-    
-    for (k <- 0 until buckets){
-      val normalizedProb1 = { if (sum1 > 0)
-          bucketedPoint.get(k).getOrElse(0.0)/sum1
-        else
-          0
-      }
-      val old1 = bucketed.get(k).getOrElse(0.0)
-      
-      if (normalizedProb1 > 0 && old1 > 0){
-        bucketed += ((k, nDecimal((old1 + normalizedProb1)/2.0, decimals)))
-      }else
-        bucketed += ((k, nDecimal(old1+normalizedProb1, decimals)))
 
-      val normalizedProb2 = {
-        if (sum2 > 0)
-          bucketedNegPoint.get(k).getOrElse(0.0) / sum2
-        else
-          0
-      }
-      val old2 = bucketedNeg.get(k).getOrElse(0.0)
-      
-      if (normalizedProb2 > 0 && old2 > 0){
-        bucketedNeg += ((k, nDecimal((old2 + normalizedProb2)/2.0, decimals)))
-      }else
-        bucketedNeg += ((k, nDecimal(old2+normalizedProb2, decimals)))
-      printf("Final Bucket %s: old1=%s norm1=%s val=%s old2=%s norm2=%s val2=%s\n", k, old1, normalizedProb1, bucketed.get(k), old2, normalizedProb2, bucketedNeg.get(k))
-      ev1 += (k+0.5)/buckets * xmax * bucketed.get(k).getOrElse(0.0)
-      ev2 += (k+0.5)/buckets * xmax * bucketedNeg.get(k).getOrElse(0.0)
+    /* Normalize dists */
+
+    for (k <- 0 until buckets) {
+      val norm = nDecimal(bucketed.get(k).getOrElse(0.0) / bigtotal, decimals)
+      bucketed += ((k, norm))
+
+      val norm2 = nDecimal(bucketedNeg.get(k).getOrElse(0.0) / bigtotal2, decimals)
+      bucketedNeg += ((k, norm2))
+
+      ev1 += (k + 0.5) / buckets * xmax * bucketed.get(k).getOrElse(0.0)
+      ev2 += (k + 0.5) / buckets * xmax * bucketedNeg.get(k).getOrElse(0.0)
+
+      printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
     }
 
     (xmax, bucketed, bucketedNeg, ev1, ev2)
   }
-  
-  def getLogBase(buckets:Int, smallestBucket:Double, xmax:Double) = math.pow(math.E, math.log(xmax/smallestBucket) / buckets)
-  
+
+  def getLogBase(buckets: Int, smallestBucket: Double, xmax: Double) = math.pow(math.E, math.log(xmax / smallestBucket) / buckets)
+
   /**
    * Bucket given distributions into `buckets` buckets, that have log sizes
    * (smaller at the low end) and return the maximum x value and the bucketed distributions.
-   * 
+   *
    * Suggested parameters: buckets = 100, smallestBucket = 0.0001, decimals = 3 or 4
-   * 
-     * For a smallest bucket upper boundary of 0.0001,
-     * the maximum battery consumption that falls into
-     * it would use the iPhone battery in 11.5 days.
-     * This is unrealistic. A 0.0005 % /s
-     * usage falls into the 87th bucket,
-     * and drains the battery in 2.5 days. This is more realistic.
-     * As the buckets go to the right, higher and higher usage is
-     * bucketed, with a larger bucket size, making heavy usage with even a 
-     * high variance fall into the same bucket. 
-     * 
-     */
-  def logBucketDistributionsByX(withDist: Array[UniformDist], withoutDist: Array[UniformDist], buckets:Int, smallestBucket:Double, decimals: Int) = {
+   *
+   * For a smallest bucket upper boundary of 0.0001,
+   * the maximum battery consumption that falls into
+   * it would use the iPhone battery in 11.5 days.
+   * This is unrealistic. A 0.0005 % /s
+   * usage falls into the 87th bucket,
+   * and drains the battery in 2.5 days. This is more realistic.
+   * As the buckets go to the right, higher and higher usage is
+   * bucketed, with a larger bucket size, making heavy usage with even a
+   * high variance fall into the same bucket.
+   *
+   */
+  def logBucketDistributionsByX(withDist: Array[UniformDist], withoutDist: Array[UniformDist], buckets: Int, smallestBucket: Double, decimals: Int) = {
     var bucketed = new TreeMap[Int, Double]
     var bucketedNeg = new TreeMap[Int, Double]
 
@@ -254,30 +213,29 @@ object ProbUtil {
       if (d.to > xmax)
         xmax = d.to
     }
-    
+
     for (d <- withoutDist) {
       if (d.to > xmax)
         xmax = d.to
     }
-    
-    
-    
+
     /* xmax / (logBase^buckets) > smallestBucket
      * <=> logBase^buckets * smallestBucket < xmax
      * <=> logBase^buckets < xmax / smallestBucket
      * log (logbase) * buckets < log (xmax/smallestBucket)
      * logbase < e^(log(xmax/smallestBucket) / buckets)
      */
-    
+
     val logbase = getLogBase(buckets, smallestBucket, xmax)
-    
-    /** TODO: Finish this...
+
+    /**
+     * TODO: Finish this...
      */
-    
+
     var bigtotal = 0.0
     var bigtotal2 = 0.0
-    
-     /* Iterate over buckets and add fractions of ranges that fall into them */
+
+    /* Iterate over buckets and add fractions of ranges that fall into them */
     for (k <- 0 until buckets) {
       val bucketStart = {
         if (k == 0)
@@ -286,28 +244,28 @@ object ProbUtil {
           xmax / (math.pow(logbase, buckets - k))
       }
       val bucketEnd = xmax / (math.pow(logbase, buckets - k - 1))
-      
+
       val count = withDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
-      
+
       val count2 = withoutDist.filter(!_.isPoint()).map(_.probOverlap(bucketStart, bucketEnd)).sum
-      
+
       bigtotal += count
       bigtotal2 += count2
-      
+
       val old = bucketed.get(k).getOrElse(0.0) + count
       val old2 = bucketedNeg.get(k).getOrElse(0.0) + count2
-      
+
       printf("Bucket %s from %s to %s: count1=%s count2=%s\n", k, bucketStart, bucketEnd, old, old2)
-      
+
       bucketed += ((k, old))
       bucketedNeg += ((k, old2))
     }
-    
+
     /* Add point values */
-    
+
     var withPoint = withDist.filter(_.isPoint).map(_.from)
     var withoutPoint = withoutDist.filter(_.isPoint).map(_.from)
-    
+
     for (k <- withPoint) {
       val bucketDouble = 100 - math.log(xmax / k) / math.log(logbase)
       val bucket = {
@@ -319,7 +277,7 @@ object ProbUtil {
           bucketDouble.toInt
       }
       var old = bucketed.get(bucket).getOrElse(0.0)
-      printf("With Point value %s bucket %s count %s\b", k, bucket, old+1)
+      printf("With Point value %s bucket %s count %s\b", k, bucket, old + 1)
       bucketed += ((bucket, old + 1))
       bigtotal += 1
     }
@@ -335,20 +293,20 @@ object ProbUtil {
           bucketDouble.toInt
       }
       var old = bucketedNeg.get(bucket).getOrElse(0.0)
-      printf("Without Point value %s bucket %s count %s\n", k, bucket, old+1)
-      bucketedNeg+= ((bucket, old + 1))
+      printf("Without Point value %s bucket %s count %s\n", k, bucket, old + 1)
+      bucketedNeg += ((bucket, old + 1))
       bigtotal2 += 1
     }
-    
+
     /* Normalize dists: */
-    
+
     var ev1 = 0.0
     var ev2 = 0.0
-    
+
     var checksum1 = 0.0
     var checksum2 = 0.0
-    
-   for (k <- 0 until buckets){
+
+    for (k <- 0 until buckets) {
       val bucketStart = {
         if (k == 0)
           0.0
@@ -359,37 +317,37 @@ object ProbUtil {
       var old = bucketed.get(k).getOrElse(0.0)
       val norm = old / bigtotal
       bucketed += ((k, nDecimal(norm, decimals)))
-      
+
       old = bucketedNeg.get(k).getOrElse(0.0)
-      val norm2 = old /bigtotal2
+      val norm2 = old / bigtotal2
       bucketedNeg += ((k, nDecimal(norm2, decimals)))
       checksum1 += norm
       checksum2 += norm2
       printf("Norm Bucket %s: val=%s val2=%s\n", k, norm, norm2)
-      ev1 += (bucketEnd - bucketStart)/2 * bucketed.get(k).getOrElse(0.0)
-      ev2 += (bucketEnd - bucketStart)/2 * bucketedNeg.get(k).getOrElse(0.0)
+      ev1 += (bucketEnd - bucketStart) / 2 * bucketed.get(k).getOrElse(0.0)
+      ev2 += (bucketEnd - bucketStart) / 2 * bucketedNeg.get(k).getOrElse(0.0)
     }
-   
-    if (bigtotal > 0){
+
+    if (bigtotal > 0) {
       val contSum = bucketed.map(_._2).sum
       assert(contSum <= 1.01 && contSum >= 0.99, "Continuous value \"with\" distribution should sum up to 1 when normalized: " + contSum)
     }
-    
-    if (bigtotal2 > 0){
+
+    if (bigtotal2 > 0) {
       val contSum = bucketedNeg.map(_._2).sum
       assert(contSum <= 1.01 && contSum >= 0.99, "Continuous value \"without\" distribution should sum up to 1 when normalized: " + contSum)
     }
-    
+
     val (sane, sanitySum1) = sanityCheck(bucketed)
-      if (!sane)
-        throw new Error("Bucketed sums up to "+sanitySum1+"!")
+    if (!sane)
+      throw new Error("Bucketed sums up to " + sanitySum1 + "!")
     val (sane2, sanitySum2) = sanityCheck(bucketedNeg)
     if (!sane2)
       throw new Error("BucketedNeg sums up to " + sanitySum2 + "!")
 
     (xmax, bucketed, bucketedNeg, ev1, ev2)
   }
-  
+
   /** Sanity check prob distribution */
   def sanityCheck(bucketed: TreeMap[Int, Double]) = {
     val sum = bucketed.map(_._2).sum
