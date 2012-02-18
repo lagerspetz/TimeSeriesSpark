@@ -48,16 +48,25 @@ object CaratDynamoDataToPlots {
   val df = new SimpleDateFormat(dfs)
   val dateString = "plots-"+df.format(System.currentTimeMillis())
 
+  val DATA_DIR = "data"
+  val PLOTS = "plots"
+  val PLOTFILES = "plotfiles"
+  
   /**
    * Main program entry point.
    */
   def main(args: Array[String]) {
-    var master = "local[1]"
+     var master = "local[1]"
     if (args != null && args.length >= 1) {
       master = args(0)
-      if (args.length > 1 && args(1) == "DEBUG")
-        DEBUG = true
     }
+    plotEverything(master, args != null && args.length > 1 && args(1) == "DEBUG", null)
+    sys.exit(0)
+  }
+
+  def plotEverything(master:String, debug:Boolean, plotDirectory:String) = {
+    if (debug)
+      DEBUG = true
     
     // turn off INFO logging for spark:
     System.setProperty("hadoop.root.logger", "WARN,console")
@@ -67,15 +76,13 @@ object CaratDynamoDataToPlots {
     System.setProperty("log4j.threshold", "WARN")
 
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
-    analyzeData(sc)
-    sys.exit(0)
+    analyzeData(sc, plotDirectory)
   }
-
   /**
    * Main function. Called from main() after sc initialization.
    */
 
-  def analyzeData(sc: SparkContext) {
+  def analyzeData(sc: SparkContext, plotDirectory:String) = {
     // Unique uuIds, Oses, and Models from registrations.
     val allUuids = new scala.collection.mutable.HashSet[String]
     val allModels = new scala.collection.mutable.HashSet[String]
@@ -93,15 +100,16 @@ object CaratDynamoDataToPlots {
     println("All models: " + allModels.mkString(", "))
 
     if (allRates != null) {
-      analyzeRateData(allRates, allUuids, allOses, allModels)
-    }
+      analyzeRateData(allRates, allUuids, allOses, allModels, plotDirectory)
+    }else
+      null
   }
   
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
   def analyzeRateData(allRates: RDD[CaratRate],
-    uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
+    uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String], plotDirectory:String) = {
     /* Daemon apps, hardcoded for now */
     var daemons: Set[String] = Set(
       "aggregated",
@@ -177,14 +185,14 @@ object CaratDynamoDataToPlots {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      plotDists("iOs " + os, "Other versions", fromOs, notFromOs, false)
+      plotDists("iOs " + os, "Other versions", fromOs, notFromOs, false, plotDirectory)
     }
 
     for (model <- models) {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      plotDists(model, "Other models", fromModel, notFromModel, false)
+      plotDists(model, "Other models", fromModel, notFromModel, false, plotDirectory)
     }
 
     var allHogs = new HashSet[String]
@@ -193,7 +201,7 @@ object CaratDynamoDataToPlots {
       if (app != CARAT) {
         val filtered = allRates.filter(_.allApps.contains(app))
         val filteredNeg = allRates.filter(!_.allApps.contains(app))
-        if (plotDists("Hog " + app, "Other apps", filtered, filteredNeg, true)) {
+        if (plotDists("Hog " + app, "Other apps", filtered, filteredNeg, true, plotDirectory)) {
           // this is a hog
           allHogs += app
         }
@@ -231,7 +239,7 @@ object CaratDynamoDataToPlots {
         intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
 
       if (uuidApps.size > 0)
-        similarApps(allRates, uuid, uuidApps)
+        similarApps(allRates, uuid, uuidApps, plotDirectory)
       //else
       // Remove similar apps entry?
 
@@ -251,12 +259,12 @@ object CaratDynamoDataToPlots {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-          plotDists("Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, true)
+          plotDists("Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, true, plotDirectory)
         }
       }
     }
     
-    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
+    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
     
     val removed = daemons -- intersectEverReportedApps
     val removedPS = daemons -- intersectPerSampleApps
@@ -271,20 +279,22 @@ object CaratDynamoDataToPlots {
       println("Removed daemons (ever reported): " + removed)
     if (removedPS.size > 0)
       println("Removed daemons (per sample): " + removedPS)
+    // return plot directory for caller
+    dateString + "/" + PLOTS
   }
 
   /**
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: scala.collection.mutable.Set[String]) {
+  def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: scala.collection.mutable.Set[String], plotDirectory:String) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    plotDists("Similar users with " + uuid, "Dissimilar users", similar, dissimilar, false)
+    plotDists("Similar users with " + uuid, "Dissimilar users", similar, dissimilar, false, plotDirectory)
   }
 
   def getDistanceAndDistributions(one: RDD[CaratRate], two: RDD[CaratRate]) = {
@@ -339,11 +349,11 @@ object CaratDynamoDataToPlots {
    * Save it as "plots/data/titleWith-titleWithout".txt.
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
-  def plotDists(title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], isBugOrHog: Boolean) = {
+  def plotDists(title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], isBugOrHog: Boolean, plotDirectory:String) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(one, two)
 
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
-      plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
+      plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
     }
     isBugOrHog && evDistance > 0
   }
@@ -359,7 +369,7 @@ object CaratDynamoDataToPlots {
     distsWithoutUuid: TreeMap[String, TreeMap[Int, Double]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, scala.collection.mutable.HashSet[String]]) {
+    appsByUuid: TreeMap[String, scala.collection.mutable.HashSet[String]], plotDirectory:String) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
@@ -381,7 +391,7 @@ object CaratDynamoDataToPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-        plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, apps.toSeq)
+        plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, apps.toSeq)
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
@@ -389,21 +399,17 @@ object CaratDynamoDataToPlots {
   
   def plot(title: String, titleNeg: String, xmax:Double,
       distWith: TreeMap[Int, Double], distWithout: TreeMap[Int, Double],
-      ev:Double, evNeg:Double, evDistance:Double, apps: Seq[String] = null) {
+      ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, apps: Seq[String] = null) {
     val evTitle = title.replace("~", "\\\\~").replace("_", "\\\\_") + " ev="+ProbUtil.nDecimal(ev, 3)
     val evTitleNeg = titleNeg.replace("~", "\\\\~").replace("_", "\\\\_") + " ev=" + ProbUtil.nDecimal(evNeg, 3)
-    printf("Plotting %s vs %s, distance=%s, evWith=%s evWithout=%s\n", evTitle, evTitleNeg, evDistance, ev, evNeg)
-    plotFile(dateString, title, evTitle, evTitleNeg, xmax)
+    printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
+    plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
     writeData(dateString, evTitle, distWith, xmax)
     writeData(dateString, evTitleNeg, distWithout, xmax)
     plotData(dateString, title)
   }
-  
-  val DATA_DIR = "data"
-  val PLOTS = "plots"
-  val PLOTFILES = "plotfiles"
 
-  def plotFile(dir: String, name: String, t1: String, t2: String, xmax:Double) = {
+  def plotFile(dir: String, name: String, t1: String, t2: String, xmax:Double, plotDirectory:String) = {
     val pdir = dir + "/" + PLOTS + "/"
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
@@ -426,7 +432,10 @@ object CaratDynamoDataToPlots {
             "set xrange [0.00001:"+(xmax+1)+"]\n" +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
-          plotfile.write("set output \"" + pdir + name + ".eps\"\n")
+          if (plotDirectory != null)
+            plotfile.write("set output \"" + plotDirectory + "/" + name + ".eps\"\n")
+          else
+            plotfile.write("set output \"" + pdir + name + ".eps\"\n")
           plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" lw 2 title \"" + t1 + "\", " +
             "\"" + ddir + t2 + ".txt\" using 1:2 with linespoints lt rgb \"#007777\" lw 2 title \"" + t2 + "\"\n")
           plotfile.close
@@ -476,6 +485,7 @@ object CaratDynamoDataToPlots {
         println(line)
         line = err_read.readLine()
       }
+      temp.waitFor()
     }
   }
 }
