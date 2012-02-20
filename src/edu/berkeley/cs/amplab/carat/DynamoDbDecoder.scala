@@ -141,14 +141,12 @@ object DynamoDbDecoder {
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
 
-  
-  def getItems(table: String, keyPart: String): (Key, List[Map[String, AttributeValue]]) = {
+  def getItems(table: String, keyPart: String, lastKey: Key = null, attributesToGet: Seq[String] = null): (Key, List[Map[String, AttributeValue]]) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart))
-    getItems(q)
-  }
-
-  def getItems(table: String, keyPart: String, lastKey: Key): (Key, List[Map[String, AttributeValue]]) = {
-    val q = new QueryRequest(table, new AttributeValue(keyPart)).withExclusiveStartKey(lastKey)
+    if (lastKey != null)
+      q.setExclusiveStartKey(lastKey)
+    if (attributesToGet != null)
+      q.setAttributesToGet(attributesToGet)
     getItems(q)
   }
   
