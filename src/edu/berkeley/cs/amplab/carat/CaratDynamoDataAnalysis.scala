@@ -52,7 +52,7 @@ object CaratDynamoDataAnalysis {
       if (args.length > 1 && args(1) == "DEBUG")
         DEBUG = true
     }
-
+    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
     sys.exit(0)

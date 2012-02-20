@@ -77,7 +77,8 @@ object CaratDynamoDataToPlots {
   def plotEverything(master:String, debug:Boolean, plotDirectory:String) = {
     if (debug)
       DEBUG = true
-    
+    // turn on ProbUtil debug logging
+    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
     // turn off INFO logging for spark:
     System.setProperty("hadoop.root.logger", "WARN,console")
     // This is misspelled in the spark jar log4j.properties:
