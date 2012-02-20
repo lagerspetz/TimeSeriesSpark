@@ -313,34 +313,23 @@ object ProbUtil extends Logging{
       checksum1 += norm
       checksum2 += norm2
       logDebug("Norm Bucket %s: val=%4.4f val2=%4.4f\n".format(k, norm, norm2))
-      ev1 += (bucketEnd - bucketStart) / 2 * bucketed.get(k).getOrElse(0.0)
-      ev2 += (bucketEnd - bucketStart) / 2 * bucketedNeg.get(k).getOrElse(0.0)
+      // Keep ev's exact.
+      ev1 += (bucketEnd - bucketStart) / 2 * norm
+      ev2 += (bucketEnd - bucketStart) / 2 * norm2
     }
 
+    /* Use checksum variable here since the sum over the 3-decimal values can be significantly less than 0.999.
+     * 
+     */
     if (bigtotal > 0) {
-      val contSum = bucketed.map(_._2).sum
-      assert(contSum <= 1.01 && contSum >= 0.99, "Continuous value \"with\" distribution should sum up to 1 when normalized: " + contSum)
+      assert(checksum1 <= 1.01 && checksum1 >= 0.99, "Continuous value \"with\" distribution should sum up to 1 when normalized: " + checksum1)
     }
 
     if (bigtotal2 > 0) {
-      val contSum = bucketedNeg.map(_._2).sum
-      assert(contSum <= 1.01 && contSum >= 0.99, "Continuous value \"without\" distribution should sum up to 1 when normalized: " + contSum)
+      assert(checksum2 <= 1.01 && checksum2 >= 0.99, "Continuous value \"without\" distribution should sum up to 1 when normalized: " + checksum2)
     }
 
-    val (sane, sanitySum1) = sanityCheck(bucketed)
-    if (!sane)
-      throw new Error("Bucketed sums up to " + sanitySum1 + "!")
-    val (sane2, sanitySum2) = sanityCheck(bucketedNeg)
-    if (!sane2)
-      throw new Error("BucketedNeg sums up to " + sanitySum2 + "!")
-
     (xmax, bucketed, bucketedNeg, ev1, ev2)
-  }
-
-  /** Sanity check prob distribution */
-  def sanityCheck(bucketed: TreeMap[Int, Double]) = {
-    val sum = bucketed.map(_._2).sum
-    (sum >= 0.99 && sum <= 1.01, sum)
   }
 
   /**
