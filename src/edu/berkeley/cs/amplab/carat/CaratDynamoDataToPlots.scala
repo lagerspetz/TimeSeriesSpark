@@ -12,6 +12,7 @@ import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import java.io.File
 import java.text.SimpleDateFormat
+import java.io.ByteArrayOutputStream
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -114,6 +115,51 @@ object CaratDynamoDataToPlots {
       analyzeRateData(allRates, allUuids, allOses, allModels, plotDirectory)
     }else
       null
+  }
+
+  /**
+   * Sample or any other record size calculator function. Takes multiple records as input and produces a
+   * Map of (key, size, compressedSize) pairs where the sizes are in Bytes. the first size is the pessimistic
+   * String representation bytes of the objects, while the second one is the size of the string representation
+   * when gzipped. 
+   */
+  def getSizeMap(key: String, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]]) = {
+    var dist = new scala.collection.immutable.TreeMap[String, (Int, Int)]
+    for (k <- samples) {
+      var keyValue = {
+        val av = k.get(key)
+        if (av != null) {
+          if (av.getN() != null)
+            av.getN()
+          else
+            av.getS()
+        }else
+          ""
+      } 
+      dist += ((keyValue, getSizes(DynamoDbDecoder.getVals(k))))
+    }
+    dist
+  }
+  
+  /**
+   * Calculates the size of a DynamoDb Map.
+   * This is a pessimistic estimate where the size of each element is its String representation's size in Bytes.
+   * Key lengths are ignored, since in a custom communication protocol object order can be used to determine keys,
+   * or very short key identifiers can be used.  
+   */
+  def getSizes(sample: java.util.Map[String, Any]) = {
+    var b = 0
+    var gz = 0
+    val bos = new ByteArrayOutputStream()
+    val g = new java.util.zip.GZIPOutputStream(bos)
+    val values = sample.values()
+    for (k <- values){
+      b += k.toString().getBytes().length
+      g.write(k.toString().getBytes())
+    }
+    g.flush()
+    g.finish()
+    (b, bos.toByteArray().length)
   }
   
   /**
