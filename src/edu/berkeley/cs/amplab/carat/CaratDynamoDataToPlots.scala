@@ -52,16 +52,16 @@ object CaratDynamoDataToPlots {
   val DATA_DIR = "data"
   val PLOTS = "plots"
   val PLOTFILES = "plotfiles"
-    
-  val Bug ="Bug"
-    val Hog = "Hog"
-      val Sim = "Sim"
-        val Pro ="Pro"
-    
-    val BUGS = "bugs"
-      val HOGS = "hogs"
-        val SIM = "similarApps"
-          val UUIDS = "uuIds"
+
+  val Bug = "Bug"
+  val Hog = "Hog"
+  val Sim = "Sim"
+  val Pro = "Pro"
+
+  val BUGS = "bugs"
+  val HOGS = "hogs"
+  val SIM = "similarApps"
+  val UUIDS = "uuIds"
   
   /**
    * Main program entry point.

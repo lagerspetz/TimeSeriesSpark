@@ -553,16 +553,27 @@ object CaratDynamoDataAnalysis {
       sampleApps --= allHogs
       sampleApps
       }).collect()
+      
+      val uuidAppsTemp = fromUuid.map(x => {
+      var sampleApps = x.allApps
+      sampleApps --= daemons
+      sampleApps
+      }).collect()
 
       var uuidApps = new scala.collection.mutable.HashSet[String]
+      var nonHogApps = new scala.collection.mutable.HashSet[String]
 
       // Get all apps ever reported, also compute likely daemons
       for (k <- tempApps) {
-        uuidApps ++= k
+        nonHogApps ++= k
         if (intersectPerSampleApps.size == 0)
           intersectPerSampleApps ++= k
         else if (k.size > 0)
           intersectPerSampleApps = intersectPerSampleApps.intersect(k)
+      }
+      
+      for (k <- uuidAppsTemp) {
+              uuidApps ++= k
       }
 
       //Another method to find likely daemons
@@ -589,7 +600,7 @@ object CaratDynamoDataAnalysis {
       appsByUuid += ((uuid, uuidApps))
       
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-      for (app <- uuidApps) {
+      for (app <- nonHogApps) {
         if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))

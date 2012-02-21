@@ -49,19 +49,6 @@ object DynamoDbEncoder {
         (expectedValue, ev),
         (expectedValueNeg, evNeg))
   }
-  
-  def put(table: String, keyName: String, keyValue: String,
-    maxX: Double,
-    prob1: Seq[(Int, Double)], prob2: Seq[(Int, Double)],
-    distance: Double,
-    ev:Double, evNeg: Double) {
-      put(table, (keyName, keyValue), (xmax, maxX),
-        (prob, prob1.map(x => { x._1 + ";" + x._2 })),
-        (probNeg, prob2.map(x => { x._1 + ";" + x._2 })),
-        (distanceField, distance),
-        (expectedValue, ev),
-        (expectedValueNeg, evNeg))
-  }
 
   /**
    * Function that makes it easy to use the ridiculous DynamoDB put API.
