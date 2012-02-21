@@ -25,6 +25,14 @@ object S3Decoder {
     in = new ObjectInputStream(obj.getObjectContent())
     open = true
   }
+  
+  /**
+   * Raw reader of S3 objects.
+   */
+  def get(bucket:String, key: String) = {
+    val temp = S3Encoder.s3.getObject(S3Encoder.defaultBucket, key)
+    temp.getObjectContent()
+  }
 
   def read() = {
     if (open) {

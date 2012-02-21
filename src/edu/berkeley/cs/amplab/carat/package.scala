@@ -3,6 +3,7 @@ package edu.berkeley.cs.amplab
 import spark.RDD
 import scala.collection.immutable.TreeMap
 package object carat {
+  val BUCKET_WEBSITE = "carat.website"
 
   val CARAT = "Carat"
   val UUIDString = "uuId"

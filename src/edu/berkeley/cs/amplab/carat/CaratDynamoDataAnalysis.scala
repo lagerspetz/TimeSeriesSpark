@@ -10,6 +10,8 @@ import scala.collection.immutable.HashSet
 import scala.collection.immutable.TreeMap
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -35,12 +37,27 @@ object CaratDynamoDataAnalysis {
    */
 
   // Bucketing and decimal constants
-  val buckets = 100
-  val smallestBucket = 0.0001
+  val BUCKETS = 100
+  val SMALLEST_BUCKET = 0.0001
   val DECIMALS = 3
   var DEBUG = false
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
+  
+  // Daemons file on S3
+  val DAEMON_FILE = "daemons.txt"
+  // Daemons list, read from S3
+  val DAEMONS_LIST = {
+    var r:Set[String] = new HashSet[String]
+    val rd = new BufferedReader(new InputStreamReader(S3Decoder.get(BUCKET_WEBSITE, DAEMON_FILE)))
+    var s = rd.readLine()
+    while (s != null){
+      r += s
+      s = rd.readLine()
+    }
+    println("Daemons list downloaded: " + r)
+    r
+  }
 
   /**
    * Main program entry point.
@@ -436,46 +453,6 @@ object CaratDynamoDataAnalysis {
    */
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
-    /* Daemon apps, hardcoded for now */
-    var daemons: Set[String] = Set(
-      "aggregated",
-      "apsd",
-      "BTServer",
-      "Carat",
-      "configd",
-      "calaccessd",
-      "dataaccessd",
-      "fseventsd",
-      "iapd",
-      "imagent",
-      "installd",
-      "kernel_task",
-      "launchd",
-      "librariand",
-      "locationd",
-      "lockdownd",
-      "lsd",
-      "mDNSResponder",
-      "mediaremoted",
-      "mediaserverd",
-      "MobileMail",
-      "MobilePhone",
-      "MobileSafari",
-      "networkd",
-      "notifyd",
-      "pasteboardd",
-      "powerd",
-      "sandboxd",
-      "securityd",
-      "SpringBoard",
-      "syslogd",
-      "ubd",
-      "UserEventAgent",
-      "wifid",
-      "WindowServer", "dynamic_pager", "logind", "fontd", 
-      "warmd", "coreservicesd", "autofsd", "warmd_agent",
-      "filecoordination", "mds", "hidd", "kextd", "diskarbitrationd",
-      "mdworker")
 
     /**
      * uuid distributions, xmax, ev and evNeg
@@ -497,7 +474,7 @@ object CaratDynamoDataAnalysis {
 
     val apps = allRates.map(x => {
       var sampleApps = x.allApps
-      sampleApps --= daemons
+      sampleApps --= DAEMONS_LIST
       sampleApps
     }).collect()
 
@@ -549,14 +526,14 @@ object CaratDynamoDataAnalysis {
 
       val tempApps = fromUuid.map(x => {
       var sampleApps = x.allApps
-      sampleApps --= daemons
+      sampleApps --= DAEMONS_LIST
       sampleApps --= allHogs
       sampleApps
       }).collect()
       
       val uuidAppsTemp = fromUuid.map(x => {
       var sampleApps = x.allApps
-      sampleApps --= daemons
+      sampleApps --= DAEMONS_LIST
       sampleApps
       }).collect()
 
@@ -613,11 +590,11 @@ object CaratDynamoDataAnalysis {
     
     writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
     
-    val removed = daemons -- intersectEverReportedApps
-    val removedPS = daemons -- intersectPerSampleApps
-    intersectEverReportedApps --= daemons
-    intersectPerSampleApps --= daemons
-    println("Daemons: " + daemons)
+    val removed = DAEMONS_LIST -- intersectEverReportedApps
+    val removedPS = DAEMONS_LIST -- intersectPerSampleApps
+    intersectEverReportedApps --= DAEMONS_LIST
+    intersectPerSampleApps --= DAEMONS_LIST
+    println("Daemons: " + DAEMONS_LIST)
     if (intersectEverReportedApps.size > 0)
       println("New possible daemons (ever reported): " + intersectEverReportedApps)
     if (intersectPerSampleApps.size > 0)
@@ -680,7 +657,7 @@ object CaratDynamoDataAnalysis {
         ProbUtil.debugNonZero(flatOne.map(_.getEv), flatTwo.map(_.getEv), "rates")
       }
       // Log bucketing:
-      val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, buckets, smallestBucket, DECIMALS)
+      val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, BUCKETS, SMALLEST_BUCKET, DECIMALS)
 
       evDistance = evDiff(ev, evNeg)
       printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
