@@ -372,83 +372,6 @@ object CaratDynamoDataAnalysis {
   }
 
   /**
-   * Create a probability density function out of Doubles.
-   */
-  def prob(rates: Array[Double]) = {
-    var sum = 0.0
-    var buf = new TreeMap[Double, Double]
-    for (d <- rates) {
-      var count = buf.get(d).getOrElse(0.0) + 1.0
-      buf += ((d, count))
-      // sum increases by one in either case.
-      sum += 1
-    }
-
-    for (k <- buf)
-      buf += ((k._1, k._2 / sum))
-    buf
-  }
-  
-  /**
-   * Create a probability density function out of UniformDistances.
-   */
-  def probUniform(rates: Array[UniformDist]) = {
-    var min = 200.0
-    var max = 0.0
-    var buf = new TreeMap[Double, Double]
-    /* Find min and max x*/
-    for (d <- rates) {
-      if (d.from < min)
-        min = d.from
-      if (d.to > max)
-        max = d.to
-    }
-    
-    /* Iterate from max to min in 3 decimal precision */
-    
-    val f = ProbUtil.nInt(min, DECIMALS)
-    val to = ProbUtil.nInt(max, DECIMALS)+1
-    
-    var mul = 1.0
-    for (k <- 0 until DECIMALS)
-      mul *= 10
-    
-    var bigtotal = 0.0
-    for (k <- f until to){
-      val kreal = k/mul
-      /* Get rates that contain the 3 decimal accurate value of k,
-       * take their uniform probability, sum all of it up,
-       * and place it in the k'th bucket in the TreeMap.*/
-      val count = rates.filter(x => {
-      !x.isPoint() && x.contains(kreal)}).map(_.prob()).sum
-      bigtotal += count
-      var prev = buf.get(kreal).getOrElse(0.0) + count
-      buf += ((kreal, prev))
-    }
-    for (k <- buf)
-      buf += ((k._1, k._2 / bigtotal))
-
-    val pointRates = rates.filter(_.isPoint)
-    
-    var sum = 0.0
-    var pointBuf = new TreeMap[Double, Double]
-    for (k <- pointRates){
-      val dec = ProbUtil.nDecimal(k.from, DECIMALS) 
-      var prev = pointBuf.get(dec).getOrElse(0.0) + 1.0
-      pointBuf += ((dec, prev))
-      sum += 1
-    }
-    
-    for (k <- pointBuf){
-      val nk = ((k._1,  k._2 / sum))
-      val prev = buf.get(k._1).getOrElse(0.0) + nk._2
-      buf += ((k._1, prev))
-    }
-    
-    buf
-  }
-
-  /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
   def analyzeRateData(allRates: RDD[CaratRate],
@@ -456,6 +379,8 @@ object CaratDynamoDataAnalysis {
 
     /**
      * uuid distributions, xmax, ev and evNeg
+     * FIXME: With many users, this is a lot of data to keep in memory.
+     * Consider changing the algorithm and using RDDs. 
      */
     var distsWithUuid = new TreeMap[String, TreeMap[Int, Double]]
     var distsWithoutUuid = new TreeMap[String, TreeMap[Int, Double]]
@@ -517,7 +442,7 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
-
+    var everReportedFirst = true
     var intersectEverReportedApps = new scala.collection.mutable.HashSet[String]
     var intersectPerSampleApps = new scala.collection.mutable.HashSet[String]
 
@@ -539,13 +464,14 @@ object CaratDynamoDataAnalysis {
 
       var uuidApps = new scala.collection.mutable.HashSet[String]
       var nonHogApps = new scala.collection.mutable.HashSet[String]
-
+      var first = true
       // Get all apps ever reported, also compute likely daemons
       for (k <- tempApps) {
         nonHogApps ++= k
-        if (intersectPerSampleApps.size == 0)
+        if (first){
           intersectPerSampleApps ++= k
-        else if (k.size > 0)
+          first = false
+        }else if (k.size > 0)
           intersectPerSampleApps = intersectPerSampleApps.intersect(k)
       }
       
@@ -554,9 +480,10 @@ object CaratDynamoDataAnalysis {
       }
 
       //Another method to find likely daemons
-      if (intersectEverReportedApps.size == 0)
-        intersectEverReportedApps = uuidApps
-      else if (uuidApps.size > 0)
+      if (everReportedFirst){
+        intersectEverReportedApps ++= uuidApps
+        everReportedFirst = false
+      } else if (uuidApps.size > 0)
         intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
 
       if (uuidApps.size > 0)
@@ -587,7 +514,7 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
-    
+    // Save J-Scores of all users.
     writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
     
     val removed = DAEMONS_LIST -- intersectEverReportedApps
@@ -621,6 +548,9 @@ object CaratDynamoDataAnalysis {
         { println("ERROR: Delete called for a non-bug non-hog!") }, false)
   }
 
+  /**
+   * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates. 
+   */
   def getDistanceAndDistributions(one: RDD[CaratRate], two: RDD[CaratRate]) = {
       // probability distribution: r, count/sumCount
 
@@ -628,6 +558,9 @@ object CaratDynamoDataAnalysis {
      * both distributions into n buckets, averaging inside a bucket
      */
     
+    /* FIXME: Should not flatten RDD's, but figure out how to transform an
+     * RDD of Rates => RDD of UniformDists => RDD of Double,Double pairs (Bucketed values)  
+     */
     val flatOne = one.map(x => {
       if (x.isUniform())
         x.rateRange

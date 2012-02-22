@@ -84,11 +84,38 @@ object ProbUtil extends Logging{
     (xmax, bucketed, bucketedNeg)
   }
 
+   /* The stddev of a continuous distribution, i.e. a single UniformDist, is
+    * square root of:
+     * 1 / (a-b) Integral from b to a (x - avg)^2 dx
+     * <=>
+     * 1 / (a-b) Integral from b to a (x^2 - 2 *avg*x +avg^2 ) dx
+     * <=>
+     * (1 / (a-b)) (a^3/3 - avg*a^2 + avg^2 - b^3/3 + avg*b^2 - avg^2*b)
+     * which simplifies ultimately to
+     * (a^2+b^2+ab) /3 - avg*(a+b) + avg^2
+     * the final contribution will be sqrt of this.
+     * @param avg The average of the entire distribution, not just the single UniformDist component.
+     */
+  def getStdDevContribution(dist: UniformDist, avg:Double) = {
+    if (dist.isPoint){
+      /* Regular avg-x^2 */
+      math.pow(avg-dist.from,2)
+    }else{
+    val a = dist.to
+    val b = dist.from
+    math.sqrt((math.pow(a,2)+math.pow(b,2)+a*b)/3 - avg*(a+b) + math.pow(avg,2))
+    }
+  }
+  
   /**
-   * To get the most accurate results, give an unbucketed version here.
+   * Get the standard deviation of the mixed distribution.
    */
-  def getStdDev(dist: Array[UniformDist]) = {
-    
+  def getStdDev(entireDist: Array[UniformDist], ev:Double) = {
+    val n = entireDist.length * 1.0
+    var sum = 0.0
+    for (k <- entireDist)
+      sum += getStdDevContribution(k, ev)
+    math.sqrt( sum / n ) 
   }
   
   /**
@@ -176,6 +203,9 @@ object ProbUtil extends Logging{
 
       logDebug("Norm Bucket %s: val=%s val2=%s\n".format(k, norm, norm2))
     }
+    
+    getStdDev(withDist, ev1)
+    getStdDev(withoutDist, ev2)
 
     (xmax, bucketed, bucketedNeg, ev1, ev2)
   }
