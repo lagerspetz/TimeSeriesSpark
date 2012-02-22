@@ -85,6 +85,13 @@ object ProbUtil extends Logging{
   }
 
   /**
+   * To get the most accurate results, give an unbucketed version here.
+   */
+  def getStdDev(dist: Array[UniformDist]) = {
+    
+  }
+  
+  /**
    * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions.
    */
   def bucketDistributionsByX(withDist: Array[UniformDist], withoutDist: Array[UniformDist], buckets: Int, decimals: Int) = {
@@ -359,6 +366,9 @@ object ProbUtil extends Logging{
     genericDistance(one, two, weightedDistance, absReplace)
   }
 
+  /** Generic distance calculation function that takes the distance metric and the replace decision function as parameters.
+   * Check absReplace, distance and weightedDistance for examples.
+   */
   def genericDistance(one: TreeMap[Double, Double], two: TreeMap[Double, Double], distanceFunction: (Double, Double, Double, Double) => Double, shouldReplace: (Double, Double) => Boolean) = {
     // Definitions:
     // result will be here

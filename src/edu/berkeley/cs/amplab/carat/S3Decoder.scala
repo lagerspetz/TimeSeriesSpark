@@ -8,6 +8,8 @@ import java.io.FileOutputStream
 import java.io.ObjectOutputStream
 import java.io.ObjectInputStream
 import collection.JavaConversions._
+import com.amazonaws.services.s3.model.Grantee
+import com.amazonaws.services.s3.model.Permission
 
 object S3Decoder {
 
@@ -30,7 +32,7 @@ object S3Decoder {
    * Raw reader of S3 objects.
    */
   def get(bucket:String, key: String) = {
-    val temp = S3Encoder.s3.getObject(S3Encoder.defaultBucket, key)
+    val temp = S3Encoder.s3.getObject(bucket, key)
     temp.getObjectContent()
   }
 
