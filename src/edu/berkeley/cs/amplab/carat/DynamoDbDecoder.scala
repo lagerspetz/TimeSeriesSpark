@@ -78,7 +78,7 @@ object DynamoDbDecoder {
   def filterItems(table:String, vals: (String, Any)*) = {
     val s = new ScanRequest(table)
     val conds = DynamoDbEncoder.convertToMap[Condition](vals.map(x => {
-      (x._1, new Condition().withComparisonOperator("EQ").withAttributeValueList(new AttributeValue(x._2.toString())))
+      (x._1, new Condition().withComparisonOperator("IN").withAttributeValueList(new AttributeValue(x._2.toString())))
     }))
     s.setScanFilter(conds)
     val sr = DynamoDbEncoder.dd.scan(s)
