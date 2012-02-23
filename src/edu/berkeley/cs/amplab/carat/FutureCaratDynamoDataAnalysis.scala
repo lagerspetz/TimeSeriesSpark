@@ -400,7 +400,9 @@ object FutureCaratDynamoDataAnalysis {
     }*/
 
     val aPrioriDistribution = getApriori(allRates)
-
+    if (aPrioriDistribution.count() == 0)
+      println("WARN: aPrioriDistribution is empty!")
+    
     val apps = allRates.map(x => {
       var sampleApps = x.allApps
       sampleApps --= DAEMONS_LIST
@@ -638,10 +640,13 @@ object FutureCaratDynamoDataAnalysis {
 
   def getApriori(allRates: RDD[CaratRate]) = {
     // get BLCs
+    assert(allRates != null, "AllRates should not be null when calculating aPriori.")
     val ap = allRates.filter(x => {
       val ev = x.getAllEvents()
       ev.size == 1 && ev.contains(TRIGGER_BATTERYLEVELCHANGED)
     })
+    if (ap.count() == 0)
+      println("WARN: Set of BLC intervals %s is empty when calculating aPriori.".format(ap))
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {
       ((x.rate, 1.0))
