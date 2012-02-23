@@ -677,7 +677,7 @@ object CaratDynamoDataAnalysis {
     }
     //DynamoDbEncoder.put(xmax, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], jScore, ev, evNeg)
   }
-  
+
   /**
    * New metric: Use EV difference for hog and bug decisions.
    * TODO: Variance and its use in the decision?
@@ -688,6 +688,6 @@ object CaratDynamoDataAnalysis {
    * m <= 0 -> not
    */
   def evDiff(evWith: Double, evWithout: Double) = {
-      1.0 - evWithout / evWith
+    1.0 - evWithout / evWith
   }
 }
