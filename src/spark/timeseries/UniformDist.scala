@@ -7,21 +7,21 @@ import scala.collection.immutable.TreeSet
  * for 75 and 70, it can be from 0 to 10%.
  */
 class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] with Serializable{
-  
+
   /**
    * @return true if x is within [from, to].
    */
-  def contains(x:Double) = {
-    if (from == to){
+  def contains(x: Double) = {
+    if (from == to) {
       /* kludge for point values:
        * with 3 decimals,
        * granularity is
        * 0.001, 0.002, ...
        * so 0.0005 can be used to
        * "expand" a point value's range. */
-      from -0.0005 <= x && x < to + 0.0005
-    }else
-    from <= x && x < to
+      from - 0.0005 <= x && x < to + 0.0005
+    } else
+      from <= x && x < to
   }
   
   /**
