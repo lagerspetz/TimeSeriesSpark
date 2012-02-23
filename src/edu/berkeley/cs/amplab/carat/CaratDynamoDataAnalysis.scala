@@ -688,6 +688,6 @@ object CaratDynamoDataAnalysis {
    * m <= 0 -> not
    */
   def evDiff(evWith: Double, evWithout: Double) = {
-    1.0 - evWithout / evWith
+      1.0 - evWithout / evWith
   }
 }

@@ -480,7 +480,7 @@ object ProbUtil extends Logging {
       assert(checksum2 <= 1.01 && checksum2 >= 0.99, "Continuous value \"without\" distribution should sum up to 1 when normalized: " + checksum2)
     }
     // Return EVs with 3 decimal accuracy
-    (xmax, bucketed, bucketedNeg, nDecimal(ev1, decimals), nDecimal(ev2, decimals))
+    (xmax, bucketed, bucketedNeg, ev1, ev2)
   }
 
   /**
