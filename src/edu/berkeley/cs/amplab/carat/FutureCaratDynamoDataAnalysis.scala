@@ -632,7 +632,7 @@ object FutureCaratDynamoDataAnalysis {
     val ap = allRates.filter(x => {
       val ev = x.getAllEvents()
       ev.size == 1 && ev.contains(TRIGGER_BATTERYLEVELCHANGED)
-    }
+    })
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {
       ((x.rate, 1.0))
