@@ -2,12 +2,13 @@ package spark.timeseries
 
 import scala.collection.immutable.TreeMap
 import edu.berkeley.cs.amplab.carat.UniformDist
-import spark.Logging
+import spark._
+import spark.SparkContext._
 
 /**
  * Various utilities for probability distribution processing.
  */
-object ProbUtil extends Logging{
+object ProbUtil extends Logging {
 
   /**
    * Get the expected value of a probability distribution.
@@ -40,10 +41,26 @@ object ProbUtil extends Logging{
   }
 
   /**
+   * Debug: Print non-zero values of two sets.
+   */
+  def debugNonZero(one: RDD[Double], two: RDD[Double], kw1: String) {
+    debugNonZeroRDD(one, kw1)
+    debugNonZeroRDD(two, kw1 + "Neg")
+  }
+
+  /**
    * Debug: Print non-zero values of a set.
    */
   def debugNonZeroOne(one: Iterable[Double], kw: String) {
     val nz = one.filter(_ > 0)
+    logDebug("Nonzero " + kw + ": " + nz.mkString(" ") + " sum=" + nz.sum)
+  }
+
+  /**
+   * Debug: Print non-zero values of a set.
+   */
+  def debugNonZeroRDD(one: RDD[Double], kw: String) {
+    val nz = one.filter(_ > 0).collect()
     logDebug("Nonzero " + kw + ": " + nz.mkString(" ") + " sum=" + nz.sum)
   }
 
@@ -84,7 +101,7 @@ object ProbUtil extends Logging{
     (xmax, bucketed, bucketedNeg)
   }
 
-   /* The stddev of a continuous distribution, i.e. a single UniformDist, is
+  /* The stddev of a continuous distribution, i.e. a single UniformDist, is
     * square root of:
      * 1 / (a-b) Integral from b to a (x - avg)^2 dx
      * <=>
@@ -96,28 +113,28 @@ object ProbUtil extends Logging{
      * the final contribution will be sqrt of this.
      * @param avg The average of the entire distribution, not just the single UniformDist component.
      */
-  def getStdDevContribution(dist: UniformDist, avg:Double) = {
-    if (dist.isPoint){
+  def getStdDevContribution(dist: UniformDist, avg: Double) = {
+    if (dist.isPoint) {
       /* Regular avg-x^2 */
-      math.pow(avg-dist.from,2)
-    }else{
-    val a = dist.to
-    val b = dist.from
-    math.sqrt((math.pow(a,2)+math.pow(b,2)+a*b)/3 - avg*(a+b) + math.pow(avg,2))
+      math.pow(avg - dist.from, 2)
+    } else {
+      val a = dist.to
+      val b = dist.from
+      math.sqrt((math.pow(a, 2) + math.pow(b, 2) + a * b) / 3 - avg * (a + b) + math.pow(avg, 2))
     }
   }
-  
+
   /**
    * Get the standard deviation of the mixed distribution.
    */
-  def getStdDev(entireDist: Array[UniformDist], ev:Double) = {
+  def getStdDev(entireDist: Array[UniformDist], ev: Double) = {
     val n = entireDist.length * 1.0
     var sum = 0.0
     for (k <- entireDist)
       sum += getStdDevContribution(k, ev)
-    math.sqrt( sum / n ) 
+    math.sqrt(sum / n)
   }
-  
+
   /**
    * Bucket given distributions into `buckets` buckets, and return the maximum x value and the bucketed distributions.
    */
@@ -203,7 +220,7 @@ object ProbUtil extends Logging{
 
       logDebug("Norm Bucket %s: val=%s val2=%s\n".format(k, norm, norm2))
     }
-    
+
     getStdDev(withDist, ev1)
     getStdDev(withoutDist, ev2)
 
@@ -229,6 +246,104 @@ object ProbUtil extends Logging{
    * high variance fall into the same bucket.
    *
    */
+  def logBucketRDDFreqs(sc: SparkContext, withDist: RDD[(Double, Double)], withoutDist: RDD[(Double, Double)], buckets: Int, smallestBucket: Double, decimals: Int) = {
+
+    /* Find max x*/
+    val xmax = withDist.union(withoutDist).map(_._1).reduce((x, y) => {
+      if (x > y)
+        x
+      else
+        y
+    })
+
+    /* xmax / (logBase^buckets) > smallestBucket
+     * <=> logBase^buckets * smallestBucket < xmax
+     * <=> logBase^buckets < xmax / smallestBucket
+     * log (logbase) * buckets < log (xmax/smallestBucket)
+     * logbase < e^(log(xmax/smallestBucket) / buckets)
+     */
+
+    val logbase = getLogBase(buckets, smallestBucket, xmax)
+
+    /* Bucket and normalize dists: */
+    var bucketed = logBucketDist(sc, withDist, xmax, logbase, buckets)
+    var bucketedNeg = logBucketDist(sc, withoutDist, xmax, logbase, buckets)
+
+    val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
+    val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
+
+    /*Verify that dists sum up to 1:
+     * 
+     */
+
+    var bigtotal = sc.accumulator(0.0)
+    bucketed.foreach(x => {
+      bigtotal += x._2
+    })
+
+    if (bigtotal.value > 0) {
+      assert(bigtotal.value <= 1.01 && bigtotal.value >= 0.99,
+        "\"with\" distribution should sum up to 1 when normalized: " + bigtotal)
+    }
+
+    bigtotal = sc.accumulator(0.0)
+    bucketedNeg.foreach(x => {
+      bigtotal += x._2
+    })
+
+    if (bigtotal.value > 0) {
+      assert(bigtotal.value <= 1.01 && bigtotal.value >= 0.99,
+        "\"without\" distribution should sum up to 1 when normalized: " + bigtotal)
+    }
+
+    // Return EVs with 3 decimal accuracy
+    (xmax, bucketed.map(x => { (x._1, nDecimal(x._2, decimals)) }),
+      bucketedNeg.map(x => { (x._1, nDecimal(x._2, decimals)) }),
+      nDecimal(ev1, decimals), nDecimal(ev2, decimals))
+  }
+
+  def getEv(sc: SparkContext, bucketedDist: RDD[(Int, Double)], xmax: Double, logbase: Double, buckets: Int) = {
+    var ev = sc.accumulator(0.0)
+    val evComponents = bucketedDist.map(k => {
+      val bucketStart = {
+        if (k._1 == 0)
+          0.0
+        else
+          xmax / (math.pow(logbase, buckets - k._1))
+      }
+      val bucketEnd = xmax / (math.pow(logbase, buckets - k._1 - 1))
+      (bucketEnd - bucketStart) / 2 * k._2
+    }).foreach(x => {
+      ev += x
+    })
+    ev.value
+  }
+
+  def logBucketDist(sc: SparkContext, withDist: RDD[(Double, Double)], xmax: Double, logbase: Double, buckets: Int) = {
+    val bucketed = withDist.map(k => {
+      val bucketDouble = 100 - math.log(xmax / k._1) / math.log(logbase)
+      val bucket = {
+        if (bucketDouble >= buckets)
+          buckets - 1
+        else if (bucketDouble < 0)
+          0
+        else
+          bucketDouble.toInt
+      }
+      (bucket, k._2)
+    }).groupByKey().map(x => {
+      (x._1, x._2.sum)
+    })
+    var sumAll = sc.accumulator(0.0)
+    bucketed.foreach(x => {
+      sumAll += x._2
+    })
+    // Normalize
+    bucketed.map(x => { (x._1, x._2 / sumAll.value) })
+  }
+
+  def groupByInt(x: Int, y: Double) = x
+
   def logBucketDistributionsByX(withDist: Array[UniformDist], withoutDist: Array[UniformDist], buckets: Int, smallestBucket: Double, decimals: Int) = {
     var bucketed = new TreeMap[Int, Double]
     var bucketedNeg = new TreeMap[Int, Double]
@@ -366,7 +481,7 @@ object ProbUtil extends Logging{
       assert(checksum2 <= 1.01 && checksum2 >= 0.99, "Continuous value \"without\" distribution should sum up to 1 when normalized: " + checksum2)
     }
     // Return EVs with 3 decimal accuracy
-    (xmax, bucketed, bucketedNeg, nDecimal(ev1,decimals), nDecimal(ev2, decimals))
+    (xmax, bucketed, bucketedNeg, nDecimal(ev1, decimals), nDecimal(ev2, decimals))
   }
 
   /**
@@ -396,7 +511,8 @@ object ProbUtil extends Logging{
     genericDistance(one, two, weightedDistance, absReplace)
   }
 
-  /** Generic distance calculation function that takes the distance metric and the replace decision function as parameters.
+  /**
+   * Generic distance calculation function that takes the distance metric and the replace decision function as parameters.
    * Check absReplace, distance and weightedDistance for examples.
    */
   def genericDistance(one: TreeMap[Double, Double], two: TreeMap[Double, Double], distanceFunction: (Double, Double, Double, Double) => Double, shouldReplace: (Double, Double) => Boolean) = {
