@@ -377,7 +377,6 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
 
-    DynamoDbDecoder.deleteAllItems(hogsTable, hogKey)
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
     DynamoDbDecoder.deleteAllItems(similarsTable, resultKey)
     /**
@@ -445,7 +444,28 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
+    // quick fix:
+    /*
+      1. delete all bugs and similar apps
+      2. add hogs
+      3. remove non-hogs from hogs database
+      4. add bugs
+      5. 
+     */
+    /* Right way:
+      1. remove non-hogs
+      2. remove new hogs from bugs table
+      3. remove non-bugs from bugs table
+      4. insert new hogs
+      5. insert new bugs
+    */
+    val globalNonHogs = allApps -- allHogs
+    DynamoDbDecoder.deleteItems(hogsTable, hogKey, globalNonHogs.map(x => {
+     (hogKey, x) 
+    }).toArray:_*)
+    
     var everReportedFirst = true
+    var first = true
     var intersectEverReportedApps = new scala.collection.mutable.HashSet[String]
     var intersectPerSampleApps = new scala.collection.mutable.HashSet[String]
 
@@ -467,7 +487,7 @@ object CaratDynamoDataAnalysis {
 
       var uuidApps = new scala.collection.mutable.HashSet[String]
       var nonHogApps = new scala.collection.mutable.HashSet[String]
-      var first = true
+      
       // Get all apps ever reported, also compute likely daemons
       for (k <- tempApps) {
         nonHogApps ++= k
