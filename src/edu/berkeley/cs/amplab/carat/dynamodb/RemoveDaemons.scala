@@ -4,9 +4,6 @@ import edu.berkeley.cs.amplab.carat._
 import collection.JavaConversions._
 
 object RemoveDaemons extends App {
-
-   // Daemons file on S3
-  val DAEMON_FILE = "daemons.txt"
   // Daemons list, read from S3
   val DAEMONS_LIST = CaratDynamoDataAnalysis.DAEMONS_LIST
 

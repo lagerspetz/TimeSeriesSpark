@@ -12,6 +12,7 @@ import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import edu.berkeley.cs.amplab.carat.dynamodb.RemoveDaemons
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -331,7 +332,7 @@ object CaratDynamoDataAnalysis {
   }
 
   def considerRate(r: CaratRate) = {
-    if (r.isUniform()){
+    if (r.isRateRange()){
       if (r.rateRange.getEv() > ABNORMAL_RATE) {
         false
       }else
@@ -352,7 +353,7 @@ object CaratDynamoDataAnalysis {
     var sum = 0.0
     var buf = new TreeMap[Double, Double]
     for (d <- rates) {
-      if (d.isUniform()) {
+      if (d.isRateRange()) {
         val disc = d.rateRange.discretize(DECIMALS)
         for (k <- disc) {
           var count = buf.get(k).getOrElse(0.0) + 1.0 / disc.size
@@ -376,6 +377,9 @@ object CaratDynamoDataAnalysis {
    */
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
+    //Remove Daemons
+    RemoveDaemons.main(Array("DAEMONS"))
+    //Remove old bugs
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
     /**
      * uuid distributions, xmax, ev and evNeg
@@ -578,13 +582,13 @@ object CaratDynamoDataAnalysis {
      * RDD of Rates => RDD of UniformDists => RDD of Double,Double pairs (Bucketed values)  
      */
     val flatOne = one.map(x => {
-      if (x.isUniform())
+      if (x.isRateRange())
         x.rateRange
         else
           new UniformDist(x.rate, x.rate)
     }).collect()
     val flatTwo = two.map(x => {
-      if (x.isUniform())
+      if (x.isRateRange())
         x.rateRange
         else
           new UniformDist(x.rate, x.rate)

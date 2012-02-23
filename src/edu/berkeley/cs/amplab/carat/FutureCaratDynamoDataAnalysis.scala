@@ -333,7 +333,7 @@ object FutureCaratDynamoDataAnalysis {
   }
 
   def considerRate(r: CaratRate) = {
-    if (r.isUniform()) {
+    if (r.isRateRange()) {
       if (r.rateRange.getEv() > ABNORMAL_RATE) {
         false
       } else
@@ -354,7 +354,7 @@ object FutureCaratDynamoDataAnalysis {
     var sum = 0.0
     var buf = new TreeMap[Double, Double]
     for (d <- rates) {
-      if (d.isUniform()) {
+      if (d.isRateRange()) {
         val disc = d.rateRange.discretize(DECIMALS)
         for (k <- disc) {
           var count = buf.get(k).getOrElse(0.0) + 1.0 / disc.size
@@ -400,7 +400,7 @@ object FutureCaratDynamoDataAnalysis {
     }*/
 
     val aPrioriDistribution = getApriori(allRates)
-    if (aPrioriDistribution.count() == 0)
+    if (aPrioriDistribution.size == 0)
       println("WARN: aPrioriDistribution is empty!")
     
     val apps = allRates.map(x => {
@@ -542,7 +542,7 @@ object FutureCaratDynamoDataAnalysis {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(sc: SparkContext, all: RDD[CaratRate], uuid: String, uuidApps: scala.collection.mutable.Set[String], aPrioriDistribution: RDD[(Double, Double)]) {
+  def similarApps(sc: SparkContext, all: RDD[CaratRate], uuid: String, uuidApps: scala.collection.mutable.Set[String], aPrioriDistribution: Array[(Double, Double)]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -557,7 +557,7 @@ object FutureCaratDynamoDataAnalysis {
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
-  def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: RDD[(Double, Double)]) = {
+  def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
@@ -604,9 +604,9 @@ object FutureCaratDynamoDataAnalysis {
       (0.0, null, null, 0.0, 0.0, 0.0)
   }
 
-  def getFrequencies(aPrioriDistribution: RDD[(Double, Double)], one: RDD[CaratRate]) = {
-    one.flatMap(x => {
-      if (x.isUniform()) {
+  def getFrequencies(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+    samples.flatMap(x => {
+      if (x.isRateRange()) {
         val freqRange = aPrioriDistribution.filter(y => {x.rateRange.contains(y._1)})
         val arr = freqRange.map { x =>
           {
@@ -625,7 +625,11 @@ object FutureCaratDynamoDataAnalysis {
       (x._1, x._2.sum)
     })
   }
-
+  
+  /**
+   * FIXME: Filters inside a map of another RDD are not allowed, so we call collect on the returned a priori distribution here.
+   * If this becomes a memory problem, averaging in the a priori dist should be done.
+   */
   def getApriori(allRates: RDD[CaratRate]) = {
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
@@ -640,13 +644,13 @@ object FutureCaratDynamoDataAnalysis {
       ((x.rate, 1.0))
     }).groupByKey()
     // turn arrays of 1.0s to frequencies
-    grouped.map(x => { (x._1, x._2.sum) })
+    grouped.map(x => { (x._1, x._2.sum) }).collect()
   }
 
   /**
    * Write the probability distributions, the distance, and the xmax value to DynamoDb. Ungrouped CaratRates variant.
    */
-  def writeTripletUngrouped(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: RDD[(Double, Double)], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit,
+  def writeTripletUngrouped(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit,
     deleteFunction: => Unit, isBugOrHog: Boolean) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(sc, one, two, aPrioriDistribution)
     if (bucketed != null && bucketedNeg != null) {

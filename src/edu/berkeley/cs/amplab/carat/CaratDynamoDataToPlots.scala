@@ -531,7 +531,7 @@ object CaratDynamoDataToPlots {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(sc:SparkContext, all: RDD[CaratRate], aPrioriDistribution: RDD[(Double, Double)], uuid: String, uuidApps: scala.collection.mutable.Set[String], plotDirectory:String) {
+  def similarApps(sc:SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], uuid: String, uuidApps: scala.collection.mutable.Set[String], plotDirectory:String) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -546,7 +546,7 @@ object CaratDynamoDataToPlots {
    * Save it as "plots/data/titleWith-titleWithout".txt.
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
-  def plotDists(sc:SparkContext, title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: RDD[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String) = {
+  def plotDists(sc:SparkContext, title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = FutureCaratDynamoDataAnalysis.getDistanceAndDistributions(sc, one, two, aPrioriDistribution)
 
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {

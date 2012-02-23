@@ -30,13 +30,13 @@ class CaratRate(var uuid:String, val os:String, val model:String,
         k}, rateRng)
   }
   
-  def isUniform() = rateRange != null
+  def isRateRange() = rateRange != null
   
   /* Should not be used to get exact values. */
   def rate() = {
     // batteryDiff is between 0 and 1, negative. Multiply by -100.0 to get 0 to 100, positive.
     // The unit for rate is percent per second.
-    if (isUniform){
+    if (isRateRange){
       rateRange.getEv()
     }else
       (batt1 - batt2) * 100.0 / (time2 - time1)
@@ -59,7 +59,7 @@ class CaratRate(var uuid:String, val os:String, val model:String,
 
   def toString(verbose: Boolean = false): String = {
     "CaratRate " + {
-      if (isUniform)
+      if (isRateRange)
         "from %4f to %4f".format(rateRange.from, rateRange.to)
       else
         "%4f".format(rate)
