@@ -629,7 +629,10 @@ object FutureCaratDynamoDataAnalysis {
   
   def getApriori(allRates: RDD[CaratRate]) = {
     // get BLCs
-    val ap = allRates.filter(_.getAllEvents().contains(TRIGGER_BATTERYLEVELCHANGED))
+    val ap = allRates.filter(x => {
+      val ev = x.getAllEvents()
+      ev.size == 1 && ev.contains(TRIGGER_BATTERYLEVELCHANGED)
+    }
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {
       ((x.rate, 1.0))
