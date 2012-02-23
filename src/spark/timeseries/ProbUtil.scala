@@ -275,23 +275,26 @@ object ProbUtil extends Logging {
      * 
      */
 
-    var bigtotal = sc.accumulator(0.0)
+    var bigt = sc.accumulator(0.0)
     bucketed.foreach(x => {
-      bigtotal += x._2
+      bigt += x._2
     })
+    var bigtotal = bigt.value
 
-    if (bigtotal.value > 0) {
-      assert(bigtotal.value <= 1.01 && bigtotal.value >= 0.99,
+    if (bigtotal > 0) {
+      assert(bigtotal <= 1.01 && bigtotal >= 0.99,
         "\"with\" distribution should sum up to 1 when normalized: " + bigtotal)
     }
 
-    bigtotal = sc.accumulator(0.0)
+    bigt = sc.accumulator(0.0)
     bucketedNeg.foreach(x => {
-      bigtotal += x._2
+      bigt += x._2
     })
 
-    if (bigtotal.value > 0) {
-      assert(bigtotal.value <= 1.01 && bigtotal.value >= 0.99,
+    bigtotal = bigt.value
+    
+    if (bigtotal > 0) {
+      assert(bigtotal <= 1.01 && bigtotal >= 0.99,
         "\"without\" distribution should sum up to 1 when normalized: " + bigtotal)
     }
 
@@ -337,8 +340,9 @@ object ProbUtil extends Logging {
     bucketed.foreach(x => {
       sumAll += x._2
     })
+    val v = sumAll.value
     // Normalize
-    bucketed.map(x => { (x._1, x._2 / sumAll.value) })
+    bucketed.map(x => { (x._1, x._2 / v) })
   }
 
   def groupByInt(x: Int, y: Double) = x
