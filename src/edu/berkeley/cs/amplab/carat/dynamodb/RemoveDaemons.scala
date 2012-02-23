@@ -23,6 +23,9 @@ object RemoveDaemons extends App {
   
   val (key, items) = DynamoDbDecoder.filterItems(bugsTable, kd:_*)
   for (k <- items){
-    println("Bug: " + k)
+    val uuid = k.get(resultKey).getS()
+    val app = k.get(appKey).getS()
+    println("Removing Bug: %s, %s".format(uuid, app))
+    DynamoDbDecoder.deleteItem(bugsTable, uuid, app)
   }
 }
