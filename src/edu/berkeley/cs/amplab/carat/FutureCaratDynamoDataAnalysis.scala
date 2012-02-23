@@ -48,15 +48,15 @@ object FutureCaratDynamoDataAnalysis {
   var DEBUG = false
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
-  
+
   // Daemons file on S3
   val DAEMON_FILE = "daemons.txt"
   // Daemons list, read from S3
   val DAEMONS_LIST = {
-    var r:Set[String] = new HashSet[String]
+    var r: Set[String] = new HashSet[String]
     val rd = new BufferedReader(new InputStreamReader(S3Decoder.get(BUCKET_WEBSITE, DAEMON_FILE)))
     var s = rd.readLine()
-    while (s != null){
+    while (s != null) {
       r += s
       s = rd.readLine()
     }
@@ -139,8 +139,8 @@ object FutureCaratDynamoDataAnalysis {
       println("Handling reg:" + x)
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-        DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
+        DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
         handleSamples(sc, _, os, model, _),
         true,
         distRet)
@@ -155,7 +155,7 @@ object FutureCaratDynamoDataAnalysis {
   def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
     tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
     stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
-    prefix:Boolean,/*prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],*/
+    prefix: Boolean, /*prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],*/
     dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
     var finished = false
 
@@ -269,11 +269,11 @@ object FutureCaratDynamoDataAnalysis {
           if (prevBatt - batt < 0) {
             printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
             negDrainSamples += 1
-          } else if (prevBatt == 0 && batt == 0){
+          } else if (prevBatt == 0 && batt == 0) {
             /* Assume simulator, ignore */
             printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
             allZeroSamples += 1
-          }else {
+          } else {
             /* now prevBatt - batt >= 0 */
             if (prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED) {
               /* Point rate */
@@ -290,14 +290,14 @@ object FutureCaratDynamoDataAnalysis {
                   abandonedSamples += 1
                 }
               }
-            }else{
+            } else {
               /* One endpoint not BLC, use uniform distribution rate */
               val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
                 prevEvent, event, prevApps, apps)
-               if (considerRate(r)) {
+              if (considerRate(r)) {
                 rates += r
               } else {
-                 println("Abandoned uniform rate with abnormally high EV: "+ r.toString(false))
+                println("Abandoned uniform rate with abnormally high EV: " + r.toString(false))
                 abandonedSamples += 1
               }
             }
@@ -333,17 +333,17 @@ object FutureCaratDynamoDataAnalysis {
   }
 
   def considerRate(r: CaratRate) = {
-    if (r.isUniform()){
+    if (r.isUniform()) {
       if (r.rateRange.getEv() > ABNORMAL_RATE) {
         false
-      }else
+      } else
         true
-    }else{
-    if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate " + r.toString(false))
-      false
-    } else
-      true
+    } else {
+      if (r.rate() > ABNORMAL_RATE) {
+        printf("Abandoning abnormally high rate " + r.toString(false))
+        false
+      } else
+        true
     }
   }
 
@@ -382,7 +382,7 @@ object FutureCaratDynamoDataAnalysis {
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
-     * Consider changing the algorithm and using RDDs. 
+     * Consider changing the algorithm and using RDDs.
      */
     var distsWithUuid = new TreeMap[String, RDD[(Int, Double)]]
     var distsWithoutUuid = new TreeMap[String, RDD[(Int, Double)]]
@@ -390,7 +390,7 @@ object FutureCaratDynamoDataAnalysis {
     var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
     /* evDistances*/
     var evDistanceByUuid = new TreeMap[String, Double]
-    
+
     var appsByUuid = new TreeMap[String, scala.collection.mutable.HashSet[String]]
 
     /*if (DEBUG) {
@@ -398,7 +398,7 @@ object FutureCaratDynamoDataAnalysis {
       for (k <- cc)
         println(k)
     }*/
-    
+
     val aPrioriDistribution = getApriori(allRates)
 
     val apps = allRates.map(x => {
@@ -410,7 +410,7 @@ object FutureCaratDynamoDataAnalysis {
     var allApps = new HashSet[String]
     for (k <- apps)
       allApps ++= k
-      
+
     // mediaremoted does not get removed here, why?
     println("AllApps (no daemons): " + allApps)
 
@@ -420,7 +420,7 @@ object FutureCaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       println("Considering os os=" + os)
       writeTripletUngrouped(sc, fromOs, notFromOs, aPrioriDistribution, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _, _, _),
-          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+        { println("ERROR: Delete called for a non-bug non-hog!") }, false)
     }
 
     for (model <- models) {
@@ -429,7 +429,7 @@ object FutureCaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       println("Considering model model=" + model)
       writeTripletUngrouped(sc, fromModel, notFromModel, aPrioriDistribution, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _, _, _),
-          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+        { println("ERROR: Delete called for a non-bug non-hog!") }, false)
     }
 
     var allHogs = new HashSet[String]
@@ -454,16 +454,16 @@ object FutureCaratDynamoDataAnalysis {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       val tempApps = fromUuid.map(x => {
-      var sampleApps = x.allApps
-      sampleApps --= DAEMONS_LIST
-      sampleApps --= allHogs
-      sampleApps
+        var sampleApps = x.allApps
+        sampleApps --= DAEMONS_LIST
+        sampleApps --= allHogs
+        sampleApps
       }).collect()
-      
+
       val uuidAppsTemp = fromUuid.map(x => {
-      var sampleApps = x.allApps
-      sampleApps --= DAEMONS_LIST
-      sampleApps
+        var sampleApps = x.allApps
+        sampleApps --= DAEMONS_LIST
+        sampleApps
       }).collect()
 
       var uuidApps = new scala.collection.mutable.HashSet[String]
@@ -472,19 +472,19 @@ object FutureCaratDynamoDataAnalysis {
       // Get all apps ever reported, also compute likely daemons
       for (k <- tempApps) {
         nonHogApps ++= k
-        if (first){
+        if (first) {
           intersectPerSampleApps ++= k
           first = false
-        }else if (k.size > 0)
+        } else if (k.size > 0)
           intersectPerSampleApps = intersectPerSampleApps.intersect(k)
       }
-      
+
       for (k <- uuidAppsTemp) {
-              uuidApps ++= k
+        uuidApps ++= k
       }
 
       //Another method to find likely daemons
-      if (everReportedFirst){
+      if (everReportedFirst) {
         intersectEverReportedApps ++= uuidApps
         everReportedFirst = false
       } else if (uuidApps.size > 0)
@@ -506,7 +506,7 @@ object FutureCaratDynamoDataAnalysis {
         evDistanceByUuid += ((uuid, evDistance))
       }
       appsByUuid += ((uuid, uuidApps))
-      
+
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- nonHogApps) {
         if (app != CARAT) {
@@ -520,7 +520,7 @@ object FutureCaratDynamoDataAnalysis {
     }
     // Save J-Scores of all users.
     writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
-    
+
     val removed = DAEMONS_LIST -- intersectEverReportedApps
     val removedPS = DAEMONS_LIST -- intersectPerSampleApps
     intersectEverReportedApps --= DAEMONS_LIST
@@ -548,33 +548,32 @@ object FutureCaratDynamoDataAnalysis {
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
     println("Considering similarApps uuid=" + uuid)
-    writeTripletUngrouped(sc, similar, dissimilar, aPrioriDistribution, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _, _, _), 
-        { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+    writeTripletUngrouped(sc, similar, dissimilar, aPrioriDistribution, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _, _, _),
+      { println("ERROR: Delete called for a non-bug non-hog!") }, false)
   }
 
   /**
-   * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates. 
+   * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
   def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: RDD[(Double, Double)]) = {
-      // probability distribution: r, count/sumCount
+    // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
      * both distributions into n buckets, averaging inside a bucket
      */
-    
+
     /* FIXME: Should not flatten RDD's, but figure out how to transform an
      * RDD of Rates => RDD of UniformDists => RDD of Double,Double pairs (Bucketed values)  
      */
-    
-    val freqWith = getFrequencies(sc, aPrioriDistribution, one)
-    val freqWithout = getFrequencies(sc, aPrioriDistribution, one)
-    
+
+    val freqWith = getFrequencies(aPrioriDistribution, one)
+    val freqWithout = getFrequencies(aPrioriDistribution, one)
+
     var evDistance = 0.0
 
     val withCount = freqWith.count
     val withoutCount = freqWithout.count
-    
-    
+
     if (withCount > 0 && withoutCount > 0) {
       println("rates=" + withCount + " ratesNeg=" + withoutCount)
       if (withCount < 10) {
@@ -597,16 +596,16 @@ object FutureCaratDynamoDataAnalysis {
       if (DEBUG) {
         ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
       }
-      
+
       (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
-    }else
+    } else
       (0.0, null, null, 0.0, 0.0, 0.0)
   }
-  
-  def getFrequencies(sc: SparkContext, aPrioriDistribution: RDD[(Double, Double)], one: RDD[CaratRate]) = {
+
+  def getFrequencies(aPrioriDistribution: RDD[(Double, Double)], one: RDD[CaratRate]) = {
     one.flatMap(x => {
       if (x.isUniform())
-        sliceOf(sc, aPrioriDistribution, x.rateRange)
+        sliceOf(aPrioriDistribution, x.rateRange)
       else
         Array((x.rate, 1.0))
     }).groupByKey().map(x => {
@@ -614,19 +613,21 @@ object FutureCaratDynamoDataAnalysis {
     })
   }
 
-  def sliceOf(sc: SparkContext, freqs: RDD[(Double, Double)], dist: UniformDist) = {
+  def sliceOf(freqs: RDD[(Double, Double)], dist: UniformDist) = {
     val freqRange = freqs.filter(x => { dist.contains(x._1) })
-    var sum = sc.accumulator(0.0)
-    freqRange.foreach(x => {
-      sum += x._2
-    })
-    freqRange.map { x =>
+    val arr = freqRange.map { x =>
       {
-        (x._1, x._2 / sum.value)
+        (x._1, x._2)
       }
     }.toArray
+
+    var sum = 0.0
+    for (k <- arr) {
+      sum += k._2
+    }
+    arr.map(x => { (x._1, x._2 / sum) })
   }
-  
+
   def getApriori(allRates: RDD[CaratRate]) = {
     // get BLCs
     val ap = allRates.filter(x => {
@@ -638,7 +639,7 @@ object FutureCaratDynamoDataAnalysis {
       ((x.rate, 1.0))
     }).groupByKey()
     // turn arrays of 1.0s to frequencies
-    grouped.map(x => { (x._1, x._2.sum)})
+    grouped.map(x => { (x._1, x._2.sum) })
   }
 
   /**
@@ -658,13 +659,13 @@ object FutureCaratDynamoDataAnalysis {
     isBugOrHog && evDistance > 0
   }
 
-   /**
-     * The J-Score is the % of people with worse = higher energy use.
-     * therefore, it is the size of the set of evDistances that are higher than mine,
-     * compared to the size of the user base.
-     * Note that the server side multiplies the JScore by 100, and we store it here
-     * as a fraction.
-     */
+  /**
+   * The J-Score is the % of people with worse = higher energy use.
+   * therefore, it is the size of the set of evDistances that are higher than mine,
+   * compared to the size of the user base.
+   * Note that the server side multiplies the JScore by 100, and we store it here
+   * as a fraction.
+   */
   def writeJScores(distsWithUuid: TreeMap[String, RDD[(Int, Double)]],
     distsWithoutUuid: TreeMap[String, RDD[(Int, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
@@ -674,7 +675,7 @@ object FutureCaratDynamoDataAnalysis {
 
     for (k <- distsWithUuid.keys) {
       val (xmax, ev, evNeg) = parametersByUuid.get(k).getOrElse((0.0, 0.0, 0.0))
-      
+
       /**
        * jscore is the % of people with worse = higher energy use.
        * therefore, it is the size of the set of evDistances that are higher than mine,
@@ -685,7 +686,7 @@ object FutureCaratDynamoDataAnalysis {
         if (temp == 0)
           0
         else
-          ProbUtil.nDecimal(dists.filter(_ > temp).size*1.0 / dists.size, DECIMALS)
+          ProbUtil.nDecimal(dists.filter(_ > temp).size * 1.0 / dists.size, DECIMALS)
       }
       val distWith = distsWithUuid.get(k).getOrElse(null)
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
@@ -697,7 +698,7 @@ object FutureCaratDynamoDataAnalysis {
     }
     //DynamoDbEncoder.put(xmax, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], jScore, ev, evNeg)
   }
-  
+
   /**
    * New metric: Use EV difference for hog and bug decisions.
    * TODO: Variance and its use in the decision?

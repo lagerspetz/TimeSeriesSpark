@@ -75,18 +75,19 @@ object CaratDynamoDataToPlots {
     sys.exit(0)
   }
 
-  def plotEverything(master:String, debug:Boolean, plotDirectory:String) = {
+  def plotEverything(master: String, debug: Boolean, plotDirectory: String) = {
     if (debug)
       DEBUG = true
-    // turn on ProbUtil debug logging
-    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
-    // turn off INFO logging for spark:
-    System.setProperty("hadoop.root.logger", "WARN,console")
-    // This is misspelled in the spark jar log4j.properties:
-    System.setProperty("log4j.threshhold", "WARN")
-    // Include correct spelling to make sure
-    System.setProperty("log4j.threshold", "WARN")
-
+    else {
+      // turn on ProbUtil debug logging
+      System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+      // turn off INFO logging for spark:
+      System.setProperty("hadoop.root.logger", "WARN,console")
+      // This is misspelled in the spark jar log4j.properties:
+      System.setProperty("log4j.threshhold", "WARN")
+      // Include correct spelling to make sure
+      System.setProperty("log4j.threshold", "WARN")
+    }
     val sc = new SparkContext(master, "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
   }
