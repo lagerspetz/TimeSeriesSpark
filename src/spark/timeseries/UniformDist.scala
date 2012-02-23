@@ -1,4 +1,5 @@
-package edu.berkeley.cs.amplab.carat
+package spark.timeseries
+
 import scala.collection.immutable.TreeSet
 
 

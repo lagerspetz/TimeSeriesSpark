@@ -1,4 +1,6 @@
 package edu.berkeley.cs.amplab.carat
+
+import spark.timeseries.UniformDist
 import scala.collection.immutable.HashSet
 
 /**

@@ -376,9 +376,7 @@ object CaratDynamoDataAnalysis {
    */
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
-
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
-    DynamoDbDecoder.deleteAllItems(similarsTable, resultKey)
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -418,7 +416,7 @@ object CaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       println("Considering os os=" + os)
       writeTripletUngrouped(fromOs, notFromOs, DynamoDbEncoder.put(osTable, osKey, os, _, _, _, _, _, _),
-          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+          { println("Delete not implemented for OS versions.") }, false)
     }
 
     for (model <- models) {
@@ -427,7 +425,7 @@ object CaratDynamoDataAnalysis {
       // no distance check, not bug or hog
       println("Considering model model=" + model)
       writeTripletUngrouped(fromModel, notFromModel, DynamoDbEncoder.put(modelsTable, modelKey, model, _, _, _, _, _, _),
-          { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+          { println("Delete not implemented for models.") }, false)
     }
 
     var allHogs = new HashSet[String]
@@ -450,7 +448,7 @@ object CaratDynamoDataAnalysis {
       2. add hogs
       3. remove non-hogs from hogs database
       4. add bugs
-      5. 
+      5. Add similar apps
      */
     /* Right way:
       1. remove non-hogs
@@ -458,6 +456,7 @@ object CaratDynamoDataAnalysis {
       3. remove non-bugs from bugs table
       4. insert new hogs
       5. insert new bugs
+      6. remove similarApps sets for users with zero intersections while adding new similarApps sets
     */
     val globalNonHogs = allApps -- allHogs
     DynamoDbDecoder.deleteItems(hogsTable, hogKey, globalNonHogs.map(x => {
@@ -540,8 +539,6 @@ object CaratDynamoDataAnalysis {
     // Save J-Scores of all users.
     writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
     
-    val removed = DAEMONS_LIST -- intersectEverReportedApps
-    val removedPS = DAEMONS_LIST -- intersectPerSampleApps
     intersectEverReportedApps --= DAEMONS_LIST
     intersectPerSampleApps --= DAEMONS_LIST
     println("Daemons: " + DAEMONS_LIST)
@@ -549,10 +546,6 @@ object CaratDynamoDataAnalysis {
       println("New possible daemons (ever reported): " + intersectEverReportedApps)
     if (intersectPerSampleApps.size > 0)
       println("New possible daemons (per sample): " + intersectPerSampleApps)
-    if (removed.size > 0)
-      println("Removed daemons (ever reported): " + removed)
-    if (removedPS.size > 0)
-      println("Removed daemons (per sample): " + removedPS)
   }
 
   /**
@@ -568,7 +561,7 @@ object CaratDynamoDataAnalysis {
     // no distance check, not bug or hog
     println("Considering similarApps uuid=" + uuid)
     writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _, _, _), 
-        { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+        { DynamoDbDecoder.deleteItem(similarsTable, uuid) }, false)
   }
 
   /**
@@ -640,7 +633,8 @@ object CaratDynamoDataAnalysis {
         /* We should probably remove it in this case. */
         deleteFunction
       }
-    }
+    }else
+      deleteFunction
     isBugOrHog && evDistance > 0
   }
 

@@ -1,7 +1,6 @@
 package spark.timeseries
 
 import scala.collection.immutable.TreeMap
-import edu.berkeley.cs.amplab.carat.UniformDist
 import spark._
 import spark.SparkContext._
 
