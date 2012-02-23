@@ -606,36 +606,24 @@ object FutureCaratDynamoDataAnalysis {
 
   def getFrequencies(aPrioriDistribution: RDD[(Double, Double)], one: RDD[CaratRate]) = {
     one.flatMap(x => {
-      if (x.isUniform()){
-        if (x.rateRange == null){
-          throw new Error("RateRange null for %s!".format(x))
-        }else
-          sliceOf(aPrioriDistribution, x.rateRange)
-      }else
+      if (x.isUniform()) {
+        val freqRange = aPrioriDistribution.filter(y => {x.rateRange.contains(y._1)})
+        val arr = freqRange.map { x =>
+          {
+            (x._1, x._2)
+          }
+        }.toArray
+
+        var sum = 0.0
+        for (k <- arr) {
+          sum += k._2
+        }
+        arr.map(x => { (x._1, x._2 / sum) })
+      } else
         Array((x.rate, 1.0))
     }).groupByKey().map(x => {
       (x._1, x._2.sum)
     })
-  }
-
-  def sliceOf(freqs: RDD[(Double, Double)], dist: UniformDist) = {
-    val freqRange = freqs.filter(x => {
-      if (dist == null)
-        throw new Error("Null uniformDist: %s!".format(dist))
-      else
-        dist.contains(x._1)
-    })
-    val arr = freqRange.map { x =>
-      {
-        (x._1, x._2)
-      }
-    }.toArray
-
-    var sum = 0.0
-    for (k <- arr) {
-      sum += k._2
-    }
-    arr.map(x => { (x._1, x._2 / sum) })
   }
 
   def getApriori(allRates: RDD[CaratRate]) = {
