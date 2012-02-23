@@ -146,7 +146,7 @@ object DynamoDbEncoder {
     if (args != null){
       if (args.length == 1){
         if (args(0) == "updateThroughput")
-          updateTableThroughput(resultsTable, osTable, modelsTable, appsTable, bugsTable, similarsTable)
+          updateTableThroughput(resultsTable, osTable, modelsTable, hogsTable, bugsTable, similarsTable)
         if (args(0) == "clearTablesDangerous")
           clearTables()
       }
@@ -190,7 +190,7 @@ object DynamoDbEncoder {
     dd.deleteTable(del)
     del = new DeleteTableRequest(modelsTable)
     dd.deleteTable(del)
-    del = new DeleteTableRequest(appsTable)
+    del = new DeleteTableRequest(hogsTable)
     dd.deleteTable(del)
     del = new DeleteTableRequest(bugsTable)
     dd.deleteTable(del)
@@ -202,7 +202,7 @@ object DynamoDbEncoder {
     createResultsTable()
     createOsTable()
     createModelsTable()
-    createAppsTable()
+    createHogsTable()
     createBugsTable()
     createSimilarsTable()
   }
@@ -252,7 +252,7 @@ object DynamoDbEncoder {
     val ks = getKey.withAttributeName(resultKey)
     ks.setAttributeType("S")
     getKey = new KeySchemaElement()
-    val rk = getKey.withAttributeName(appKey)
+    val rk = getKey.withAttributeName(hogKey)
     rk.setAttributeType("S")
     // will only have current
     val req = new CreateTableRequest(bugsTable, new KeySchema(ks).withRangeKeyElement(rk))
@@ -260,12 +260,12 @@ object DynamoDbEncoder {
     dd.createTable(req)
   }
 
-  def createAppsTable() {
+  def createHogsTable() {
     val getKey = new KeySchemaElement()
-    val ks = getKey.withAttributeName(appKey)
+    val ks = getKey.withAttributeName(hogKey)
     ks.setAttributeType("S")
     // will only have current
-    val req = new CreateTableRequest(appsTable, new KeySchema(ks))
+    val req = new CreateTableRequest(hogsTable, new KeySchema(ks))
     req.setProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(30).withWriteCapacityUnits(20))
     dd.createTable(req)
   }

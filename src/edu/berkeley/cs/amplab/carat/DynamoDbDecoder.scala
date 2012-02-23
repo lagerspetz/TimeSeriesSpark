@@ -15,6 +15,7 @@ import com.amazonaws.services.dynamodb.model.Condition
 import com.amazonaws.services.dynamodb.model.QueryResult
 import com.amazonaws.AmazonClientException
 import com.amazonaws.AmazonServiceException
+import spark.timeseries.dynamodb.DynamoDbReader
 
 object DynamoDbDecoder {
   
@@ -58,6 +59,26 @@ object DynamoDbDecoder {
         println("Going to delete " +hashKeyName +" = " + hkey +", " +rangeKeyName +" = " + rkey + ": " + k + " from " + table)
         deleteItem(table, hkey, rkey)
       }
+    }
+  }
+  
+  def deleteAllItems(tableName:String, keyName:String){
+    DynamoDbReader.DynamoDbItemLoop(getAllItems(tableName), getAllItems(tableName, _), deleteResults(tableName, keyName, _, _, _))
+  }
+  
+  def deleteResults(tableName:String, keyName:String, index:Int, key:Key, results: List[Map[String, AttributeValue]]){
+    for (k <- results){
+      deleteItem(tableName, k.get(keyName).getS())
+    }
+  }
+  
+  def deleteAllItems(tableName:String, keyName:String, rKeyName:String){
+    DynamoDbReader.DynamoDbItemLoop(getAllItems(tableName), getAllItems(tableName, _), deleteResults(tableName, keyName, rKeyName, _, _, _))
+  }
+  
+  def deleteResults(tableName:String, keyName:String, rKeyName:String, index:Int, key:Key, results: List[Map[String, AttributeValue]]){
+    for (k <- results){
+      deleteItem(tableName, k.get(keyName).getS(), k.get(rKeyName).getS())
     }
   }
   

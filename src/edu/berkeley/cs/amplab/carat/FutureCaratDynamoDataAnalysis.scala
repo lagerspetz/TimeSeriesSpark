@@ -439,8 +439,8 @@ object FutureCaratDynamoDataAnalysis {
         val filtered = allRates.filter(_.allApps.contains(app))
         val filteredNeg = allRates.filter(!_.allApps.contains(app))
         println("Considering hog app=" + app)
-        if (writeTripletUngrouped(sc, filtered, filteredNeg, aPrioriDistribution, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
-          DynamoDbDecoder.deleteItem(appsTable, app), true)) {
+        if (writeTripletUngrouped(sc, filtered, filteredNeg, aPrioriDistribution, DynamoDbEncoder.put(hogsTable, hogKey, app, _, _, _, _, _, _),
+          DynamoDbDecoder.deleteItem(hogsTable, app), true)) {
           // this is a hog
           allHogs += app
         }
@@ -513,7 +513,7 @@ object FutureCaratDynamoDataAnalysis {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
           println("Considering bug app=" + app + " uuid=" + uuid)
-          writeTripletUngrouped(sc, appFromUuid, appNotFromUuid, aPrioriDistribution, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
+          writeTripletUngrouped(sc, appFromUuid, appNotFromUuid, aPrioriDistribution, DynamoDbEncoder.putBug(bugsTable, (resultKey, hogKey), (uuid, app), _, _, _, _, _, _),
             DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
         }
       }

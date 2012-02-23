@@ -14,7 +14,7 @@ object DataPlotter extends App {
   val lines = Source.fromFile("data/charts/alltables-2012-02-09.txt").getLines()
   for (k <- lines){
     //println("Line: " + k)
-    if (k.endsWith(appsTable)){
+    if (k.endsWith(hogsTable)){
       if (!hogs)
         println("Hogs:")
       hogs = true
@@ -25,14 +25,14 @@ object DataPlotter extends App {
       hogs = false
       bugs = true
     }
-    if (hogs && k.startsWith(appKey)){
+    if (hogs && k.startsWith(hogKey)){
       
       // collect and plot hogs
       //println("Line:" + k + " start with: " + appKey)
       parseLine(k, "hog")
     }
     
-    if (bugs && k.startsWith(appKey)){
+    if (bugs && k.startsWith(hogKey)){
       
       // collect and plot hogs
       //println("Line:" + k + " start with: " + appKey)

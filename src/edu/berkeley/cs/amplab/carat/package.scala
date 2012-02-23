@@ -14,8 +14,8 @@ package object carat {
   val similarsTable = "carat.similarusers"
   val similarKey = UUIDString
   
-  val appsTable = "carat.latestapps"
-  val appKey = "appName"
+  val hogsTable = "carat.latestapps"
+  val hogKey = "appName"
 
   val bugsTable = "carat.latestbugs"
   val expectedValue = "expectedValue"

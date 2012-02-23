@@ -377,6 +377,9 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
 
+    DynamoDbDecoder.deleteAllItems(hogsTable, hogKey)
+    DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
+    DynamoDbDecoder.deleteAllItems(similarsTable, resultKey)
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -435,8 +438,8 @@ object CaratDynamoDataAnalysis {
         val filtered = allRates.filter(_.allApps.contains(app))
         val filteredNeg = allRates.filter(!_.allApps.contains(app))
         println("Considering hog app=" + app)
-        if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(appsTable, appKey, app, _, _, _, _, _, _),
-          DynamoDbDecoder.deleteItem(appsTable, app), true)) {
+        if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(hogsTable, hogKey, app, _, _, _, _, _, _),
+          DynamoDbDecoder.deleteItem(hogsTable, app), true)) {
           // this is a hog
           allHogs += app
         }
@@ -509,7 +512,7 @@ object CaratDynamoDataAnalysis {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
           println("Considering bug app=" + app + " uuid=" + uuid)
-          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, appKey), (uuid, app), _, _, _, _, _, _),
+          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, hogKey), (uuid, app), _, _, _, _, _, _),
             DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
         }
       }
