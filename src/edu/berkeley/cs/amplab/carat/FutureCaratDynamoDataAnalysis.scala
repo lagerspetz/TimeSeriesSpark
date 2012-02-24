@@ -254,6 +254,7 @@ object FutureCaratDynamoDataAnalysis {
     var chargingSamples = 0
     var zeroBLCSamples = 0
     var allZeroSamples = 0
+    var pointRates = 0
 
     var rates = new ArrayBuffer[CaratRate]
 
@@ -287,6 +288,7 @@ object FutureCaratDynamoDataAnalysis {
               } else {
                 if (considerRate(r)) {
                   rates += r
+                  pointRates+=1
                 } else {
                   abandonedSamples += 1
                 }
@@ -314,8 +316,20 @@ object FutureCaratDynamoDataAnalysis {
       prevApps = apps
     }
 
-    printf("Abandoned %s all zero, %s charging, %s negative drain, %s > %s drain, %s zero drain BLC samples.\n", allZeroSamples, chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE, zeroBLCSamples)
+    println(nzf("Recorded %s point rates ",pointRates) +
+        nzf("abandoned %s all zero", allZeroSamples) +
+        nzf(", %s charging", chargingSamples) +
+        nzf(", %s negative drain", negDrainSamples) +
+        nzf("%s > "+ABNORMAL_RATE+" drain", abandonedSamples) +
+        nzf(", %s zero drain BLC", zeroBLCSamples) +" samples.")
     rates.toSeq
+  }
+  
+  def nzf(formatString:String, number:Int) = {
+    if (number > 0)
+      formatString.format(number)
+    else
+      ""
   }
 
   /**
@@ -346,32 +360,6 @@ object FutureCaratDynamoDataAnalysis {
       } else
         true
     }
-  }
-
-  /**
-   * Create a probability density function out of a set of CaratRates.
-   */
-  def prob(rates: Array[CaratRate]) = {
-    var sum = 0.0
-    var buf = new TreeMap[Double, Double]
-    for (d <- rates) {
-      if (d.isRateRange()) {
-        val disc = d.rateRange.discretize(DECIMALS)
-        for (k <- disc) {
-          var count = buf.get(k).getOrElse(0.0) + 1.0 / disc.size
-          buf += ((k, count))
-        }
-      } else {
-        var count = buf.get(d.rate).getOrElse(0.0) + 1.0
-        buf += ((d.rate, count))
-      }
-      // sum increases by one in either case.
-      sum += 1
-    }
-
-    for (k <- buf)
-      buf += ((k._1, k._2 / sum))
-    buf
   }
 
   /**
@@ -634,9 +622,8 @@ object FutureCaratDynamoDataAnalysis {
   def getApriori(allRates: RDD[CaratRate]) = {
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
-    val ap = allRates.filter(x => {
-      x.events1 == TRIGGER_BATTERYLEVELCHANGED && x.events2 == TRIGGER_BATTERYLEVELCHANGED
-    })
+    val ap = allRates.filter(!_.isRateRange())
+    assert(ap.count > 0, "AllRates should contain some rates that are not rateRanges when calculating aPriori.")
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {
       ((x.rate, 1.0))
