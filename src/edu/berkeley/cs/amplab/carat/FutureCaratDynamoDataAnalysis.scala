@@ -576,7 +576,7 @@ object FutureCaratDynamoDataAnalysis {
 
     val withCount = freqWith.count
     val withoutCount = freqWithout.count
-
+    println("getDist withCount=%s withoutCount=%s".format(withCount, withoutCount))
     if (withCount > 0 && withoutCount > 0) {
       println("rates=" + withCount + " ratesNeg=" + withoutCount)
       if (withCount < 10) {
