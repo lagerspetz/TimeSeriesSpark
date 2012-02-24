@@ -173,14 +173,23 @@ object DynamoDbDecoder {
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
 
-  def getItemsAfterRangeKey(table: String, keyPart: String, rangeKeyPart: Any, lastKey: Key = null, attributesToGet: Seq[String] = null) = {
+  def getItemsAfterRangeKey(table: String, keyPart: String, rangeKeyPart: String, lastKey: Key = null, attributesToGet: Seq[String] = null) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart))
     if (lastKey != null)
       q.setExclusiveStartKey(lastKey)
     if (attributesToGet != null)
       q.setAttributesToGet(attributesToGet)
     if (rangeKeyPart != null)
-      q.setRangeKeyCondition(new Condition().withComparisonOperator("GT").withAttributeValueList(new AttributeValue().withN(rangeKeyPart + "")))
+      q.setRangeKeyCondition(new Condition().withComparisonOperator("GT").withAttributeValueList(new AttributeValue().withN(rangeKeyPart)))
+    getItems(q)
+  }
+  
+  def getItems(table: String, keyPart: String, lastKey: Key = null, attributesToGet: Seq[String] = null): (Key, List[Map[String, AttributeValue]]) = {
+    val q = new QueryRequest(table, new AttributeValue(keyPart))
+    if (lastKey != null)
+      q.setExclusiveStartKey(lastKey)
+    if (attributesToGet != null)
+      q.setAttributesToGet(attributesToGet)
     getItems(q)
   }
   

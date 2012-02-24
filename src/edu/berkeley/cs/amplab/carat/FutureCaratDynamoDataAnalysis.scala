@@ -316,12 +316,12 @@ object FutureCaratDynamoDataAnalysis {
       prevApps = apps
     }
 
-    println(nzf("Recorded %s point rates ",pointRates) +
-        nzf("abandoned %s all zero", allZeroSamples) +
-        nzf(", %s charging", chargingSamples) +
-        nzf(", %s negative drain", negDrainSamples) +
-        nzf("%s > "+ABNORMAL_RATE+" drain", abandonedSamples) +
-        nzf(", %s zero drain BLC", zeroBLCSamples) +" samples.")
+    println(nzf("Recorded %s point rates ",pointRates) +"abandoned "+
+        nzf("%s all zero, ", allZeroSamples) +
+        nzf("%s charging, ", chargingSamples) +
+        nzf("%s negative drain, ", negDrainSamples) +
+        nzf("%s > "+ABNORMAL_RATE+" drain, ", abandonedSamples) +
+        nzf("%s zero drain BLC", zeroBLCSamples) +" samples.")
     rates.toSeq
   }
   
