@@ -163,7 +163,8 @@ object CaratDynamoDataToPlots {
         DynamoDbDecoder.getAllItems(registrationTable, _),
         handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
     }
-    allRates = allRates.union(oldRates)
+    if (oldRates != null)
+      allRates = allRates.union(oldRates)
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
