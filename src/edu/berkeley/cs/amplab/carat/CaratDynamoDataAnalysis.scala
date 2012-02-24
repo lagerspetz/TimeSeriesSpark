@@ -111,6 +111,8 @@ object CaratDynamoDataAnalysis {
         DEBUG = true
     }
     System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    // Fix Spark running out of space on AWS.
+    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
     sys.exit(0)

@@ -117,20 +117,22 @@ object CaratDynamoDataToPlots {
   }
 
   def plotEverything(master: String, debug: Boolean, plotDirectory: String) = {
-    if (debug)
+    if (debug) {
       DEBUG = true
-    else {
-      // turn on ProbUtil debug logging
-      System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    } else {
       // turn off INFO logging for spark:
       System.setProperty("hadoop.root.logger", "WARN,console")
       // This is misspelled in the spark jar log4j.properties:
       System.setProperty("log4j.threshhold", "WARN")
       // Include correct spelling to make sure
       System.setProperty("log4j.threshold", "WARN")
-      
-      System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
     }
+    // turn on ProbUtil debug logging
+    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
+
+    // Fix Spark running out of space on AWS.
+    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
     val sc = new SparkContext(master, "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
   }
