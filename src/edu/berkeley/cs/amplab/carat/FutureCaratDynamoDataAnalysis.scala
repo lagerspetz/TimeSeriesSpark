@@ -558,7 +558,7 @@ object FutureCaratDynamoDataAnalysis {
      */
 
     val freqWith = getFrequencies(aPrioriDistribution, one)
-    val freqWithout = getFrequencies(aPrioriDistribution, one)
+    val freqWithout = getFrequencies(aPrioriDistribution, two)
 
     var evDistance = 0.0
 
@@ -700,6 +700,9 @@ object FutureCaratDynamoDataAnalysis {
    * m <= 0 -> not
    */
   def evDiff(evWith: Double, evWithout: Double) = {
-    1.0 - evWithout / evWith
+    if (evWith == 0 && evWithout == 0)
+      0.0
+    else
+      1.0 - evWithout / evWith
   }
 }
