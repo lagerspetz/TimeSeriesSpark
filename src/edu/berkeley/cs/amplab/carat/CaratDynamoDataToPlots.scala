@@ -87,6 +87,8 @@ object CaratDynamoDataToPlots {
       System.setProperty("log4j.threshhold", "WARN")
       // Include correct spelling to make sure
       System.setProperty("log4j.threshold", "WARN")
+      
+      System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
     }
     val sc = new SparkContext(master, "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
@@ -397,9 +399,9 @@ object CaratDynamoDataToPlots {
       for (k <- cc)
         println(k)
     }*/
-    
+    println("Calculating aPriori.")
     val aPrioriDistribution = FutureCaratDynamoDataAnalysis.getApriori(allRates)
-
+    println("Calculated aPriori.")
     val apps = allRates.map(x => {
       var sampleApps = x.allApps
       sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
