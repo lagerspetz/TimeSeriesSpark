@@ -635,8 +635,7 @@ object FutureCaratDynamoDataAnalysis {
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
     val ap = allRates.filter(x => {
-      val ev = x.getAllEvents()
-      ev.size == 1 && ev.contains(TRIGGER_BATTERYLEVELCHANGED)
+      x.events1 == TRIGGER_BATTERYLEVELCHANGED && x.events2 == TRIGGER_BATTERYLEVELCHANGED
     })
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {

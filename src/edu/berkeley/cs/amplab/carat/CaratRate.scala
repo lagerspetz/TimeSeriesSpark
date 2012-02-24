@@ -42,7 +42,7 @@ class CaratRate(var uuid:String, val os:String, val model:String,
       (batt1 - batt2) * 100.0 / (time2 - time1)
   }
   
-  def getAllEvents() = {
+  def getTriggers() = {
     var k = new HashSet[String]
     k ++= events1
     k ++= events2
@@ -64,7 +64,7 @@ class CaratRate(var uuid:String, val os:String, val model:String,
       else
         "%4f".format(rate)
     } + " time1=%4f time2=%4f batt1=%4.2f batt2=%4.2f uuid=%s os=%s model=%s events=%s %s".format(time1, time2, batt1, batt2,
-      uuid, os, model, getAllEvents(), {
+      uuid, os, model, getTriggers(), {
         if (verbose)
           "apps=%s".format(allApps)
         else
