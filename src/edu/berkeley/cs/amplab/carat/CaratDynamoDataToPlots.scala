@@ -147,7 +147,6 @@ object CaratDynamoDataToPlots {
 
     // Master RDD for all data.
 
-    var time = 0.0
     val oldRates: spark.RDD[CaratRate] = {
       val f = new File(RATES_CACHED)
       if (f.exists()) {
