@@ -223,7 +223,7 @@ object CaratDynamoDataToPlots {
         true,
         distRet)
       }else{
-        distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, null, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+        distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
             DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
         handleSamples(sc, _, os, model, _),
         true,
