@@ -187,7 +187,9 @@ object CaratDynamoDataToPlots {
      */
     
     // Get last reg timestamp for set saving
-    last_reg = regs.last.get(regsTimestamp).getN().toDouble
+    if (regs.size > 0){
+      last_reg = regs.last.get(regsTimestamp).getN().toDouble
+    }
 
     // Remove duplicates caused by re-registrations:
     var regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
@@ -256,9 +258,10 @@ object CaratDynamoDataToPlots {
           println()
         }
       }
-
-    val lastSample = samples.last
-    last_sample = lastSample.get(sampleTime).getN().toDouble
+    if (samples.size > 0) {
+      val lastSample = samples.last
+      last_sample = lastSample.get(sampleTime).getN().toDouble
+    }
 
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(x => {
