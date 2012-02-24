@@ -525,6 +525,11 @@ object CaratDynamoDataToPlots {
     println("Calculating aPriori.")
     val aPrioriDistribution = FutureCaratDynamoDataAnalysis.getApriori(allRates)
     println("Calculated aPriori.")
+    if (aPrioriDistribution.size == 0)
+      println("WARN: a priori dist is empty!")
+    else
+      println("a priori dist:\n" + aPrioriDistribution.mkString("\n"))
+      
     val apps = allRates.map(x => {
       var sampleApps = x.allApps
       sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
