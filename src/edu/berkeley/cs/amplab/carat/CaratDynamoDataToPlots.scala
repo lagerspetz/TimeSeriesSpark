@@ -56,9 +56,13 @@ object CaratDynamoDataToPlots {
   val LAST_REG = "/mnt/TimeSeriesSpark/spark-temp/last-reg.txt"
   
   
-  var last_sample = readDoubleFromFile(LAST_SAMPLE)
+  val last_sample = readDoubleFromFile(LAST_SAMPLE)
   
-  var last_reg = readDoubleFromFile(LAST_REG)
+  var last_sample_write = 0.0
+  
+  val last_reg = readDoubleFromFile(LAST_REG)
+  
+  var last_reg_write = 0.0
 
   def readDoubleFromFile(file: String) = {
     val f = new File(file)
@@ -171,8 +175,8 @@ object CaratDynamoDataToPlots {
 
     if (allRates != null) {
       allRates.saveAsObjectFile(RATES_CACHED)
-      saveDoubleToFile(last_sample, LAST_SAMPLE)
-      saveDoubleToFile(last_reg, LAST_REG)
+      saveDoubleToFile(last_sample_write, LAST_SAMPLE)
+      saveDoubleToFile(last_reg_write, LAST_REG)
       analyzeRateData(sc, allRates, allUuids, allOses, allModels, plotDirectory)
     }else
       null
@@ -190,7 +194,7 @@ object CaratDynamoDataToPlots {
     
     // Get last reg timestamp for set saving
     if (regs.size > 0){
-      last_reg = regs.last.get(regsTimestamp).getN().toDouble
+      last_reg_write = regs.last.get(regsTimestamp).getN().toDouble
     }
 
     // Remove duplicates caused by re-registrations:
@@ -262,7 +266,7 @@ object CaratDynamoDataToPlots {
       }
     if (samples.size > 0) {
       val lastSample = samples.last
-      last_sample = lastSample.get(sampleTime).getN().toDouble
+      last_sample_write = lastSample.get(sampleTime).getN().toDouble
     }
 
     var rateRdd = sc.parallelize[CaratRate]({
