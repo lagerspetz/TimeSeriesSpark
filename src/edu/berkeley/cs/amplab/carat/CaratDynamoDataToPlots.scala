@@ -823,7 +823,7 @@ object CaratDynamoDataToPlots {
         val bucketEnd = xmax / (math.pow(logbase, buckets - x._1 - 1))
         
         (bucketStart+bucketEnd)/2 +" "+ x._2
-      }).collect()
+      }).collect().sorted
       
       for (k <- data)
         datafile.write(k +"\n")
