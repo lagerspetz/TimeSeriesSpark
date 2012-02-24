@@ -637,13 +637,12 @@ object FutureCaratDynamoDataAnalysis {
       val ev = x.getAllEvents()
       ev.size == 1 && ev.contains(TRIGGER_BATTERYLEVELCHANGED)
     })
-    if (ap.count() == 0)
-      println("WARN: Set of BLC intervals %s is empty when calculating aPriori.".format(ap))
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {
       ((x.rate, 1.0))
     }).groupByKey()
     // turn arrays of 1.0s to frequencies
+    println("Collecting aPriori.")
     grouped.map(x => { (x._1, x._2.sum) }).collect()
   }
 
