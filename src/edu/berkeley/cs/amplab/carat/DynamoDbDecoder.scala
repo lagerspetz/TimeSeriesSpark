@@ -106,7 +106,17 @@ object DynamoDbDecoder {
     val sr = DynamoDbEncoder.dd.scan(s)
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
-  
+
+  def filterItemsAfter(table: String, attrName: String, attrValue: String, lastKey: Key = null) = {
+    val s = new ScanRequest(table)
+    if (lastKey != null)
+      s.setExclusiveStartKey(lastKey)
+    val cond = new Condition().withComparisonOperator("GT").withAttributeValueList(new AttributeValue().withN(attrValue))
+    val conds = DynamoDbEncoder.convertToMap[Condition](Array((attrName, cond)))
+    s.setScanFilter(conds)
+    val sr = DynamoDbEncoder.dd.scan(s)
+    (sr.getLastEvaluatedKey(), sr.getItems())
+  }
   
   def getAllItems(table:String) = {
     println("Getting all items from table " + table)
@@ -163,12 +173,14 @@ object DynamoDbDecoder {
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
 
-  def getItems(table: String, keyPart: String, lastKey: Key = null, attributesToGet: Seq[String] = null): (Key, List[Map[String, AttributeValue]]) = {
+  def getItemsAfterRangeKey(table: String, keyPart: String, rangeKeyPart: Any, lastKey: Key = null, attributesToGet: Seq[String] = null) = {
     val q = new QueryRequest(table, new AttributeValue(keyPart))
     if (lastKey != null)
       q.setExclusiveStartKey(lastKey)
     if (attributesToGet != null)
       q.setAttributesToGet(attributesToGet)
+    if (rangeKeyPart != null)
+      q.setRangeKeyCondition(new Condition().withComparisonOperator("GT").withAttributeValueList(new AttributeValue().withN(rangeKeyPart + "")))
     getItems(q)
   }
   

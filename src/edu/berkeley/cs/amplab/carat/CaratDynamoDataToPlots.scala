@@ -13,6 +13,12 @@ import com.amazonaws.services.dynamodb.model.AttributeValue
 import java.io.File
 import java.text.SimpleDateFormat
 import java.io.ByteArrayOutputStream
+import com.amazonaws.services.dynamodb.model.Key
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.FileInputStream
+import java.io.FileWriter
+import java.io.FileOutputStream
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -44,6 +50,37 @@ object CaratDynamoDataToPlots {
   var DEBUG = false
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
+  
+  val RATES_CACHED = "/mnt/TimeSeriesSpark/spark-temp/cached-rates.dat"
+  val LAST_SAMPLE = "/mnt/TimeSeriesSpark/spark-temp/last-sample.txt"
+  val LAST_REG = "/mnt/TimeSeriesSpark/spark-temp/last-reg.txt"
+  
+  
+  var last_sample = readDoubleFromFile(LAST_SAMPLE)
+  
+  var last_reg = readDoubleFromFile(LAST_REG)
+
+  def readDoubleFromFile(file: String) = {
+    val f = new File(file)
+    if (!f.exists() && !f.createNewFile())
+      throw new Error("Could not create %s for reading!".format(file))
+    val rd = new BufferedReader(new InputStreamReader(new FileInputStream(f)))
+    var s = rd.readLine()
+    rd.close()
+    if (s != null && s.length > 0) {
+      s.toDouble
+    } else
+      0.0
+  }
+  
+  def saveDoubleToFile(d:Double, file:String) {
+    val f = new File(file)
+    if (!f.exists() && !f.createNewFile())
+      throw new Error("Could not create %s for saving %f!".format(file, d))
+    val wr = new FileWriter(file)
+    wr.write(d+"\n")
+    wr.close()
+  }
   
   val dfs = "yyyy-MM-dd"
   val df = new SimpleDateFormat(dfs)
@@ -105,17 +142,35 @@ object CaratDynamoDataToPlots {
     val allOses = new scala.collection.mutable.HashSet[String]
 
     // Master RDD for all data.
+
+    var time = 0.0
+    val oldRates: spark.RDD[CaratRate] = {
+      val f = new File(RATES_CACHED)
+      if (f.exists()) {
+        sc.objectFile(RATES_CACHED)
+      } else
+        null
+    }
+    
     var allRates: spark.RDD[CaratRate] = null
 
-    allRates = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
-      DynamoDbDecoder.getAllItems(registrationTable, _),
-      handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
-      
+    if (last_reg > 0) {
+      allRates = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+        DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
+        handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
+    } else {
+      allRates = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+        DynamoDbDecoder.getAllItems(registrationTable, _),
+        handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
+    }
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
 
     if (allRates != null) {
+      allRates.saveAsObjectFile(RATES_CACHED)
+      saveDoubleToFile(last_sample, LAST_SAMPLE)
+      saveDoubleToFile(last_reg, LAST_REG)
       analyzeRateData(sc, allRates, allUuids, allOses, allModels, plotDirectory)
     }else
       null
@@ -130,6 +185,9 @@ object CaratDynamoDataToPlots {
     /* FIXME: I would like to do this in parallel, but that would not let me re-use
      * all the data for the other uuids, resulting in n^2 execution time.
      */
+    
+    // Get last reg timestamp for set saving
+    last_reg = regs.last.get(regsTimestamp).getN().toDouble
 
     // Remove duplicates caused by re-registrations:
     var regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
@@ -154,11 +212,19 @@ object CaratDynamoDataToPlots {
       println("Handling reg:" + x)
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-        DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-        FutureCaratDynamoDataAnalysis.handleSamples(sc, _, os, model, _),
+      if (last_sample > 0){
+      distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+        DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+        handleSamples(sc, _, os, model, _),
         true,
         distRet)
+      }else{
+        distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, null, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+            DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, null, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+        handleSamples(sc, _, os, model, _),
+        true,
+        distRet)
+      }
       /* 
        * distRet here augments by 1 user at a time, so statistics for rates while adding a user at a time can be calculated here
        * 
@@ -173,6 +239,56 @@ object CaratDynamoDataToPlots {
     distRet
   }
 
+    /**
+   * Process a bunch of samples, assumed to be in order by uuid and timestamp.
+   * will return an RDD of CaratRates. Samples need not be from the same uuid.
+   */
+  def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]], os: String, model: String, rates: RDD[CaratRate]) = {
+    if (DEBUG)
+      if (samples.size < 100) {
+        for (x <- samples) {
+          for (k <- x) {
+            if (k._2.isInstanceOf[Seq[String]])
+              print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ") ")
+            else
+              print(k + " ")
+          }
+          println()
+        }
+      }
+
+    val lastSample = samples.last
+    last_sample = lastSample.get(sampleTime).getN().toDouble
+
+    var rateRdd = sc.parallelize[CaratRate]({
+      val mapped = samples.map(x => {
+        /* See properties in package.scala for data keys. */
+        val uuid = x.get(sampleKey).getS()
+        val apps = x.get(sampleProcesses).getSS().map(w => {
+          if (w == null)
+            ""
+          else {
+            val s = w.split(";")
+            if (s.size > 1)
+              s(1).trim
+            else
+              ""
+          }
+        })
+
+        val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
+        val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
+        val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
+        val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
+        (uuid, time, batteryLevel, event, batteryState, apps)
+      })
+      FutureCaratDynamoDataAnalysis.rateMapperPairwise(os, model, mapped)
+    })
+    if (rates != null)
+      rateRdd = rateRdd.union(rates)
+    rateRdd
+  }
+  
   /**
    * Sample or any other record size calculator function. Takes multiple records as input and produces a
    * Map of (key, size, compressedSize) pairs where the sizes are in Bytes. the first size is the pessimistic

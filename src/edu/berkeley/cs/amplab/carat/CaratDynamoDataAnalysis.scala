@@ -135,8 +135,8 @@ object CaratDynamoDataAnalysis {
       println("Handling reg:" + x)
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-        DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+      distRet = DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, null, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+        DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, null, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
         handleSamples(sc, _, os, model, _),
         true,
         distRet)
@@ -162,14 +162,14 @@ object CaratDynamoDataAnalysis {
     distRet = stepHandler(results, dist)
 
     while (key != null) {
-
       println("Continuing from key=" + key)
       var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
       /* Re-use last zero-drain samples here, if any.
        * Not used now; taking the final sample is enough. */
       /*if (prefixer != null)
         results2.prepend(... ++= prefixer(results))*/
-      results2.prepend(results.last)
+      if (prefix)
+        results2.prepend(results.last)
       results = results2
       key = key2
       println("Got: " + results.size + " results.")
