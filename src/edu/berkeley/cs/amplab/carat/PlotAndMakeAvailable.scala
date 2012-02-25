@@ -5,6 +5,7 @@ object PlotAndMakeAvailable extends App {
   val plotwww = "/mnt/www/plots"
     
   // rm -rf /mnt/www/plots/*.eps
+  // rm -rf /mnt/www/plots/*/*.eps
   val f = new File(plotwww)
   val flist = f.listFiles
   for (k <- flist){
@@ -14,14 +15,14 @@ object PlotAndMakeAvailable extends App {
       })
       for (j <- klist)
         j.delete()
-    }
-    k.delete()
+    }else
+      k.delete()
   }
 
   val plotDir = CaratDynamoDataToPlots.plotEverything("local[2]", true, plotwww)
   // /mnt/www/treethumbnailer.sh /mnt/www/plots
 
-  val temp = Runtime.getRuntime().exec(Array("/bin/bash", "/mnt/www/treethumbnailer.sh", "/mnt/www/plots"))
+  val temp = Runtime.getRuntime().exec(Array("/bin/bash", "/mnt/www/treethumbnailer.sh", plotwww))
   val err_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getErrorStream()))
   val out_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getInputStream()))
   var line = err_read.readLine()

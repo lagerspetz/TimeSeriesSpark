@@ -813,7 +813,7 @@ object CaratDynamoDataToPlots {
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
 
-      val data = dist.map(x => {
+      val dataPairs = dist.map(x => {
         val bucketStart = {
           if (x._1 == 0)
             0.0
@@ -822,11 +822,13 @@ object CaratDynamoDataToPlots {
         }
         val bucketEnd = xmax / (math.pow(logbase, buckets - x._1 - 1))
         
-        (bucketStart+bucketEnd)/2 +" "+ x._2
-      }).collect().sorted
+       ((bucketStart+bucketEnd)/2, x._2)
+      }).collect()
+      var dataMap = new TreeMap[Double, Double]
+      dataMap ++= dataPairs
       
-      for (k <- data)
-        datafile.write(k +"\n")
+      for (k <- dataMap)
+        datafile.write(k._1 +" "+k._2 +"\n")
       datafile.close
     }
   }
