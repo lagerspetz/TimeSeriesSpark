@@ -3,7 +3,11 @@ package edu.berkeley.cs.amplab
 import spark.RDD
 import scala.collection.immutable.TreeMap
 package object carat {
+  // Carat Website bucket
   val BUCKET_WEBSITE = "carat.website"
+    
+  // Daemons file on S3
+  val DAEMON_FILE = "daemons.txt"
 
   val CARAT = "Carat"
   val UUIDString = "uuId"
