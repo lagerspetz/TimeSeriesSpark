@@ -38,6 +38,6 @@ object PlotAndMakeAvailable extends App {
       line2 = out_read.readLine()
     }
   }
-  temp.waitFor()
+  //temp.waitFor()
   sys.exit(0)
 }
