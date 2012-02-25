@@ -8,6 +8,6 @@ do
   &> "carat-dynamo-data-analysis-log-$d.txt"
   d=$( date +%Y-%m-%d-%H-%M-%S ).txt
   echo "Analysis finished at $d"
-  rm -rf spark-temp/spark-local
+  rm -rf spark-temp/spark-local-*
   sleep 3600
 done
