@@ -19,6 +19,7 @@ import java.io.InputStreamReader
 import java.io.FileInputStream
 import java.io.FileWriter
 import java.io.FileOutputStream
+import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -51,40 +52,18 @@ object CaratDynamoDataToPlots {
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
   
+  val RATES_CACHED_NEW = "/mnt/TimeSeriesSpark/spark-temp/cached-rates-new.dat"
   val RATES_CACHED = "/mnt/TimeSeriesSpark/spark-temp/cached-rates.dat"
   val LAST_SAMPLE = "/mnt/TimeSeriesSpark/spark-temp/last-sample.txt"
   val LAST_REG = "/mnt/TimeSeriesSpark/spark-temp/last-reg.txt"
   
-  
-  val last_sample = readDoubleFromFile(LAST_SAMPLE)
+  val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
   
   var last_sample_write = 0.0
   
-  val last_reg = readDoubleFromFile(LAST_REG)
+  val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
   
   var last_reg_write = 0.0
-
-  def readDoubleFromFile(file: String) = {
-    val f = new File(file)
-    if (!f.exists() && !f.createNewFile())
-      throw new Error("Could not create %s for reading!".format(file))
-    val rd = new BufferedReader(new InputStreamReader(new FileInputStream(f)))
-    var s = rd.readLine()
-    rd.close()
-    if (s != null && s.length > 0) {
-      s.toDouble
-    } else
-      0.0
-  }
-  
-  def saveDoubleToFile(d:Double, file:String) {
-    val f = new File(file)
-    if (!f.exists() && !f.createNewFile())
-      throw new Error("Could not create %s for saving %f!".format(file, d))
-    val wr = new FileWriter(file)
-    wr.write(d+"\n")
-    wr.close()
-  }
   
   val dfs = "yyyy-MM-dd"
   val df = new SimpleDateFormat(dfs)
@@ -132,9 +111,10 @@ object CaratDynamoDataToPlots {
     System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
 
     // Fix Spark running out of space on AWS.
-    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
+    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
     val sc = new SparkContext(master, "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
+    DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
   }
   
   /**
@@ -160,11 +140,11 @@ object CaratDynamoDataToPlots {
     var allRates: spark.RDD[CaratRate] = null
 
     if (last_reg > 0) {
-      allRates = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
         DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
         handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
     } else {
-      allRates = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
         DynamoDbDecoder.getAllItems(registrationTable, _),
         handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
     }
@@ -175,9 +155,9 @@ object CaratDynamoDataToPlots {
     println("All models: " + allModels.mkString(", "))
 
     if (allRates != null) {
-      allRates.saveAsObjectFile(RATES_CACHED)
-      saveDoubleToFile(last_sample_write, LAST_SAMPLE)
-      saveDoubleToFile(last_reg_write, LAST_REG)
+      allRates.saveAsObjectFile(RATES_CACHED_NEW)
+      DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
+      DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
       analyzeRateData(sc, allRates, allUuids, allOses, allModels, plotDirectory)
     }else
       null
@@ -199,13 +179,7 @@ object CaratDynamoDataToPlots {
     }
 
     // Remove duplicates caused by re-registrations:
-    var regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
-    regSet ++= regs.map(x => {
-      val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
-      val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
-      val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
-      (uuid, model, os)
-    })
+    var regSet: Set[(String, String, String)] = DynamoAnalysisUtil.regSet(regs)
 
     var distRet: spark.RDD[CaratRate] = dist
     for (x <- regSet) {
@@ -222,13 +196,13 @@ object CaratDynamoDataToPlots {
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
       if (last_sample > 0){
-      distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample+"", null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+      distRet = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample+"", null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
         DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample+"", _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
         handleSamples(sc, _, os, model, _),
         true,
         distRet)
       }else{
-        distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
+        distRet = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
             DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
         handleSamples(sc, _, os, model, _),
         true,
@@ -292,7 +266,7 @@ object CaratDynamoDataToPlots {
         val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
-      FutureCaratDynamoDataAnalysis.rateMapperPairwise(os, model, mapped)
+      DynamoAnalysisUtil.rateMapperPairwise(os, model, mapped)
     })
     if (rates != null)
       rateRdd = rateRdd.union(rates)
@@ -344,7 +318,6 @@ object CaratDynamoDataToPlots {
     (b, bos.toByteArray().length)
   }
   
-  
   /**
    * TODO: This function should calculate the stddev of all the distributions that it calculates, and return those in some sort of data structure.
    * The stddevs would then be added to by a future iteration of this function, etc., until we have a time series of stddevs for all the distributions
@@ -364,15 +337,9 @@ object CaratDynamoDataToPlots {
     /* evDistances*/
     var evDistanceByUuid = new TreeMap[String, Double]
     
-    var appsByUuid = new TreeMap[String, scala.collection.mutable.HashSet[String]]
-
-    /*if (DEBUG) {
-      val cc = allRates.collect()
-      for (k <- cc)
-        println(k)
-    }*/
+    var appsByUuid = new TreeMap[String, Set[String]]
     
-    val aPrioriDistribution = FutureCaratDynamoDataAnalysis.getApriori(allRates)
+    val aPrioriDistribution = DynamoAnalysisUtil.getApriori(allRates)
     if (aPrioriDistribution.size == 0)
       println("WARN: a priori dist is empty!")
     else
@@ -418,46 +385,12 @@ object CaratDynamoDataToPlots {
       }
     }
 
-    var intersectEverReportedApps = new scala.collection.mutable.HashSet[String]
-    var intersectPerSampleApps = new scala.collection.mutable.HashSet[String]
-
     for (uuid <- uuids) {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
-      val tempApps = fromUuid.map(x => {
-        var sampleApps = x.allApps
-        sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-        sampleApps --= allHogs
-        sampleApps
-      }).collect()
-
-      val uuidAppsTemp = fromUuid.map(x => {
-        var sampleApps = x.allApps
-        sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-        sampleApps
-      }).collect()
-
-      var uuidApps = new scala.collection.mutable.HashSet[String]
-      var nonHogApps = new scala.collection.mutable.HashSet[String]
-
-      // Get all apps ever reported, also compute likely daemons
-      for (k <- tempApps) {
-        nonHogApps ++= k
-        if (intersectPerSampleApps.size == 0)
-          intersectPerSampleApps ++= k
-        else if (k.size > 0)
-          intersectPerSampleApps = intersectPerSampleApps.intersect(k)
-      }
-
-      for (k <- uuidAppsTemp) {
-        uuidApps ++= k
-      }
-
-      //Another method to find likely daemons
-      if (intersectEverReportedApps.size == 0)
-        intersectEverReportedApps = uuidApps
-      else if (uuidApps.size > 0)
-        intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
+      var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+      uuidApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
+      val nonHogApps = uuidApps -- allHogs
 
       if (uuidApps.size > 0)
         similarApps(sc, allRates, aPrioriDistribution, uuid, uuidApps, plotDirectory)
@@ -486,20 +419,6 @@ object CaratDynamoDataToPlots {
     }
     
     plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
-    
-    val removed = FutureCaratDynamoDataAnalysis.DAEMONS_LIST -- intersectEverReportedApps
-    val removedPS = FutureCaratDynamoDataAnalysis.DAEMONS_LIST -- intersectPerSampleApps
-    intersectEverReportedApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-    intersectPerSampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-    println("Daemons: " + FutureCaratDynamoDataAnalysis.DAEMONS_LIST)
-    if (intersectEverReportedApps.size > 0)
-      println("New possible daemons (ever reported): " + intersectEverReportedApps)
-    if (intersectPerSampleApps.size > 0)
-      println("New possible daemons (per sample): " + intersectPerSampleApps)
-    if (removed.size > 0)
-      println("Removed daemons (ever reported): " + removed)
-    if (removedPS.size > 0)
-      println("Removed daemons (per sample): " + removedPS)
     // return plot directory for caller
     dateString + "/" + PLOTS
   }
@@ -522,15 +441,10 @@ object CaratDynamoDataToPlots {
     /* evDistances*/
     var evDistanceByUuid = new TreeMap[String, Double]
     
-    var appsByUuid = new TreeMap[String, scala.collection.mutable.HashSet[String]]
+    var appsByUuid = new TreeMap[String, Set[String]]
 
-    /*if (DEBUG) {
-      val cc = allRates.collect()
-      for (k <- cc)
-        println(k)
-    }*/
     println("Calculating aPriori.")
-    val aPrioriDistribution = FutureCaratDynamoDataAnalysis.getApriori(allRates)
+    val aPrioriDistribution = DynamoAnalysisUtil.getApriori(allRates)
     println("Calculated aPriori.")
     if (aPrioriDistribution.size == 0)
       println("WARN: a priori dist is empty!")
@@ -577,48 +491,13 @@ object CaratDynamoDataToPlots {
       }
     }
 
-    var intersectEverReportedApps = new scala.collection.mutable.HashSet[String]
-    var intersectPerSampleApps = new scala.collection.mutable.HashSet[String]
-
     for (uuid <- uuids) {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
-      val tempApps = fromUuid.map(x => {
-        var sampleApps = x.allApps
-        sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-        sampleApps --= allHogs
-        sampleApps
-      }).collect()
-
-      val uuidAppsTemp = fromUuid.map(x => {
-        var sampleApps = x.allApps
-        sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-        sampleApps
-      }).collect()
-
-      var uuidApps = new scala.collection.mutable.HashSet[String]
-      var nonHogApps = new scala.collection.mutable.HashSet[String]
-
-      // Get all apps ever reported, also compute likely daemons
-      for (k <- tempApps) {
-        nonHogApps ++= k
-        if (intersectPerSampleApps.size == 0)
-          intersectPerSampleApps ++= k
-        else if (k.size > 0)
-          intersectPerSampleApps = intersectPerSampleApps.intersect(k)
-      }
-
-      for (k <- uuidAppsTemp) {
-        uuidApps ++= k
-      }
-
-
-      //Another method to find likely daemons
-      if (intersectEverReportedApps.size == 0)
-        intersectEverReportedApps = uuidApps
-      else if (uuidApps.size > 0)
-        intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
-
+      var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+      uuidApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
+      val nonHogApps = uuidApps -- allHogs
+    
       if (uuidApps.size > 0)
         similarApps(sc, allRates, aPrioriDistribution, uuid, uuidApps, plotDirectory)
       //else
@@ -644,22 +523,7 @@ object CaratDynamoDataToPlots {
         }
       }
     }
-    
     plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
-    
-    val removed = FutureCaratDynamoDataAnalysis.DAEMONS_LIST -- intersectEverReportedApps
-    val removedPS = FutureCaratDynamoDataAnalysis.DAEMONS_LIST -- intersectPerSampleApps
-    intersectEverReportedApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-    intersectPerSampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-    println("Daemons: " + FutureCaratDynamoDataAnalysis.DAEMONS_LIST)
-    if (intersectEverReportedApps.size > 0)
-      println("New possible daemons (ever reported): " + intersectEverReportedApps)
-    if (intersectPerSampleApps.size > 0)
-      println("New possible daemons (per sample): " + intersectPerSampleApps)
-    if (removed.size > 0)
-      println("Removed daemons (ever reported): " + removed)
-    if (removedPS.size > 0)
-      println("Removed daemons (per sample): " + removedPS)
     // return plot directory for caller
     dateString + "/" + PLOTS
   }
@@ -668,7 +532,7 @@ object CaratDynamoDataToPlots {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(sc:SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], uuid: String, uuidApps: scala.collection.mutable.Set[String], plotDirectory:String) {
+  def similarApps(sc:SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], uuid: String, uuidApps: Set[String], plotDirectory:String) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -703,7 +567,7 @@ object CaratDynamoDataToPlots {
     distsWithoutUuid: TreeMap[String, RDD[(Int, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, scala.collection.mutable.HashSet[String]], plotDirectory:String) {
+    appsByUuid: TreeMap[String, Set[String]], plotDirectory:String) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
