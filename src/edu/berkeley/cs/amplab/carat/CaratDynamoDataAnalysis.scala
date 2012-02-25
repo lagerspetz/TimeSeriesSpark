@@ -83,8 +83,7 @@ object CaratDynamoDataAnalysis {
     // Include correct spelling to make sure
     System.setProperty("log4j.threshold", "WARN")
     
-    System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
-    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    System.setProperty("log4j.logger.spark.timeseries.ProbUtil", "DEBUG")
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
@@ -105,6 +104,7 @@ object CaratDynamoDataAnalysis {
     val allOses = new scala.collection.mutable.HashSet[String]
 
     // Master RDD for old data.
+    println("Getting old rates from %s".format(RATES_CACHED))
     val oldRates: spark.RDD[CaratRate] = {
       val f = new File(RATES_CACHED)
       if (f.exists()) {
@@ -115,6 +115,7 @@ object CaratDynamoDataAnalysis {
     // for all data
     var allRates: spark.RDD[CaratRate] = null
 
+    println("Retrieving rates from DynamoDb starting with timestamp=%f".format(last_reg))
     if (last_reg > 0) {
       allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
         DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
@@ -132,9 +133,11 @@ object CaratDynamoDataAnalysis {
     println("All models: " + allModels.mkString(", "))
 
     if (allRates != null) {
+      println("Saving rates for next time")
       allRates.saveAsObjectFile(RATES_CACHED_NEW)
       DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
       DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
+      println("Analysing data")
       analyzeRateData(allRates, allUuids, allOses, allModels)
     }
   }
@@ -226,8 +229,10 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
     //Remove Daemons
+    println("Removing daemons from the database")
     RemoveDaemons.main(Array("DAEMONS"))
     //Remove old bugs
+    println("Clearing bugs")
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
     /**
      * uuid distributions, xmax, ev and evNeg
@@ -296,6 +301,7 @@ object CaratDynamoDataAnalysis {
       6. remove similarApps sets for users with zero intersections while adding new similarApps sets
     */
     val globalNonHogs = allApps -- allHogs
+    println("Removing non-hogs from the hogs table: " + globalNonHogs)
     DynamoDbDecoder.deleteItems(hogsTable, hogKey, globalNonHogs.map(x => {
       (hogKey, x)
     }).toArray: _*)
@@ -335,6 +341,7 @@ object CaratDynamoDataAnalysis {
         }
       }
     }
+    println("Saving J-Scores")
     // Save J-Scores of all users.
     writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
   }

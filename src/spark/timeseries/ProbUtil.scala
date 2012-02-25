@@ -8,7 +8,7 @@ import spark.SparkContext._
  * Various utilities for probability distribution processing.
  */
 object ProbUtil extends Logging {
-
+  
   /**
    * Get the expected value of a probability distribution.
    * The EV is x*y / sum(y), where sum(y) is 1 for a probability distribution.
