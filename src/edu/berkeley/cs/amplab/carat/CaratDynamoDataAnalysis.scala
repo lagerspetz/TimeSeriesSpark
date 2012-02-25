@@ -76,6 +76,14 @@ object CaratDynamoDataAnalysis {
       if (args.length > 1 && args(1) == "DEBUG")
         DEBUG = true
     }
+    // turn off INFO logging for spark:
+    System.setProperty("hadoop.root.logger", "WARN,console")
+    // This is misspelled in the spark jar log4j.properties:
+    System.setProperty("log4j.threshhold", "WARN")
+    // Include correct spelling to make sure
+    System.setProperty("log4j.threshold", "WARN")
+    
+    System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
     System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
