@@ -16,6 +16,7 @@ import edu.berkeley.cs.amplab.carat.dynamodb.RemoveDaemons
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileWriter
+import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -31,14 +32,13 @@ import java.io.FileWriter
  *    and comparing it with (A intersection sample.getAllApps()).size < ln(A).
  *
  * Where uuId is a unique device identifier.
+ * 
+ * Note: We do not store hogs or bugs with negative distance values.
  *
  * @author Eemil Lagerspetz
  */
 
 object CaratDynamoDataAnalysis {
-  /**
-   * We do not store hogs or bugs with negative distance values.
-   */
 
   // Bucketing and decimal constants
   val BUCKETS = 100
@@ -48,10 +48,8 @@ object CaratDynamoDataAnalysis {
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
 
-  // Daemons file on S3
-  val DAEMON_FILE = "daemons.txt"
   // Daemons list, read from S3
-  val DAEMONS_LIST = readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
+  val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
 
   // For saving rates so they do not have to be fetched from DynamoDB every time
   val RATES_CACHED = "/mnt/TimeSeriesSpark/spark-temp/stable-cached-rates.dat"
@@ -60,47 +58,13 @@ object CaratDynamoDataAnalysis {
   val LAST_SAMPLE = "/mnt/TimeSeriesSpark/spark-temp/stable-last-sample.txt"
   val LAST_REG = "/mnt/TimeSeriesSpark/spark-temp/stable-last-reg.txt"
 
-  val last_sample = readDoubleFromFile(LAST_SAMPLE)
+  val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
 
   var last_sample_write = 0.0
 
-  val last_reg = readDoubleFromFile(LAST_REG)
+  val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
 
   var last_reg_write = 0.0
-
-  def readDoubleFromFile(file: String) = {
-    val f = new File(file)
-    if (!f.exists() && !f.createNewFile())
-      throw new Error("Could not create %s for reading!".format(file))
-    val rd = new BufferedReader(new InputStreamReader(new FileInputStream(f)))
-    var s = rd.readLine()
-    rd.close()
-    if (s != null && s.length > 0) {
-      s.toDouble
-    } else
-      0.0
-  }
-
-  def saveDoubleToFile(d: Double, file: String) {
-    val f = new File(file)
-    if (!f.exists() && !f.createNewFile())
-      throw new Error("Could not create %s for saving %f!".format(file, d))
-    val wr = new FileWriter(file)
-    wr.write(d + "\n")
-    wr.close()
-  }
-
-  def readS3LineSet(bucket: String, file: String) = {
-    var r: Set[String] = new HashSet[String]
-    val rd = new BufferedReader(new InputStreamReader(S3Decoder.get(bucket, file)))
-    var s = rd.readLine()
-    while (s != null) {
-      r += s
-      s = rd.readLine()
-    }
-    println("Daemons list downloaded: " + r)
-    r
-  }
 
   /**
    * Main program entry point.
@@ -118,10 +82,7 @@ object CaratDynamoDataAnalysis {
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
     // replace old rate file
-    val rem = Runtime.getRuntime().exec(Array("/bin/rm","-rf", RATES_CACHED))
-    rem.waitFor()
-    val move = Runtime.getRuntime().exec(Array("/bin/mv",RATES_CACHED_NEW, RATES_CACHED))
-    move.waitFor()
+    DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
     sys.exit(0)
   }
 
@@ -147,11 +108,11 @@ object CaratDynamoDataAnalysis {
     var allRates: spark.RDD[CaratRate] = null
 
     if (last_reg > 0) {
-      allRates = DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
         DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
         handleRegs(sc, _, _, allUuids, allOses, allModels), false, allRates)
     } else {
-      allRates = DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
         DynamoDbDecoder.getAllItems(registrationTable, _),
         handleRegs(sc, _, _, allUuids, allOses, allModels), false, allRates)
     }
@@ -164,8 +125,8 @@ object CaratDynamoDataAnalysis {
 
     if (allRates != null) {
       allRates.saveAsObjectFile(RATES_CACHED_NEW)
-      saveDoubleToFile(last_sample_write, LAST_SAMPLE)
-      saveDoubleToFile(last_reg_write, LAST_REG)
+      DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
+      DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
       analyzeRateData(allRates, allUuids, allOses, allModels)
     }
   }
@@ -186,13 +147,7 @@ object CaratDynamoDataAnalysis {
     }
 
     // Remove duplicates caused by re-registrations:
-    var regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
-    regSet ++= regs.map(x => {
-      val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
-      val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
-      val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
-      (uuid, model, os)
-    })
+    var regSet: Set[(String, String, String)] = DynamoAnalysisUtil.regSet(regs)
 
     var distRet: spark.RDD[CaratRate] = dist
     for (x <- regSet) {
@@ -209,53 +164,18 @@ object CaratDynamoDataAnalysis {
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
       if (last_sample > 0) {
-        distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample + "", null, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
+        distRet = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample + "", null, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
           DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample + "", _, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
           handleSamples(sc, _, os, model, _),
           true,
           distRet)
       } else {
-        distRet = FutureCaratDynamoDataAnalysis.DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
+        distRet = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
           DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)),
           handleSamples(sc, _, os, model, _),
           true,
           distRet)
       }
-    }
-    distRet
-  }
-
-  /**
-   * Generic Carat DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
-   * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
-   */
-  def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
-    tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
-    stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
-    prefix: Boolean, /*prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],*/
-    dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
-    var finished = false
-
-    var (key, results) = tableAndValueToKeyAndResults
-    println("Got: " + results.size + " results.")
-
-    var distRet: spark.RDD[CaratRate] = null
-    distRet = stepHandler(results, dist)
-
-    while (key != null) {
-      println("Continuing from key=" + key)
-      var (key2, results2) = tableAndValueToKeyAndResultsContinue(key)
-      /* Re-use last zero-drain samples here, if any.
-       * Not used now; taking the final sample is enough. */
-      /*if (prefixer != null)
-        results2.prepend(... ++= prefixer(results))*/
-      if (prefix)
-        results2.prepend(results.last)
-      results = results2
-      key = key2
-      println("Got: " + results.size + " results.")
-
-      distRet = stepHandler(results, distRet)
     }
     distRet
   }
@@ -283,153 +203,13 @@ object CaratDynamoDataAnalysis {
       last_sample_write = lastSample.get(sampleTime).getN().toDouble
     }
 
+    val mapped = samples.map(DynamoAnalysisUtil.sampleMapper)
     var rateRdd = sc.parallelize[CaratRate]({
-      val mapped = samples.map(x => {
-        /* See properties in package.scala for data keys. */
-        val uuid = x.get(sampleKey).getS()
-        val apps = x.get(sampleProcesses).getSS().map(w => {
-          if (w == null)
-            ""
-          else {
-            val s = w.split(";")
-            if (s.size > 1)
-              s(1).trim
-            else
-              ""
-          }
-        })
-
-        val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
-        val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
-        val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
-        val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
-        (uuid, time, batteryLevel, event, batteryState, apps)
-      })
-      rateMapperPairwise(os, model, mapped)
+      DynamoAnalysisUtil.rateMapperPairwise(os, model, mapped)
     })
     if (rates != null)
       rateRdd = rateRdd.union(rates)
     rateRdd
-  }
-
-  /**
-   * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
-   * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
-   */
-  def rateMapperPairwise(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
-    val charge = "charging"
-    val discharge = "unplugged"
-    val blc = "batterylevelchanged"
-    // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
-    var prevD = 0.0
-    var prevBatt = 0.0
-    var prevEvent = ""
-    var prevState = ""
-    var prevApps: Seq[String] = Array[String]()
-
-    var d = 0.0
-    var batt = 0.0
-    var event = ""
-    var state = ""
-    var apps: Seq[String] = Array[String]()
-
-    var negDrainSamples = 0
-    var abandonedSamples = 0
-    var chargingSamples = 0
-    var zeroBLCSamples = 0
-    var allZeroSamples = 0
-
-    var rates = new ArrayBuffer[CaratRate]
-
-    for (k <- observations) {
-      d = k._2.toDouble
-      batt = k._3.toDouble
-      event = k._4.trim().toLowerCase()
-      state = k._5.trim().toLowerCase()
-      apps = k._6
-
-      if (state != charge) {
-        /* Record rates. First time fall through */
-        if (prevD != 0 && prevD != d) {
-          if (prevBatt - batt < 0) {
-            printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
-            negDrainSamples += 1
-          } else if (prevBatt == 0 && batt == 0) {
-            /* Assume simulator, ignore */
-            printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
-            allZeroSamples += 1
-          } else {
-            /* now prevBatt - batt >= 0 */
-            if (prevEvent == blc && event == blc) {
-              /* Point rate */
-              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
-                prevEvent, event, prevApps, apps)
-              if (r.rate() == 0) {
-                // This should never happen
-                println("RATE ERROR: BatteryLevelChanged with zero rate: " + r.toString(false))
-                zeroBLCSamples += 1
-              } else {
-                if (considerRate(r)) {
-                  rates += r
-                } else {
-                  abandonedSamples += 1
-                }
-              }
-            } else {
-              /* One endpoint not BLC, use uniform distribution rate */
-              val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
-                prevEvent, event, prevApps, apps)
-              if (considerRate(r)) {
-                rates += r
-              } else {
-                println("Abandoned uniform rate with abnormally high EV: " + r.toString(false))
-                abandonedSamples += 1
-              }
-            }
-          }
-        }
-      } else {
-        chargingSamples += 1
-      }
-      prevD = d
-      prevBatt = batt
-      prevEvent = event
-      prevState = state
-      prevApps = apps
-    }
-
-    printf("Abandoned %s all zero, %s charging, %s negative drain, %s > %s drain, %s zero drain BLC samples.\n", allZeroSamples, chargingSamples, negDrainSamples, abandonedSamples, ABNORMAL_RATE, zeroBLCSamples)
-    rates.toSeq
-  }
-
-  /**
-   * Check rate for abnormally high drain in a short time. Return true if the rate is not abnormally high.
-   */
-  def considerRate(r: CaratRate, oldObs: ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
-    if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate " + r)
-      println("All observations included for the abnormally high rate: " + "(" + oldObs.size + ")")
-      for (j <- oldObs) {
-        printf("uuid=%s time=%s batt=%s event=%s trigger=%s\n", j._1, j._2, j._3, j._4, j._5)
-      }
-      false
-    } else
-      true
-  }
-
-  def considerRate(r: CaratRate) = {
-    if (r.isRateRange()) {
-      if (r.rateRange.getEv() > ABNORMAL_RATE) {
-        false
-      } else
-        true
-    } else {
-      if (r.rate() > ABNORMAL_RATE) {
-        printf("Abandoning abnormally high rate " + r.toString(false))
-        false
-      } else
-        true
-    }
   }
 
   /**
@@ -452,24 +232,11 @@ object CaratDynamoDataAnalysis {
     var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
     /* evDistances*/
     var evDistanceByUuid = new TreeMap[String, Double]
+    // apps by Uuid for all devices
+    var appsByUuid = new TreeMap[String, Set[String]]
 
-    var appsByUuid = new TreeMap[String, scala.collection.mutable.HashSet[String]]
-
-    /*if (DEBUG) {
-      val cc = allRates.collect()
-      for (k <- cc)
-        println(k)
-    }*/
-
-    val apps = allRates.map(x => {
-      var sampleApps = x.allApps
-      sampleApps --= DAEMONS_LIST
-      sampleApps
-    }).collect()
-
-    var allApps = new HashSet[String]
-    for (k <- apps)
-      allApps ++= k
+    var allApps = allRates.flatMap(_.allApps).collect().toSet
+    allApps --= DAEMONS_LIST
 
     // mediaremoted does not get removed here, why?
     println("AllApps (no daemons): " + allApps)
@@ -495,15 +262,13 @@ object CaratDynamoDataAnalysis {
     var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      if (app != CARAT) {
-        val filtered = allRates.filter(_.allApps.contains(app))
-        val filteredNeg = allRates.filter(!_.allApps.contains(app))
-        println("Considering hog app=" + app)
-        if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(hogsTable, hogKey, app, _, _, _, _, _, _),
-          DynamoDbDecoder.deleteItem(hogsTable, app), true)) {
-          // this is a hog
-          allHogs += app
-        }
+      val filtered = allRates.filter(_.allApps.contains(app))
+      val filteredNeg = allRates.filter(!_.allApps.contains(app))
+      println("Considering hog app=" + app)
+      if (writeTripletUngrouped(filtered, filteredNeg, DynamoDbEncoder.put(hogsTable, hogKey, app, _, _, _, _, _, _),
+        DynamoDbDecoder.deleteItem(hogsTable, app), true)) {
+        // this is a hog
+        allHogs += app
       }
     }
     // quick fix:
@@ -527,50 +292,12 @@ object CaratDynamoDataAnalysis {
       (hogKey, x)
     }).toArray: _*)
 
-    var everReportedFirst = true
-    var first = true
-    var intersectEverReportedApps = new scala.collection.mutable.HashSet[String]
-    var intersectPerSampleApps = new scala.collection.mutable.HashSet[String]
-
     for (uuid <- uuids) {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
-      val tempApps = fromUuid.map(x => {
-        var sampleApps = x.allApps
-        sampleApps --= DAEMONS_LIST
-        sampleApps --= allHogs
-        sampleApps
-      }).collect()
-
-      val uuidAppsTemp = fromUuid.map(x => {
-        var sampleApps = x.allApps
-        sampleApps --= DAEMONS_LIST
-        sampleApps
-      }).collect()
-
-      var uuidApps = new scala.collection.mutable.HashSet[String]
-      var nonHogApps = new scala.collection.mutable.HashSet[String]
-
-      // Get all apps ever reported, also compute likely daemons
-      for (k <- tempApps) {
-        nonHogApps ++= k
-        if (first) {
-          intersectPerSampleApps ++= k
-          first = false
-        } else if (k.size > 0)
-          intersectPerSampleApps = intersectPerSampleApps.intersect(k)
-      }
-
-      for (k <- uuidAppsTemp) {
-        uuidApps ++= k
-      }
-
-      //Another method to find likely daemons
-      if (everReportedFirst) {
-        intersectEverReportedApps ++= uuidApps
-        everReportedFirst = false
-      } else if (uuidApps.size > 0)
-        intersectEverReportedApps = intersectEverReportedApps.intersect(uuidApps)
+       var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+      uuidApps --= DAEMONS_LIST
+      val nonHogApps = uuidApps -- allHogs
 
       if (uuidApps.size > 0)
         similarApps(allRates, uuid, uuidApps)
@@ -602,21 +329,13 @@ object CaratDynamoDataAnalysis {
     }
     // Save J-Scores of all users.
     writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
-
-    intersectEverReportedApps --= DAEMONS_LIST
-    intersectPerSampleApps --= DAEMONS_LIST
-    println("Daemons: " + DAEMONS_LIST)
-    if (intersectEverReportedApps.size > 0)
-      println("New possible daemons (ever reported): " + intersectEverReportedApps)
-    if (intersectPerSampleApps.size > 0)
-      println("New possible daemons (per sample): " + intersectPerSampleApps)
   }
 
   /**
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: scala.collection.mutable.Set[String]) {
+  def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -672,7 +391,7 @@ object CaratDynamoDataAnalysis {
       // Log bucketing:
       val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, BUCKETS, SMALLEST_BUCKET, DECIMALS)
 
-      evDistance = evDiff(ev, evNeg)
+      evDistance =  DynamoAnalysisUtil.evDiff(ev, evNeg)
       printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
 
       if (DEBUG) {
@@ -713,7 +432,7 @@ object CaratDynamoDataAnalysis {
     distsWithoutUuid: TreeMap[String, TreeMap[Int, Double]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, scala.collection.mutable.HashSet[String]]) {
+    appsByUuid: TreeMap[String, Set[String]]) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
@@ -740,18 +459,5 @@ object CaratDynamoDataAnalysis {
         printf("Error: Could not save jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
     //DynamoDbEncoder.put(xmax, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], jScore, ev, evNeg)
-  }
-
-  /**
-   * New metric: Use EV difference for hog and bug decisions.
-   * TODO: Variance and its use in the decision?
-   * Multimodal distributions -> EV does not match true energy usage profile?
-   * m = 1 - evWith / evWithout
-   *
-   * m > 0 -> Hog
-   * m <= 0 -> not
-   */
-  def evDiff(evWith: Double, evWithout: Double) = {
-    1.0 - evWithout / evWith
   }
 }
