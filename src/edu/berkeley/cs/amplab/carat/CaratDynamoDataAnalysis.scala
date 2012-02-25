@@ -83,6 +83,7 @@ object CaratDynamoDataAnalysis {
     // Include correct spelling to make sure
     System.setProperty("log4j.threshold", "WARN")
     
+    System.setProperty("log4j.logger.spark.LocalScheduler", "WARN")
     System.setProperty("log4j.logger.spark.timeseries.ProbUtil", "DEBUG")
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
