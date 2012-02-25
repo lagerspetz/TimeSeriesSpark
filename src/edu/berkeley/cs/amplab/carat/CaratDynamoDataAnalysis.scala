@@ -55,6 +55,8 @@ object CaratDynamoDataAnalysis {
 
   // For saving rates so they do not have to be fetched from DynamoDB every time
   val RATES_CACHED = "/mnt/TimeSeriesSpark/spark-temp/stable-cached-rates.dat"
+    // to make sure that the old RATES_CACHED is not overwritten while it is being worked on
+  val RATES_CACHED_NEW = "/mnt/TimeSeriesSpark/spark-temp/stable-cached-rates-new.dat"
   val LAST_SAMPLE = "/mnt/TimeSeriesSpark/spark-temp/stable-last-sample.txt"
   val LAST_REG = "/mnt/TimeSeriesSpark/spark-temp/stable-last-reg.txt"
 
@@ -115,6 +117,11 @@ object CaratDynamoDataAnalysis {
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
+    // replace old rate file
+    val rem = Runtime.getRuntime().exec(Array("/bin/rm","-rf", RATES_CACHED))
+    rem.waitFor()
+    val move = Runtime.getRuntime().exec(Array("/bin/mv",RATES_CACHED_NEW, RATES_CACHED))
+    move.waitFor()
     sys.exit(0)
   }
 
@@ -156,7 +163,7 @@ object CaratDynamoDataAnalysis {
     println("All models: " + allModels.mkString(", "))
 
     if (allRates != null) {
-      allRates.saveAsObjectFile(RATES_CACHED)
+      allRates.saveAsObjectFile(RATES_CACHED_NEW)
       saveDoubleToFile(last_sample_write, LAST_SAMPLE)
       saveDoubleToFile(last_reg_write, LAST_REG)
       analyzeRateData(allRates, allUuids, allOses, allModels)
