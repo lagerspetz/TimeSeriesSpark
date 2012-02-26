@@ -450,18 +450,21 @@ object CaratDynamoDataToPlots {
       println("WARN: a priori dist is empty!")
     else
       println("a priori dist:\n" + aPrioriDistribution.mkString("\n"))
-      
-    val apps = allRates.map(x => {
-      var sampleApps = x.allApps
-      sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
-      sampleApps
-    }).collect()
 
-    var allApps = new HashSet[String]
-    for (k <- apps)
-      allApps ++= k
+    var allApps = allRates.flatMap(_.allApps).collect().toSet
+
+    val globs = FutureCaratDynamoDataAnalysis.DAEMONS_LIST.filter(_.endsWith("*")).map(x => { x.substring(0, x.length - 1) })
+
+    var matched = allApps.filter(x => {
+      val globPrefix = globs.filter(x.startsWith(_))
+      !globPrefix.isEmpty
+    })
+    
+    println("Matched daemons with globs: " + matched)
+    val DAEMONS_LIST_GLOBBED = FutureCaratDynamoDataAnalysis.DAEMONS_LIST ++ matched
+    
+    allApps --= DAEMONS_LIST_GLOBBED
       
-    // mediaremoted does not get removed here, why?
     println("AllApps (no daemons): " + allApps)
 
     for (os <- oses) {
@@ -481,13 +484,11 @@ object CaratDynamoDataToPlots {
     var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      if (app != CARAT) {
-        val filtered = allRates.filter(_.allApps.contains(app))
-        val filteredNeg = allRates.filter(!_.allApps.contains(app))
-        if (plotDists(sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
-          // this is a hog
-          allHogs += app
-        }
+      val filtered = allRates.filter(_.allApps.contains(app))
+      val filteredNeg = allRates.filter(!_.allApps.contains(app))
+      if (plotDists(sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
+        // this is a hog
+        allHogs += app
       }
     }
 
@@ -495,13 +496,11 @@ object CaratDynamoDataToPlots {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
-      uuidApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
+      uuidApps --= DAEMONS_LIST_GLOBBED
       val nonHogApps = uuidApps -- allHogs
     
       if (uuidApps.size > 0)
         similarApps(sc, allRates, aPrioriDistribution, uuid, uuidApps, plotDirectory)
-      //else
-      // Remove similar apps entry?
 
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
@@ -516,11 +515,9 @@ object CaratDynamoDataToPlots {
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- nonHogApps) {
-        if (app != CARAT) {
-          val appFromUuid = fromUuid.filter(_.allApps.contains(app))
-          val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-          plotDists(sc, "Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)
-        }
+        val appFromUuid = fromUuid.filter(_.allApps.contains(app))
+        val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
+        plotDists(sc, "Bug " + app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)
       }
     }
     plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)

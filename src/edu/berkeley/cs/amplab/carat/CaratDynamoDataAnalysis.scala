@@ -224,10 +224,6 @@ object CaratDynamoDataAnalysis {
    */
   def analyzeRateData(allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
-    //Remove Daemons
-    println("Removing daemons from the database")
-    DynamoAnalysisUtil.removeDaemons(DAEMONS_LIST)
-    //Remove old bugs
     println("Clearing bugs")
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
     /**
@@ -245,7 +241,23 @@ object CaratDynamoDataAnalysis {
     var appsByUuid = new TreeMap[String, Set[String]]
 
     var allApps = allRates.flatMap(_.allApps).collect().toSet
-    allApps --= DAEMONS_LIST
+    
+    val globs = DAEMONS_LIST.filter(_.endsWith("*")).map(x => {x.substring(0, x.length -1)})
+    
+    var matched = allApps.filter(x => {
+      val globPrefix = globs.filter(x.startsWith(_))
+      !globPrefix.isEmpty
+    })
+    
+    println("Matched daemons with globs: " + matched)
+    val DAEMONS_LIST_GLOBBED = DAEMONS_LIST ++ matched
+    
+    allApps --= DAEMONS_LIST_GLOBBED
+    
+    //Remove Daemons
+    println("Removing daemons from the database")
+    DynamoAnalysisUtil.removeDaemons(DAEMONS_LIST_GLOBBED)
+    //Remove old bugs
 
     // mediaremoted does not get removed here, why?
     println("AllApps (no daemons): " + allApps)
@@ -306,7 +318,7 @@ object CaratDynamoDataAnalysis {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
        var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
-      uuidApps --= DAEMONS_LIST
+      uuidApps --= DAEMONS_LIST_GLOBBED
       val nonHogApps = uuidApps -- allHogs
 
       if (uuidApps.size > 0)
