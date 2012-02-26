@@ -761,16 +761,10 @@ object CaratDynamoDataToPlots {
       println("Failed to create " + f + " for plots!")
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
-
-      val dataPairs = data.flatMap(x => {
-        var treemap = new TreeSet[(String, Double)]
-        for (k <- x._2)
-          treemap += ((x._1, k))
-        treemap
-      })
       
-      for (k <- dataPairs)
-        datafile.write(k._1 +" "+k._2 +"\n")
+      for (k <- data)
+        for (j <- k._2)
+          datafile.write(k._1 +" "+j +"\n")
       datafile.close
     }
   }
