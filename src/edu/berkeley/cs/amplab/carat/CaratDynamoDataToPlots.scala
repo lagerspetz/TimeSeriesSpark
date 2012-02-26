@@ -190,8 +190,17 @@ object CaratDynamoDataToPlots {
         DynamoDbDecoder.getAllItems(registrationTable, _),
         handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
     }
-    if (oldRates != null)
+    if (oldRates != null) {
+      val devices = oldRates.map(x => {
+        (x.uuid, x.os, x.model)
+      }).collect()
+      for (k <- devices) {
+        allUuids += k._1
+        allOses += k._2
+        allModels += k._3
+      }
       allRates = allRates.union(oldRates)
+    }
     println("All uuIds: " + allUuids.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
