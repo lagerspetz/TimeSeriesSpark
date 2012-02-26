@@ -10,12 +10,12 @@ import java.io.ObjectInputStream
 
 object S3Encoder {
   val cred = new PropertiesCredentials(S3Encoder.getClass().getResourceAsStream("/AwsCredentials.properties"))
-  val s3 = new AmazonS3Client(cred)
+  var s3p:AmazonS3Client = null
+  def s3() = { if (s3p == null) s3p = new AmazonS3Client(cred); s3p }
   val defaultBucket = "carat.results"
-  var tempFile = File.createTempFile("temp-appstore-icon-crawler-", ".bin")
-  tempFile.deleteOnExit()
-  var fos = new FileOutputStream(tempFile)
-  var out = new ObjectOutputStream(fos)
+  var tempFile:File = null
+  var fos:FileOutputStream = null
+  var out:ObjectOutputStream = null
 
   def initStream() {
     tempFile = File.createTempFile("temp-appstore-icon-crawler-", ".bin")
@@ -25,6 +25,8 @@ object S3Encoder {
   }
 
   def write(obj: Any) {
+    if (out == null)
+      initStream()
     out.writeObject(obj)
   }
   
