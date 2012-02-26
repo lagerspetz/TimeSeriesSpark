@@ -78,12 +78,7 @@ object CaratDynamoDataAnalysis {
     }
     // turn off INFO logging for spark:
     System.setProperty("hadoop.root.logger", "WARN,console")
-    // This is misspelled in the spark jar log4j.properties:
-    System.setProperty("log4j.threshhold", "WARN")
-    // Include correct spelling to make sure
-    System.setProperty("log4j.threshold", "WARN")
-    
-    System.setProperty("log4j.logger.spark.LocalScheduler", "WARN")
+    // Hopefully turn on ProbUtil debug logging:
     System.setProperty("log4j.logger.spark.timeseries.ProbUtil", "DEBUG")
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
@@ -219,6 +214,7 @@ object CaratDynamoDataAnalysis {
     var rateRdd = sc.parallelize[CaratRate]({
       DynamoAnalysisUtil.rateMapperPairwise(os, model, mapped)
     })
+
     if (rates != null)
       rateRdd = rateRdd.union(rates)
     rateRdd

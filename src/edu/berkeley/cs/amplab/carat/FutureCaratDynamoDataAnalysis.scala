@@ -13,6 +13,7 @@ import com.amazonaws.services.dynamodb.model.AttributeValue
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
+import edu.berkeley.cs.amplab.carat.dynamodb.RemoveDaemons
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -28,14 +29,13 @@ import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
  *    and comparing it with (A intersection sample.getAllApps()).size < ln(A).
  *
  * Where uuId is a unique device identifier.
+ * 
+ * Note: We do not store hogs or bugs with negative distance values.
  *
  * @author Eemil Lagerspetz
  */
 
 object FutureCaratDynamoDataAnalysis {
-  /**
-   * We do not store hogs or bugs with negative distance values.
-   */
 
   // Bucketing and decimal constants
   val BUCKETS = 100
@@ -57,7 +57,12 @@ object FutureCaratDynamoDataAnalysis {
       if (args.length > 1 && args(1) == "DEBUG")
         DEBUG = true
     }
-    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    // turn off INFO logging for spark:
+    System.setProperty("hadoop.root.logger", "WARN,console")
+    // Hopefully turn on ProbUtil debug logging:
+    System.setProperty("log4j.logger.spark.timeseries.ProbUtil", "DEBUG")
+    // Fix Spark running out of space on AWS.
+    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark/spark-temp")
     val sc = new SparkContext(master, "CaratDynamoDataAnalysis")
     analyzeData(sc)
     sys.exit(0)
@@ -100,13 +105,7 @@ object FutureCaratDynamoDataAnalysis {
      */
 
     // Remove duplicates caused by re-registrations:
-    var regSet: Set[(String, String, String)] = new HashSet[(String, String, String)]
-    regSet ++= regs.map(x => {
-      val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
-      val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
-      val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
-      (uuid, model, os)
-    })
+    var regSet: Set[(String, String, String)] = DynamoAnalysisUtil.regSet(regs)
 
     var distRet: spark.RDD[CaratRate] = dist
     for (x <- regSet) {
@@ -164,7 +163,12 @@ object FutureCaratDynamoDataAnalysis {
    */
   def analyzeRateData(sc: SparkContext, allRates: RDD[CaratRate],
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
-
+    //Remove Daemons
+    println("Removing daemons from the database")
+    RemoveDaemons.main(Array("DAEMONS"))
+    //Remove old bugs
+    println("Clearing bugs")
+    DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -183,15 +187,8 @@ object FutureCaratDynamoDataAnalysis {
     if (aPrioriDistribution.size == 0)
       throw new Error("WARN: aPrioriDistribution is empty!")
     
-    val apps = allRates.map(x => {
-      var sampleApps = x.allApps
-      sampleApps --= DAEMONS_LIST
-      sampleApps
-    }).collect()
-
-    var allApps = new HashSet[String]
-    for (k <- apps)
-      allApps ++= k
+	var allApps = allRates.flatMap(_.allApps).collect().toSet
+    allApps --= DAEMONS_LIST
 
     println("AllApps (no daemons): " + allApps)
 
@@ -278,7 +275,7 @@ object FutureCaratDynamoDataAnalysis {
     // no distance check, not bug or hog
     println("Considering similarApps uuid=" + uuid)
     writeTripletUngrouped(sc, similar, dissimilar, aPrioriDistribution, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _, _, _),
-      { println("ERROR: Delete called for a non-bug non-hog!") }, false)
+      { DynamoDbDecoder.deleteItem(similarsTable, uuid) }, false)
   }
 
   /**

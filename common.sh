@@ -24,8 +24,11 @@ export SPARK_CLASSPATH="$HOME/mesos/lib/java/mesos.jar:$dir/jar/spark-core-assem
 mem="27g"
 export SPARK_MEM="${mem}"
 #Workaround an issue with xerces? Where did I get xerces?
-export JAVA_OPTS="-Djavax.xml.parsers.DocumentBuilderFactory=com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl -XX:+UseCompressedOops"
+JAVA_OPTS="-Djavax.xml.parsers.DocumentBuilderFactory=com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl -XX:+UseCompressedOops"
 # "-Xmx${mem} -XX:+UseCompressedOops -XX:+PrintGCDetails -XX:+PrintGCTimeStamps"
+# Turn off task progress logging for now
+JAVA_OPTS+=" -Dhadoop.root.logger=WARN,console"
+export JAVA_OPTS
 export SPARK_JAVA_OPTS="$JAVA_OPTS"
 export SPARK_HOME="$HOME/spark"
 export SPARK_LIBRARY_PATH=$HOME/mesos/lib/java:$HOME/mesos/lib
