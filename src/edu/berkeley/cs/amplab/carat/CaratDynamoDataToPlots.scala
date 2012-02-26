@@ -763,7 +763,7 @@ object CaratDynamoDataToPlots {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
 
       val dataPairs = data.flatMap(x => {
-        var treemap = new TreeMap[String, Double]
+        var treemap = new TreeSet[(String, Double)]
         for (k <- x._2)
           treemap += ((x._1, k))
         treemap
