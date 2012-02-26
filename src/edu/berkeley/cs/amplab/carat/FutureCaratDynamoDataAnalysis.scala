@@ -165,7 +165,7 @@ object FutureCaratDynamoDataAnalysis {
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
     //Remove Daemons
     println("Removing daemons from the database")
-    RemoveDaemons.main(Array("DAEMONS"))
+    DynamoAnalysisUtil.removeDaemons(DAEMONS_LIST)
     //Remove old bugs
     println("Clearing bugs")
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)

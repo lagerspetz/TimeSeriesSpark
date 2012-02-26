@@ -12,7 +12,6 @@ import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import edu.berkeley.cs.amplab.carat.dynamodb.RemoveDaemons
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileWriter
@@ -227,7 +226,7 @@ object CaratDynamoDataAnalysis {
     uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
     //Remove Daemons
     println("Removing daemons from the database")
-    RemoveDaemons.main(Array("DAEMONS"))
+    DynamoAnalysisUtil.removeDaemons(DAEMONS_LIST)
     //Remove old bugs
     println("Clearing bugs")
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)

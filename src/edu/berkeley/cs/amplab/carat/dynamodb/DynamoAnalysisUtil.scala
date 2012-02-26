@@ -13,16 +13,16 @@ import scala.collection.mutable.ArrayBuffer
 import spark.timeseries.UniformDist
 import spark._
 import spark.SparkContext._
+import com.amazonaws.services.dynamodb.model.Key
 
 object DynamoAnalysisUtil {
-  
+
   // constants for battery state and sample triggers
   val STATE_CHARGING = "charging"
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 9
-  
-  
+
   def readDoubleFromFile(file: String) = {
     val f = new File(file)
     if (!f.exists() && !f.createNewFile())
@@ -56,7 +56,7 @@ object DynamoAnalysisUtil {
     println("%s/%s downloaded: %s".format(bucket, file, r))
     r
   }
-  
+
   def regSet(regs: java.util.List[java.util.Map[String, AttributeValue]]) = {
     var regSet = new HashSet[(String, String, String)]
     regSet ++= regs.map(x => {
@@ -74,8 +74,8 @@ object DynamoAnalysisUtil {
     val move = Runtime.getRuntime().exec(Array("/bin/mv", newPath, oldPath))
     move.waitFor()
   }
-  
-    /**
+
+  /**
    * Generic Carat DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
    * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
    */
@@ -128,8 +128,7 @@ object DynamoAnalysisUtil {
     val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
     (uuid, time, batteryLevel, event, batteryState, apps)
   }
-  
-  
+
   /**
    * New metric: Use EV difference for hog and bug decisions.
    * TODO: Variance and its use in the decision?
@@ -145,7 +144,7 @@ object DynamoAnalysisUtil {
     else
       1.0 - evWithout / evWith
   }
-  
+
   /**
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
@@ -203,7 +202,7 @@ object DynamoAnalysisUtil {
               } else {
                 if (considerRate(r)) {
                   rates += r
-                  pointRates+=1
+                  pointRates += 1
                 } else {
                   abandonedSamples += 1
                 }
@@ -231,16 +230,16 @@ object DynamoAnalysisUtil {
       prevApps = apps
     }
 
-    println(nzf("Recorded %s point rates ",pointRates) +"abandoned "+
-        nzf("%s all zero, ", allZeroSamples) +
-        nzf("%s charging, ", chargingSamples) +
-        nzf("%s negative drain, ", negDrainSamples) +
-        nzf("%s > "+ABNORMAL_RATE+" drain, ", abandonedSamples) +
-        nzf("%s zero drain BLC", zeroBLCSamples) +" samples.")
+    println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
+      nzf("%s all zero, ", allZeroSamples) +
+      nzf("%s charging, ", chargingSamples) +
+      nzf("%s negative drain, ", negDrainSamples) +
+      nzf("%s > " + ABNORMAL_RATE + " drain, ", abandonedSamples) +
+      nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
     rates.toSeq
   }
-  
-  def nzf(formatString:String, number:Int) = {
+
+  def nzf(formatString: String, number: Int) = {
     if (number > 0)
       formatString.format(number)
     else
@@ -276,8 +275,8 @@ object DynamoAnalysisUtil {
         true
     }
   }
-  
-   /**
+
+  /**
    * FIXME: Filters inside a map of another RDD are not allowed, so we call collect on the returned a priori distribution here.
    * If this becomes a memory problem, averaging in the a priori dist should be done.
    */
@@ -293,5 +292,59 @@ object DynamoAnalysisUtil {
     // turn arrays of 1.0s to frequencies
     println("Collecting aPriori.")
     grouped.map(x => { (x._1, x._2.sum) }).collect()
+  }
+
+  def removeDaemons(daemonSet: Set[String]) {
+    // add hog table key (which is the same as bug table app key)
+    val kd = CaratDynamoDataAnalysis.DAEMONS_LIST.map(x => {
+      (hogKey, x)
+    }).toSeq
+    DynamoDbItemLoop(DynamoDbDecoder.filterItems(hogsTable, kd: _*),
+      DynamoDbDecoder.filterItemsFromKey(hogsTable, _, kd: _*),
+      removeHogs(_, _))
+    
+    DynamoDbItemLoop(DynamoDbDecoder.filterItems(bugsTable, kd: _*),
+      DynamoDbDecoder.filterItemsFromKey(bugsTable, _, kd: _*),
+      removeBugs(_, _))
+  }
+  
+  def removeBugs(key:Key, results: java.util.List[java.util.Map[String, AttributeValue]]){
+    for (k <- results) {
+      val uuid = k.get(resultKey).getS()
+      val app = k.get(hogKey).getS()
+      println("Removing Bug: %s, %s".format(uuid, app))
+      DynamoDbDecoder.deleteItem(bugsTable, uuid, app)
+    }
+  }
+  
+  def removeHogs(key:Key, results: java.util.List[java.util.Map[String, AttributeValue]]){
+    for (k <- results) {
+      val app = k.get(hogKey).getS()
+      println("Deleting: " + app)
+      DynamoDbDecoder.deleteItem(hogsTable, app)
+    }
+  }
+    
+   /**
+   * Generic DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
+   * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
+   */
+  def DynamoDbItemLoop(getKeyAndResults: => (Key, java.util.List[java.util.Map[String, AttributeValue]]),
+    getKeyAndMoreResults: Key => (Key, java.util.List[java.util.Map[String, AttributeValue]]),
+    handleResults: (Key, java.util.List[java.util.Map[String, AttributeValue]]) => Unit) {
+    var index = 0
+    var (key, results) = getKeyAndResults
+    println("Got: " + results.size + " results.")
+    handleResults(null, results)
+
+    while (key != null) {
+      index += 1
+      println("Continuing from key=" + key)
+      val (key2, results2) = getKeyAndMoreResults(key)
+      results = results2
+      handleResults(key, results)
+      key = key2
+      println("Got: " + results.size + " results.")
+    }
   }
 }

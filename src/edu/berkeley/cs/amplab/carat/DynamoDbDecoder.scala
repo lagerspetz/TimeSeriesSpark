@@ -107,6 +107,19 @@ object DynamoDbDecoder {
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
 
+  def filterItemsFromKey(table: String, lastKey: Key,  vals: (String, Any)*) = {
+    val s = new ScanRequest(table)
+    if (lastKey != null)
+      s.setExclusiveStartKey(lastKey)
+    val cond = new Condition().withComparisonOperator("IN").withAttributeValueList(vals.map(x => {
+      new AttributeValue(x._2.toString())
+    }))
+    val conds = DynamoDbEncoder.convertToMap[Condition](Array((vals.first._1, cond)))
+    s.setScanFilter(conds)
+    val sr = DynamoDbEncoder.dd.scan(s)
+    (sr.getLastEvaluatedKey(), sr.getItems())
+  }
+
   def filterItemsAfter(table: String, attrName: String, attrValue: String, lastKey: Key = null) = {
     val s = new ScanRequest(table)
     if (lastKey != null)
