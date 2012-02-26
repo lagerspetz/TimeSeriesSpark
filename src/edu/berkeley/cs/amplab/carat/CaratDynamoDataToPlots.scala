@@ -20,6 +20,7 @@ import java.io.FileInputStream
 import java.io.FileWriter
 import java.io.FileOutputStream
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
+import scala.collection.immutable.TreeSet
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -94,6 +95,46 @@ object CaratDynamoDataToPlots {
     plotEverything(master, args != null && args.length > 1 && args(1) == "DEBUG", null)
     sys.exit(0)
   }
+  
+  def plotSampleTimes(){
+    // turn off INFO logging for spark:
+      System.setProperty("hadoop.root.logger", "WARN,console")
+      // This is misspelled in the spark jar log4j.properties:
+      System.setProperty("log4j.threshhold", "WARN")
+      // Include correct spelling to make sure
+      System.setProperty("log4j.threshold", "WARN")
+    // turn on ProbUtil debug logging
+    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+
+    // Fix Spark running out of space on AWS.
+    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
+    val plotDirectory =  "/mnt/www/plots"
+    val tm = {
+    val allSamples = new scala.collection.mutable.HashMap[String, TreeSet[Double]]
+      DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+        DynamoDbDecoder.getAllItems(samplesTable, _),
+        addToSet(_, _, allSamples))
+        var tm = new TreeMap[String, TreeSet[Double]]
+      tm ++= allSamples
+      tm
+    }
+    plotSamples("Samples in time", plotDirectory, tm)
+  }
+
+  def addToSet(key: Key, samples: java.util.List[java.util.Map[String, AttributeValue]], 
+    allSamples: scala.collection.mutable.HashMap[String, TreeSet[Double]]) {
+    val mapped = samples.map(x => {
+      /* See properties in package.scala for data keys. */
+      val uuid = x.get(sampleKey).getS()
+      val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN().toDouble else 0.0 }
+      (uuid, time)
+    })
+    for (k <- mapped) {
+      var oldVal = allSamples.get(k._1).getOrElse(new TreeSet[Double])
+      oldVal += k._2
+      allSamples.put(k._1, oldVal)
+    }
+  }
 
   def plotEverything(master: String, debug: Boolean, plotDirectory: String) = {
     if (debug) {
@@ -158,7 +199,8 @@ object CaratDynamoDataToPlots {
       allRates.saveAsObjectFile(RATES_CACHED_NEW)
       DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
       DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
-      analyzeRateData(sc, allRates, allUuids, allOses, allModels, plotDirectory)
+      // cache allRates here?
+      analyzeRateData(sc, allRates.cache(), allUuids, allOses, allModels, plotDirectory)
     }else
       null
   }
@@ -375,13 +417,11 @@ object CaratDynamoDataToPlots {
     var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      if (app != CARAT) {
-        val filtered = allRates.filter(_.allApps.contains(app))
-        val filteredNeg = allRates.filter(!_.allApps.contains(app))
-        if (plotDists(sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
-          // this is a hog
-          allHogs += app
-        }
+      val filtered = allRates.filter(_.allApps.contains(app))
+      val filteredNeg = allRates.filter(!_.allApps.contains(app))
+      if (plotDists(sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
+        // this is a hog
+        allHogs += app
       }
     }
 
@@ -410,12 +450,10 @@ object CaratDynamoDataToPlots {
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- nonHogApps) {
-        if (app != CARAT) {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
           plotDists(sc, "Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)
         }
-      }
     }
     
     plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
@@ -595,8 +633,8 @@ object CaratDynamoDataToPlots {
   def plot(title: String, titleNeg: String, xmax:Double,distWith: RDD[(Int, Double)],
     distWithout: RDD[(Int, Double)],
       ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, apps: Seq[String] = null) {
-    val evTitle = title + " ev="+ProbUtil.nDecimal(ev, 3)
-    val evTitleNeg = titleNeg + " ev=" + ProbUtil.nDecimal(evNeg, 3)
+    val evTitle = title + " (ev="+ProbUtil.nDecimal(ev, 3) +")"
+    val evTitleNeg = titleNeg + " (ev=" + ProbUtil.nDecimal(evNeg, 3)+ ")"
     printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
     writeData(dateString, evTitle, distWith, xmax)
@@ -621,19 +659,19 @@ object CaratDynamoDataToPlots {
           println("Failed to create " + f + " for plots!")
         else {
           val plotfile = new java.io.FileWriter(gdir + name + ".gnuplot")
-          plotfile.write("set term postscript eps enhanced color 'Arial' 24\nset xtics out\n" +
+          plotfile.write("set term postscript eps enhanced color 'Helvetica' 32\nset xtics out\n" +
             "set size 1.93,1.1\n" +
             "set logscale x\n" +
-            "set xrange [0.00001:"+(xmax+1)+"]\n" +
+            "set xrange [0.0005:"+(xmax+0.5)+"]\n" +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)
             plotfile.write("set output \"" + plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + ".eps\"\n")
           else
             plotfile.write("set output \"" + pdir + name + ".eps\"\n")
-          plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" lw 2 title \"" + t1.replace("~", "\\\\~").replace("_", "\\\\_") +
+          plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" ps 3 lw 5 title \"" + t1.replace("~", "\\\\~").replace("_", "\\\\_") +
               "\", " +
-            "\"" + ddir + t2 + ".txt\" using 1:2 with linespoints lt rgb \"#007777\" lw 2 title \"" + t2.replace("~", "\\\\~").replace("_", "\\\\_")
+            "\"" + ddir + t2 + ".txt\" using 1:2 with linespoints lt rgb \"#007777\" ps 3 lw 5 title \"" + t2.replace("~", "\\\\~").replace("_", "\\\\_")
             + "\"\n")
           plotfile.close
           true
@@ -708,6 +746,32 @@ object CaratDynamoDataToPlots {
         line = err_read.readLine()
       }
       temp.waitFor()
+    }
+  }
+  
+  def plotSamples(title: String, plotDirectory:String, data: TreeMap[String, TreeSet[Double]]) {
+    println("Plotting samples.")
+    writeSampleData(dateString, title, data)
+  }
+  
+  def writeSampleData(dir:String, name:String, data: TreeMap[String, TreeSet[Double]]){
+    val ddir = dir + "/" + DATA_DIR + "/"
+    var f = new File(ddir)
+    if (!f.isDirectory() && !f.mkdirs())
+      println("Failed to create " + f + " for plots!")
+    else {
+      val datafile = new java.io.FileWriter(ddir + name + ".txt")
+
+      val dataPairs = data.flatMap(x => {
+        var treemap = new TreeMap[String, Double]
+        for (k <- x._2)
+          treemap += ((x._1, k))
+        treemap
+      })
+      
+      for (k <- dataPairs)
+        datafile.write(k._1 +" "+k._2 +"\n")
+      datafile.close
     }
   }
 }
