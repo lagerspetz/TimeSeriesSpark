@@ -4,7 +4,6 @@ cd "$dir"
 source $dir/common.sh
 
 SPARK_MEM="2g"
-export JAVA_OPTS="-Djavax.xml.parsers.DocumentBuilderFactory=com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl -XX:+UseCompressedOops"
 export SPARK_JAVA_OPTS="$JAVA_OPTS"
 export MASTER='local[1]'
 
