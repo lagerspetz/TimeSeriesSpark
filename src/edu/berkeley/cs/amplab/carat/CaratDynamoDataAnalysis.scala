@@ -133,7 +133,8 @@ object CaratDynamoDataAnalysis {
       DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
       DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
       println("Analysing data")
-      analyzeRateData(allRates, allUuids, allOses, allModels)
+      // cache RDD here
+      analyzeRateData(allRates.cache(), allUuids, allOses, allModels)
     }
   }
 

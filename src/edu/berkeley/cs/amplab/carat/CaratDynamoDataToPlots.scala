@@ -53,10 +53,11 @@ object CaratDynamoDataToPlots {
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
   
-  val RATES_CACHED_NEW = "/mnt/TimeSeriesSpark/spark-temp/cached-rates-new.dat"
-  val RATES_CACHED = "/mnt/TimeSeriesSpark/spark-temp/cached-rates.dat"
-  val LAST_SAMPLE = "/mnt/TimeSeriesSpark/spark-temp/last-sample.txt"
-  val LAST_REG = "/mnt/TimeSeriesSpark/spark-temp/last-reg.txt"
+  val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
+  val RATES_CACHED_NEW = tmpdir+"cached-rates-new.dat"
+  val RATES_CACHED = tmpdir+"cached-rates.dat"
+  val LAST_SAMPLE = tmpdir+"last-sample.txt"
+  val LAST_REG = tmpdir+"last-reg.txt"
   
   val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
   
