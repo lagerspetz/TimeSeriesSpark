@@ -301,7 +301,7 @@ object ProbUtil extends Logging {
     // Return EVs with 3 decimal accuracy
     (xmax, bucketed.map(x => { (x._1, nDecimal(x._2, decimals)) }),
       bucketedNeg.map(x => { (x._1, nDecimal(x._2, decimals)) }),
-      nDecimal(ev1, decimals), nDecimal(ev2, decimals))
+      ev1, ev2)
   }
 
   def getEv(sc: SparkContext, bucketedDist: RDD[(Int, Double)], xmax: Double, logbase: Double, buckets: Int) = {
