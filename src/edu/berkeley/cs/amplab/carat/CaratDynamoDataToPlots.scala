@@ -434,8 +434,13 @@ object CaratDynamoDataToPlots {
         allHogs += app
       }
     }
-
-    for (uuid <- uuids) {
+    
+    val uuidArray = uuids.toArray.sortWith((s, t) => {
+      s < t
+    })
+    
+    for (i <- 0 until uuidArray.length) {
+      val uuid = uuidArray(i)
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
@@ -443,7 +448,7 @@ object CaratDynamoDataToPlots {
       val nonHogApps = uuidApps -- allHogs
 
       if (uuidApps.size > 0)
-        similarApps(sc, allRates, aPrioriDistribution, uuid, uuidApps, plotDirectory)
+        similarApps(sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
       //else
       // Remove similar apps entry?
 
@@ -554,7 +559,7 @@ object CaratDynamoDataToPlots {
       val nonHogApps = uuidApps -- allHogs
     
       if (uuidApps.size > 0)
-        similarApps(sc, allRates, aPrioriDistribution, uuid, uuidApps, plotDirectory)
+        similarApps(sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
         /* cache these because they will be used numberOfApps times */
       val notFromUuid = allRates.filter(_.uuid != uuid).cache()
       // no distance check, not bug or hog
