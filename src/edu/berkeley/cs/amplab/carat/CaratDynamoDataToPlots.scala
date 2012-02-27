@@ -414,7 +414,7 @@ object CaratDynamoDataToPlots {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      plotDists(sc, "iOs " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory)
+      plotDists(sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory)
     }
 
     for (model <- models) {
@@ -534,13 +534,18 @@ object CaratDynamoDataToPlots {
     for (app <- allApps) {
       val filtered = allRates.filter(_.allApps.contains(app))
       val filteredNeg = allRates.filter(!_.allApps.contains(app))
-      if (plotDists(sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
+      if (plotDists(sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
         // this is a hog
         allHogs += app
       }
     }
-
-    for (uuid <- uuids) {
+    
+    val uuidArray = uuids.toArray.sortWith((s, t) => {
+      s < t
+    })
+    
+    for (i <- 0 until uuidArray.length) {
+      val uuid = uuidArray(i)
       /* cache these because they will be used numberOfApps times */ 
       val fromUuid = allRates.filter(_.uuid == uuid).cache()
 
@@ -566,7 +571,7 @@ object CaratDynamoDataToPlots {
       for (app <- nonHogApps) {
         val appFromUuid = fromUuid.filter(_.allApps.contains(app))
         val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-        plotDists(sc, "Bug " + app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)
+        plotDists(sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)
       }
     }
     plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
@@ -578,14 +583,14 @@ object CaratDynamoDataToPlots {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(sc:SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], uuid: String, uuidApps: Set[String], plotDirectory:String) {
+  def similarApps(sc:SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], i: Int, uuidApps: Set[String], plotDirectory:String) {
     val sCount = similarityCount(uuidApps.size)
-    printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
+    printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    plotDists(sc, "Similar users with " + uuid, "Dissimilar users", similar, dissimilar, aPrioriDistribution, false, plotDirectory)
+    plotDists(sc, "Similar to client " + i, "Not similar to client "+i, similar, dissimilar, aPrioriDistribution, false, plotDirectory)
   }
 
   /* TODO: Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -644,8 +649,15 @@ object CaratDynamoDataToPlots {
   def plot(title: String, titleNeg: String, xmax:Double,distWith: RDD[(Int, Double)],
     distWithout: RDD[(Int, Double)],
       ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, apps: Seq[String] = null) {
-    val evTitle = title + " (ev="+ProbUtil.nDecimal(ev, DECIMALS) +")"
-    val evTitleNeg = titleNeg + " (ev=" + ProbUtil.nDecimal(evNeg, DECIMALS)+ ")"
+    
+    var fixedTitle = title
+    if (title.startsWith("Hog "))
+      fixedTitle = title.substring(4)
+    else if (title.startsWith("Bug "))
+      fixedTitle = title.substring(4)      
+    // bump up accuracy here so that not everything gets blurred
+    val evTitle = fixedTitle + " (EV="+ProbUtil.nDecimal(ev, DECIMALS+1) +")"
+    val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, DECIMALS+1)+ ")"
     printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
     writeData(dateString, evTitle, distWith, xmax)
