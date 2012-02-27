@@ -29,7 +29,7 @@ import edu.berkeley.cs.amplab.carat.dynamodb.RemoveDaemons
  *    and comparing it with (A intersection sample.getAllApps()).size < ln(A).
  *
  * Where uuId is a unique device identifier.
- * 
+ *
  * Note: We do not store hogs or bugs with negative distance values.
  *
  * @author Eemil Lagerspetz
@@ -186,8 +186,8 @@ object FutureCaratDynamoDataAnalysis {
     val aPrioriDistribution = DynamoAnalysisUtil.getApriori(allRates)
     if (aPrioriDistribution.size == 0)
       throw new Error("WARN: aPrioriDistribution is empty!")
-    
-	var allApps = allRates.flatMap(_.allApps).collect().toSet
+
+    var allApps = allRates.flatMap(_.allApps).collect().toSet
     allApps --= DAEMONS_LIST
 
     println("AllApps (no daemons): " + allApps)
@@ -278,6 +278,8 @@ object FutureCaratDynamoDataAnalysis {
       { DynamoDbDecoder.deleteItem(similarsTable, uuid) }, false)
   }
 
+  val DIST_THRESHOLD = 10
+
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
@@ -291,47 +293,64 @@ object FutureCaratDynamoDataAnalysis {
     /* FIXME: Should not flatten RDD's, but figure out how to transform an
      * RDD of Rates => RDD of UniformDists => RDD of Double,Double pairs (Bucketed values)  
      */
+    val onec = one.count
+    val twoc = two.count
 
-    val freqWith = getFrequencies(aPrioriDistribution, one)
-    val freqWithout = getFrequencies(aPrioriDistribution, two)
+    if (onec > DIST_THRESHOLD && twoc > DIST_THRESHOLD) {
 
-    var evDistance = 0.0
+      val freqWith = getFrequencies(aPrioriDistribution, one)
+      val freqWithout = getFrequencies(aPrioriDistribution, two)
 
-    val withCount = freqWith.count
-    val withoutCount = freqWithout.count
-    println("getDist withCount=%s withoutCount=%s".format(withCount, withoutCount))
-    if (withCount > 0 && withoutCount > 0) {
-      println("rates=" + withCount + " ratesNeg=" + withoutCount)
-      if (withCount < 10) {
+      var evDistance = 0.0
+
+      val withCount = freqWith.count
+      val withoutCount = freqWithout.count
+      println("withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(onec, withCount, twoc, withoutCount))
+
+      if (withCount < DIST_THRESHOLD) {
         println("Less than 10 rates in \"with\": " + freqWith.map(_.toString).collect())
       }
 
-      if (withoutCount < 10) {
+      if (withoutCount < DIST_THRESHOLD) {
         println("Less than 10 rates in \"without\": " + freqWithout.map(_.toString).collect())
       }
 
-      if (DEBUG) {
-        ProbUtil.debugNonZero(freqWith.map(_._1).collect(), freqWithout.map(_._1).collect(), "rates")
+      if (withCount >= DIST_THRESHOLD && withoutCount >= DIST_THRESHOLD) {
+
+        if (DEBUG) {
+          ProbUtil.debugNonZero(freqWith.map(_._1).collect(), freqWithout.map(_._1).collect(), "rates")
+        }
+        // Log bucketing:
+        val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketRDDFreqs(sc, freqWith, freqWithout, BUCKETS, SMALLEST_BUCKET, DECIMALS)
+
+        evDistance = DynamoAnalysisUtil.evDiff(ev, evNeg)
+        if (evDistance > 0){
+          val impr = ( 100.0 / ev - 100.0 /evNeg ) / 3600.0 / 24.0 
+          printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days\n", ev, evNeg, evDistance, impr)
+        }else{
+          printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
+        }
+
+        if (DEBUG) {
+          ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
+        }
+
+        (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
+      } else{
+        println("Not enough apriori points: threshold: %d withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(DIST_THRESHOLD, onec, withCount, twoc, withoutCount))
+        println("Not enough : withCount=%s < %d or withoutCount=%s < %d".format(onec, DIST_THRESHOLD, twoc, DIST_THRESHOLD))
+        (0.0, null, null, 0.0, 0.0, 0.0)
       }
-      // Log bucketing:
-      val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketRDDFreqs(sc, freqWith, freqWithout, BUCKETS, SMALLEST_BUCKET, DECIMALS)
-
-      evDistance = DynamoAnalysisUtil.evDiff(ev, evNeg)
-      printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
-
-      if (DEBUG) {
-        ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
-      }
-
-      (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
-    } else
+    } else{
+      println("Not enough samples: withCount=%s < %d or withoutCount=%s < %d".format(onec, DIST_THRESHOLD, twoc, DIST_THRESHOLD))
       (0.0, null, null, 0.0, 0.0, 0.0)
+    }
   }
 
   def getFrequencies(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
     samples.flatMap(x => {
       if (x.isRateRange()) {
-        val freqRange = aPrioriDistribution.filter(y => {x.rateRange.contains(y._1)})
+        val freqRange = aPrioriDistribution.filter(y => { x.rateRange.contains(y._1) })
         val arr = freqRange.map { x =>
           {
             (x._1, x._2)
