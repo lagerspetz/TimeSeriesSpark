@@ -115,7 +115,7 @@ object CaratDynamoDataToPlots {
       DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
         DynamoDbDecoder.getAllItems(samplesTable, _),
         addToSet(_, _, allSamples))
-        var tm = new TreeMap[String, TreeSet[Double]]
+        var tm = new TreeMap[String, TreeSet[Double]]()
       tm ++= allSamples
       tm
     }
@@ -541,7 +541,8 @@ object CaratDynamoDataToPlots {
     }
 
     for (uuid <- uuids) {
-      val fromUuid = allRates.filter(_.uuid == uuid)
+      /* cache these because they will be used numberOfApps times */ 
+      val fromUuid = allRates.filter(_.uuid == uuid).cache()
 
       var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
       uuidApps --= DAEMONS_LIST_GLOBBED
@@ -549,8 +550,8 @@ object CaratDynamoDataToPlots {
     
       if (uuidApps.size > 0)
         similarApps(sc, allRates, aPrioriDistribution, uuid, uuidApps, plotDirectory)
-
-      val notFromUuid = allRates.filter(_.uuid != uuid)
+        /* cache these because they will be used numberOfApps times */
+      val notFromUuid = allRates.filter(_.uuid != uuid).cache()
       // no distance check, not bug or hog
       val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = FutureCaratDynamoDataAnalysis.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution)
       if (bucketed != null && bucketedNeg != null) {
@@ -643,8 +644,8 @@ object CaratDynamoDataToPlots {
   def plot(title: String, titleNeg: String, xmax:Double,distWith: RDD[(Int, Double)],
     distWithout: RDD[(Int, Double)],
       ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, apps: Seq[String] = null) {
-    val evTitle = title + " (ev="+ProbUtil.nDecimal(ev, 3) +")"
-    val evTitleNeg = titleNeg + " (ev=" + ProbUtil.nDecimal(evNeg, 3)+ ")"
+    val evTitle = title + " (ev="+ProbUtil.nDecimal(ev, DECIMALS) +")"
+    val evTitleNeg = titleNeg + " (ev=" + ProbUtil.nDecimal(evNeg, DECIMALS)+ ")"
     printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
     writeData(dateString, evTitle, distWith, xmax)
@@ -771,8 +772,11 @@ object CaratDynamoDataToPlots {
       println("Failed to create " + f + " for plots!")
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
-      
-      for (k <- data)
+      val arr = data.toArray[(String, TreeSet[Double])]
+      val ret = arr.sortWith((x, y) => {
+        x._2.size > y._2.size
+      })
+      for (k <- ret)
         for (j <- k._2)
           datafile.write(k._1 +" "+j +"\n")
       datafile.close
