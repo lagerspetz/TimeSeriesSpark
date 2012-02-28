@@ -3,6 +3,7 @@ package edu.berkeley.cs.amplab.carat
 import spark._
 import spark.SparkContext._
 import spark.timeseries._
+import scala.actors.Scheduler
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
 import scala.collection.immutable.Set
@@ -575,7 +576,9 @@ object CaratDynamoDataToPlots {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
 
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
+      Scheduler.execute(
       plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
+      )
     }
     isBugOrHog && evDistance > 0
   }
@@ -613,7 +616,9 @@ object CaratDynamoDataToPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
+        Scheduler.execute(
         plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, apps.toSeq)
+        )
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
