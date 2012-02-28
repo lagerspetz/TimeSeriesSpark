@@ -58,7 +58,7 @@ object DynamoDbEncoder {
     val map = getMap(vals: _*)
     println("Going to put into " + table + ":\n" + map.mkString("\n"))
     val putReq = new PutItemRequest(table, map)
-    dd.putItem(putReq)
+    safePut(putReq)
   }
 
   
@@ -69,7 +69,7 @@ object DynamoDbEncoder {
     for (map <- stuff) {
       println("Going to put into " + table + ":\n" + map.mkString("\n"))
       val putReq = new PutItemRequest(table, map)
-      dd.putItem(putReq)
+      safePut(putReq)
     }
   }
   /**
@@ -78,7 +78,39 @@ object DynamoDbEncoder {
   def putItem(table: String, map: java.util.Map[String, AttributeValue]) = {
     println("Going to put into " + table + ":\n" + map.mkString("\n"))
     val putReq = new PutItemRequest(table, map)
-    dd.putItem(putReq)
+    safePut(putReq)
+  }
+  
+  // max allowed write caps per sec
+  val capMax = 80.0
+  // write caps used
+  var capUsedPerSec = 0.0
+  // time write caps were used in
+  var timeSpent = 0L
+  // last request write caps used
+  var lastCap = 0.0
+  
+  
+  def safePut(req: PutItemRequest) = {
+    val now = System.currentTimeMillis
+    if (timeSpent == 0){
+      timeSpent = now
+    }else
+      timeSpent = now - timeSpent
+    // if LastCap is bigger than capMax, this whole thing makes no sense.
+    if (lastCap > capMax)
+      println("Error: lastCap=%s is greater than max=%s".format(lastCap, capMax))
+    else {
+      if (timeSpent < 1000 && capUsedPerSec + lastCap > capMax) {
+        wait(1000 - timeSpent)
+        timeSpent = now
+        capUsedPerSec = 0
+      }
+    }
+    val res = dd.putItem(req)
+    lastCap = res.getConsumedCapacityUnits()
+    capUsedPerSec += lastCap
+    println("Put used %s cap, %s cap left".format(lastCap, (capMax - capUsedPerSec)))
   }
 
   /**
