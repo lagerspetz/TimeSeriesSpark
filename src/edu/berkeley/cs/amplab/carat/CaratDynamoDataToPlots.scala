@@ -165,7 +165,7 @@ object CaratDynamoDataToPlots {
 
   def analyzeData(sc: SparkContext, plotDirectory:String) = {
     // Unique uuIds, Oses, and Models from registrations.
-    val allUuids = new scala.collection.mutable.HashSet[String]
+    val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
     val allModels = new scala.collection.mutable.HashSet[String]
     val allOses = new scala.collection.mutable.HashSet[String]
 
@@ -179,29 +179,45 @@ object CaratDynamoDataToPlots {
         null
     }
     
-    var allRates: spark.RDD[CaratRate] = null
-
-    if (last_reg > 0) {
-      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
-        DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-        handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
-    } else {
-      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
-        DynamoDbDecoder.getAllItems(registrationTable, _),
-        handleRegs(sc, _, _, allUuids, allOses, allModels, plotDirectory), false, allRates)
-    }
     if (oldRates != null) {
       val devices = oldRates.map(x => {
-        (x.uuid, x.os, x.model)
+        (x.uuid, (x.os, x.model))
       }).collect()
       for (k <- devices) {
-        allUuids += k._1
-        allOses += k._2
-        allModels += k._3
+        uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
+        allOses += k._2._1
+        allModels += k._2._2
       }
-      allRates = allRates.union(oldRates)
     }
-    println("All uuIds: " + allUuids.mkString(", "))
+
+    var allRates: spark.RDD[CaratRate] = oldRates
+
+    if (last_reg > 0) {
+      DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+        DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
+        handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+    } else {
+      DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+        DynamoDbDecoder.getAllItems(registrationTable, _),
+        handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+    }
+
+    /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
+    if (last_sample > 0) {
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
+        DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
+        handleSamples(sc, _, uuidToOsAndModel, _),
+        true,
+        allRates)
+    } else {
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+        DynamoDbDecoder.getAllItems(samplesTable, _),
+        handleSamples(sc, _, uuidToOsAndModel, _),
+        true,
+        allRates)
+    }
+
+    println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
     println("All oses: " + allOses.mkString(", "))
     println("All models: " + allModels.mkString(", "))
 
@@ -210,87 +226,49 @@ object CaratDynamoDataToPlots {
       DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
       DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
       // cache allRates here?
-      analyzeRateData(sc, allRates.cache(), allUuids, allOses, allModels, plotDirectory)
+      analyzeRateData(sc, allRates.cache(), uuidToOsAndModel, allOses, allModels, plotDirectory)
     }else
       null
   }
   
-   /**
+  /**
    * Handles a set of registration messages from the Carat DynamoDb.
-   * Samples matching each registration identifier are got, rates calculated from them, and combined with `dist`.
-   * uuids, oses and models are filled during registration message handling. Returns the updated version of `dist`.
+   * uuids, oses and models are filled in.
    */
-  def handleRegs(sc: SparkContext, regs: java.util.List[java.util.Map[String, AttributeValue]], dist: spark.RDD[CaratRate], uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String], plotDirectory:String) = {
-    /* FIXME: I would like to do this in parallel, but that would not let me re-use
-     * all the data for the other uuids, resulting in n^2 execution time.
-     */
+  def handleRegs(key:Key, regs: java.util.List[java.util.Map[String, AttributeValue]],
+      uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+      oses: scala.collection.mutable.Set[String],
+      models: scala.collection.mutable.Set[String]) {
     
     // Get last reg timestamp for set saving
     if (regs.size > 0){
       last_reg_write = regs.last.get(regsTimestamp).getN().toDouble
     }
 
-    // Remove duplicates caused by re-registrations:
-    var regSet: Set[(String, String, String)] = DynamoAnalysisUtil.regSet(regs)
-
-    var distRet: spark.RDD[CaratRate] = dist
-    for (x <- regSet) {
-      val uuid = x._1
-      val model = x._2
-      val os = x._3
-
-      // Collect all uuids, models and oses in the same loop
-      uuids += uuid
+    for (x <- regs) {
+      val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
+      val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
+      val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
+      uuidToOsAndModel += ((uuid, (os, model)))
       models += model
       oses += os
-
-      println("Handling reg:" + x)
-
-      /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      if (last_sample > 0){
-      distRet = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample+"", null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-        DynamoDbDecoder.getItemsAfterRangeKey(samplesTable, uuid, last_sample+"", _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-        handleSamples(sc, _, os, model, _),
-        true,
-        distRet)
-      }else{
-        distRet = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getItems(samplesTable, uuid, null, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-            DynamoDbDecoder.getItems(samplesTable, uuid, _, Seq(sampleKey, sampleProcesses,sampleTime,sampleBatteryState,sampleBatteryLevel,sampleEvent)),
-        handleSamples(sc, _, os, model, _),
-        true,
-        distRet)
-      }
-      /* 
-       * distRet here augments by 1 user at a time, so statistics for rates while adding a user at a time can be calculated here
-       * 
-       */
-        //analyzeRateDataStdDevsOverTime(sc, distRet, uuids, oses, models, plotDirectory)
     }
+        
     /*
      * TODO: Stddev of samples per user over time,
      * stddev of distributions (hog, etc) per all users over increasing number of users,
      * change of distance of distributions (hog, etc) over increasing number of users.
      */
-    distRet
+    //analyzeRateDataStdDevsOverTime(sc, distRet, uuid, os, model, plotDirectory)
   }
-
-    /**
+  /**
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
-  def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]], os: String, model: String, rates: RDD[CaratRate]) = {
-    if (DEBUG)
-      if (samples.size < 100) {
-        for (x <- samples) {
-          for (k <- x) {
-            if (k._2.isInstanceOf[Seq[String]])
-              print("(" + k._1 + ", length=" + k._2.asInstanceOf[Seq[String]].size + ") ")
-            else
-              print(k + " ")
-          }
-          println()
-        }
-      }
+  def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    rates: RDD[CaratRate]) = {
+
     if (samples.size > 0) {
       val lastSample = samples.last
       last_sample_write = lastSample.get(sampleTime).getN().toDouble
@@ -318,7 +296,7 @@ object CaratDynamoDataToPlots {
         val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
-      DynamoAnalysisUtil.rateMapperPairwise(os, model, mapped)
+      DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
     })
     if (rates != null)
       rateRdd = rateRdd.union(rates)
@@ -480,7 +458,7 @@ object CaratDynamoDataToPlots {
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
   def analyzeRateData(sc:SparkContext, allRates: RDD[CaratRate],
-    uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String], plotDirectory:String) = {
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String], plotDirectory:String) = {
     
     /**
      * uuid distributions, xmax, ev and evNeg
@@ -545,7 +523,7 @@ object CaratDynamoDataToPlots {
       }
     }
     
-    val uuidArray = uuids.toArray.sortWith((s, t) => {
+    val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
     

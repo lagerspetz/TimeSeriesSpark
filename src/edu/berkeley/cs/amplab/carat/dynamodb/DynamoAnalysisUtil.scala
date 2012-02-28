@@ -14,10 +14,12 @@ import spark.timeseries.UniformDist
 import spark._
 import spark.SparkContext._
 import com.amazonaws.services.dynamodb.model.Key
+import scala.collection.immutable.HashMap
 
 object DynamoAnalysisUtil {
 
   // constants for battery state and sample triggers
+  val MODEL_SIMULATOR = "Simulator"
   val STATE_CHARGING = "charging"
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
@@ -58,12 +60,12 @@ object DynamoAnalysisUtil {
   }
 
   def regSet(regs: java.util.List[java.util.Map[String, AttributeValue]]) = {
-    var regSet = new HashSet[(String, String, String)]
+    var regSet = new HashMap[String, (String, String)]
     regSet ++= regs.map(x => {
       val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
       val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
       val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
-      (uuid, model, os)
+      (uuid, (model, os))
     })
     regSet
   }
@@ -239,6 +241,130 @@ object DynamoAnalysisUtil {
     rates.toSeq
   }
 
+  /**
+   * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
+   * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
+   */
+  def rateMapperPairwise(uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
+    // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
+    var prevUuid = ""
+    var prevD = 0.0
+    var prevBatt = 0.0
+    var prevEvent = ""
+    var prevState = ""
+    var prevApps: Seq[String] = Array[String]()
+
+    var uuid = ""
+    var d = 0.0
+    var batt = 0.0
+    var event = ""
+    var state = ""
+    var apps: Seq[String] = Array[String]()
+
+    var negDrainSamples = 0
+    var abandonedSamples = 0
+    var chargingSamples = 0
+    var zeroBLCSamples = 0
+    var allZeroSamples = 0
+    var pointRates = 0
+
+    var rates = new ArrayBuffer[CaratRate]
+    val obsSorted = observations.sortWith((x, y) => {
+      // order lexicographically by uuid
+      if (x._1 < y._1)
+        true
+      else if (x._1 > y._1)
+        false
+      else if (x._1 == y._1 && x._2 < y._2)
+        true
+      else if (x._1 == y._1 && x._2 > y._2)
+        false
+      else
+        true
+      // if time and uuid are the same, sort first parameter first
+    })
+    for (k <- obsSorted) {
+      uuid = k._1
+      val (os, model) = uuidToOsAndModel.get(k._1).getOrElse("", "")
+      d = k._2.toDouble
+      batt = k._3.toDouble
+      event = k._4.trim().toLowerCase()
+      state = k._5.trim().toLowerCase()
+      apps = k._6
+      if (model != MODEL_SIMULATOR) {
+        if (state != STATE_CHARGING) {
+          /* Record rates. First time fall through.
+           * Note: same date or different uuid does not result
+           * in discard of the sample as a starting point for a rate.
+           * However, we cannot have a rate across UUIDs or the same timestamp.
+           */
+          if (prevD != 0 && prevD != d && prevUuid == uuid) {
+            if (prevBatt - batt < 0) {
+              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
+              negDrainSamples += 1
+            } else if (prevBatt == 0 && batt == 0) {
+              /* Assume simulator, ignore */
+              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
+              allZeroSamples += 1
+            } else {
+
+              /* now prevBatt - batt >= 0 */
+              if (prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED) {
+                /* Point rate */
+                val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+                  prevEvent, event, prevApps, apps)
+                if (r.rate() == 0) {
+                  // This should never happen
+                  println("RATE ERROR: BatteryLevelChanged with zero rate: " + r.toString(false))
+                  zeroBLCSamples += 1
+                } else {
+                  if (considerRate(r)) {
+                    rates += r
+                    pointRates += 1
+                  } else {
+                    abandonedSamples += 1
+                  }
+                }
+              } else {
+                /* One endpoint not BLC, use uniform distribution rate */
+                val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
+                  prevEvent, event, prevApps, apps)
+                if (considerRate(r)) {
+                  rates += r
+                } else {
+                  println("Abandoned uniform rate with abnormally high EV: " + r.toString(false))
+                  abandonedSamples += 1
+                }
+              }
+            }
+          }
+        } else {
+          chargingSamples += 1
+          // do not use charging samples as even starting points.
+          prevD = 0
+        }
+      } else{
+        // simulator samples also reset prevD
+        prevD = 0
+      }
+      prevUuid = uuid
+      prevD = d
+      prevBatt = batt
+      prevEvent = event
+      prevState = state
+      prevApps = apps
+    }
+
+    println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
+      nzf("%s all zero, ", allZeroSamples) +
+      nzf("%s charging, ", chargingSamples) +
+      nzf("%s negative drain, ", negDrainSamples) +
+      nzf("%s > " + ABNORMAL_RATE + " drain, ", abandonedSamples) +
+      nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
+    rates.toSeq
+  }
+
   def nzf(formatString: String, number: Int) = {
     if (number > 0)
       formatString.format(number)
@@ -302,13 +428,13 @@ object DynamoAnalysisUtil {
     DynamoDbItemLoop(DynamoDbDecoder.filterItems(hogsTable, kd: _*),
       DynamoDbDecoder.filterItemsFromKey(hogsTable, _, kd: _*),
       removeHogs(_, _))
-    
+
     DynamoDbItemLoop(DynamoDbDecoder.filterItems(bugsTable, kd: _*),
       DynamoDbDecoder.filterItemsFromKey(bugsTable, _, kd: _*),
       removeBugs(_, _))
   }
-  
-  def removeBugs(key:Key, results: java.util.List[java.util.Map[String, AttributeValue]]){
+
+  def removeBugs(key: Key, results: java.util.List[java.util.Map[String, AttributeValue]]) {
     for (k <- results) {
       val uuid = k.get(resultKey).getS()
       val app = k.get(hogKey).getS()
@@ -316,16 +442,16 @@ object DynamoAnalysisUtil {
       DynamoDbDecoder.deleteItem(bugsTable, uuid, app)
     }
   }
-  
-  def removeHogs(key:Key, results: java.util.List[java.util.Map[String, AttributeValue]]){
+
+  def removeHogs(key: Key, results: java.util.List[java.util.Map[String, AttributeValue]]) {
     for (k <- results) {
       val app = k.get(hogKey).getS()
       println("Deleting: " + app)
       DynamoDbDecoder.deleteItem(hogsTable, app)
     }
   }
-    
-   /**
+
+  /**
    * Generic DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
    * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
    */

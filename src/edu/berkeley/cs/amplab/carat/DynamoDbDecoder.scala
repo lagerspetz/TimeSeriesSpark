@@ -124,7 +124,7 @@ object DynamoDbDecoder {
     val s = new ScanRequest(table)
     if (lastKey != null)
       s.setExclusiveStartKey(lastKey)
-    val cond = new Condition().withComparisonOperator("GT").withAttributeValueList(new AttributeValue().withN(attrValue))
+    val cond = new Condition().withComparisonOperator("GE").withAttributeValueList(new AttributeValue().withN(attrValue))
     val conds = DynamoDbEncoder.convertToMap[Condition](Array((attrName, cond)))
     s.setScanFilter(conds)
     val sr = DynamoDbEncoder.dd.scan(s)
