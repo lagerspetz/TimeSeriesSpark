@@ -3,7 +3,12 @@ package edu.berkeley.cs.amplab.carat
 import spark.RDD
 import scala.collection.immutable.TreeMap
 package object dynamodb {
-  
+  // Carat Website bucket
+  val BUCKET_WEBSITE = "carat.website"
+
+  // Daemons file on S3
+  val DAEMON_FILE = "daemons.txt"
+
   val UUIDString = "uuId"
 
   val resultsTable = "carat.latestresults"

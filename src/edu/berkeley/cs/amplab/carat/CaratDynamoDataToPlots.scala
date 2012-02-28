@@ -378,7 +378,7 @@ object CaratDynamoDataToPlots {
 
     val apps = allRates.map(x => {
       var sampleApps = x.allApps
-      sampleApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
+      sampleApps --= DynamoAnalysisUtil.DAEMONS_LIST
       sampleApps
     }).collect()
 
@@ -423,7 +423,7 @@ object CaratDynamoDataToPlots {
       val fromUuid = allRates.filter(_.uuid == uuid)
 
       var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
-      uuidApps --= FutureCaratDynamoDataAnalysis.DAEMONS_LIST
+      uuidApps --= DynamoAnalysisUtil.DAEMONS_LIST
       val nonHogApps = uuidApps -- allHogs
 
       if (uuidApps.size > 0)
@@ -433,7 +433,7 @@ object CaratDynamoDataToPlots {
 
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = FutureCaratDynamoDataAnalysis.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution)
+      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
       if (bucketed != null && bucketedNeg != null) {
         distsWithUuid += ((uuid, bucketed))
         distsWithoutUuid += ((uuid, bucketedNeg))
@@ -484,19 +484,8 @@ object CaratDynamoDataToPlots {
       println("a priori dist:\n" + aPrioriDistribution.mkString("\n"))
 
     var allApps = allRates.flatMap(_.allApps).collect().toSet
-
-    val globs = FutureCaratDynamoDataAnalysis.DAEMONS_LIST.filter(_.endsWith("*")).map(x => { x.substring(0, x.length - 1) })
-
-    var matched = allApps.filter(x => {
-      val globPrefix = globs.filter(x.startsWith(_))
-      !globPrefix.isEmpty
-    })
-    
-    println("Matched daemons with globs: " + matched)
-    val DAEMONS_LIST_GLOBBED = FutureCaratDynamoDataAnalysis.DAEMONS_LIST ++ matched
-    
+    val DAEMONS_LIST_GLOBBED = DynamoAnalysisUtil.daemons_globbed(allApps)
     allApps --= DAEMONS_LIST_GLOBBED
-      
     println("AllApps (no daemons): " + allApps)
 
     for (os <- oses) {
@@ -542,7 +531,7 @@ object CaratDynamoDataToPlots {
         /* cache these because they will be used numberOfApps times */
       val notFromUuid = allRates.filter(_.uuid != uuid).cache()
       // no distance check, not bug or hog
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = FutureCaratDynamoDataAnalysis.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution)
+      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
       if (bucketed != null && bucketedNeg != null) {
         distsWithUuid += ((uuid, bucketed))
         distsWithoutUuid += ((uuid, bucketedNeg))
@@ -583,7 +572,7 @@ object CaratDynamoDataToPlots {
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
   def plotDists(sc:SparkContext, title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = FutureCaratDynamoDataAnalysis.getDistanceAndDistributions(sc, one, two, aPrioriDistribution)
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
 
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)

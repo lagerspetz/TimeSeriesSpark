@@ -5,5 +5,5 @@ import collection.JavaConversions._
 
 object RemoveDaemons extends App {
   // Daemons list, read from S3
-  DynamoAnalysisUtil.removeDaemons(CaratDynamoDataAnalysis.DAEMONS_LIST)
+  DynamoAnalysisUtil.removeDaemons
 }

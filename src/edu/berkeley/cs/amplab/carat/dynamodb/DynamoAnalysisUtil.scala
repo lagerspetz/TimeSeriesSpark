@@ -16,6 +16,7 @@ import spark.SparkContext._
 import com.amazonaws.services.dynamodb.model.Key
 import scala.collection.immutable.HashMap
 import edu.berkeley.cs.amplab.carat.CaratRate
+import spark.timeseries.ProbUtil
 
 object DynamoAnalysisUtil {
 
@@ -26,6 +27,9 @@ object DynamoAnalysisUtil {
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 9
 
+  // Daemons list, read from S3
+  val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
+  
   def readDoubleFromFile(file: String) = {
     val f = new File(file)
     if (!f.exists() && !f.createNewFile())
@@ -421,7 +425,121 @@ object DynamoAnalysisUtil {
     println("Collecting aPriori.")
     grouped.map(x => { (x._1, x._2.sum) }).collect()
   }
+  
+  val DIST_THRESHOLD = 10
 
+  /**
+   * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
+   */
+  def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
+      buckets:Int, smallestBucket:Double, decimals:Int, DEBUG:Boolean = false) = {
+    // probability distribution: r, count/sumCount
+
+    /* Figure out max x value (maximum rate) and bucket y values of 
+     * both distributions into n buckets, averaging inside a bucket
+     */
+
+    /* FIXME: Should not flatten RDD's, but figure out how to transform an
+     * RDD of Rates => RDD of UniformDists => RDD of Double,Double pairs (Bucketed values)  
+     */
+    val onec = one.count
+    val twoc = two.count
+
+    if (onec > DIST_THRESHOLD && twoc > DIST_THRESHOLD) {
+
+      val freqWith = getFrequencies(aPrioriDistribution, one)
+      val freqWithout = getFrequencies(aPrioriDistribution, two)
+
+      var evDistance = 0.0
+
+      val withCount = freqWith.count
+      val withoutCount = freqWithout.count
+      println("withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(onec, withCount, twoc, withoutCount))
+
+      if (withCount < DIST_THRESHOLD) {
+        println("Less than 10 rates in \"with\": " + freqWith.map(_.toString).collect())
+      }
+
+      if (withoutCount < DIST_THRESHOLD) {
+        println("Less than 10 rates in \"without\": " + freqWithout.map(_.toString).collect())
+      }
+
+      if (withCount >= DIST_THRESHOLD && withoutCount >= DIST_THRESHOLD) {
+
+        if (DEBUG) {
+          ProbUtil.debugNonZero(freqWith.map(_._1).collect(), freqWithout.map(_._1).collect(), "rates")
+        }
+        // Log bucketing:
+        val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketRDDFreqs(sc, freqWith, freqWithout, buckets, smallestBucket, decimals)
+
+        evDistance = evDiff(ev, evNeg)
+        if (evDistance > 0){
+          var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
+          val imprD = (imprHr / 24.0).toInt
+          imprHr -= imprD * 24.0
+          printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours\n", ev, evNeg, evDistance, imprD, imprHr)
+        }else{
+          printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
+        }
+
+        if (DEBUG) {
+          ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
+        }
+
+        (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
+      } else{
+        println("Not enough apriori points: threshold: %d withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(DIST_THRESHOLD, onec, withCount, twoc, withoutCount))
+        println("Not enough : withCount=%s < %d or withoutCount=%s < %d".format(onec, DIST_THRESHOLD, twoc, DIST_THRESHOLD))
+        (0.0, null, null, 0.0, 0.0, 0.0)
+      }
+    } else{
+      println("Not enough samples: withCount=%s < %d or withoutCount=%s < %d".format(onec, DIST_THRESHOLD, twoc, DIST_THRESHOLD))
+      (0.0, null, null, 0.0, 0.0, 0.0)
+    }
+  }
+  
+  /**
+   * Convert a set of rates into their frequencies, interpreting rate ranges as slices
+   * of `aPrioriDistribution`.
+   */
+  def getFrequencies(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+    samples.flatMap(x => {
+      if (x.isRateRange()) {
+        val freqRange = aPrioriDistribution.filter(y => { x.rateRange.contains(y._1) })
+        val arr = freqRange.map { x =>
+          {
+            (x._1, x._2)
+          }
+        }.toArray
+
+        var sum = 0.0
+        for (k <- arr) {
+          sum += k._2
+        }
+        arr.map(x => { (x._1, x._2 / sum) })
+      } else
+        Array((x.rate, 1.0))
+    }).groupByKey().map(x => {
+      (x._1, x._2.sum)
+    })
+  }
+
+  def daemons_globbed(allApps: Set[String]) = {
+    val globs = DAEMONS_LIST.filter(_.endsWith("*")).map(x => { x.substring(0, x.length - 1) })
+
+    var matched = allApps.filter(x => {
+      val globPrefix = globs.filter(x.startsWith(_))
+      !globPrefix.isEmpty
+    })
+    
+    println("Matched daemons with globs: " + matched)
+    DAEMONS_LIST ++ matched
+  }
+  
+  def removeDaemons() {
+    removeDaemons(DAEMONS_LIST)
+  }
+    
   def removeDaemons(daemonSet: Set[String]) {
     // add hog table key (which is the same as bug table app key)
     val kd = daemonSet.map(x => {

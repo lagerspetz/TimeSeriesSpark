@@ -50,9 +50,6 @@ object CaratDynamoDataAnalysis {
   val LIMIT_SPEED = false
   val ABNORMAL_RATE = 9
 
-  // Daemons list, read from S3
-  val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
-
   // For saving rates so they do not have to be fetched from DynamoDB every time
   val RATES_CACHED = "/mnt/TimeSeriesSpark/spark-temp/stable-cached-rates.dat"
   // to make sure that the old RATES_CACHED is not overwritten while it is being worked on
@@ -258,26 +255,14 @@ object CaratDynamoDataAnalysis {
     var appsByUuid = new TreeMap[String, Set[String]]
 
     var allApps = allRates.flatMap(_.allApps).collect().toSet
-
-    val globs = DAEMONS_LIST.filter(_.endsWith("*")).map(x => { x.substring(0, x.length - 1) })
-
-    var matched = allApps.filter(x => {
-      val globPrefix = globs.filter(x.startsWith(_))
-      !globPrefix.isEmpty
-    })
-
-    println("Matched daemons with globs: " + matched)
-    val DAEMONS_LIST_GLOBBED = DAEMONS_LIST ++ matched
-
+    val DAEMONS_LIST_GLOBBED = DynamoAnalysisUtil.daemons_globbed(allApps)
     allApps --= DAEMONS_LIST_GLOBBED
+    println("AllApps (no daemons): " + allApps)
 
     //Remove Daemons
     println("Removing daemons from the database")
     DynamoAnalysisUtil.removeDaemons(DAEMONS_LIST_GLOBBED)
     //Remove old bugs
-
-    // mediaremoted does not get removed here, why?
-    println("AllApps (no daemons): " + allApps)
 
     for (os <- oses) {
       val fromOs = allRates.filter(_.os == os)
