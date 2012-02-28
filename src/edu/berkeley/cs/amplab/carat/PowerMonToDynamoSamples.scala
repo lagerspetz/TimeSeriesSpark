@@ -5,6 +5,7 @@ import spark.SparkContext._
 import spark.timeseries._
 import scala.collection.mutable.ArrayBuffer
 import java.text.SimpleDateFormat
+import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbEncoder
 
 object PowerMonToDynamoSamples {
 

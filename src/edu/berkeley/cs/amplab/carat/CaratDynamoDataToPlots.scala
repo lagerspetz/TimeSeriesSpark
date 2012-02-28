@@ -21,6 +21,7 @@ import java.io.FileWriter
 import java.io.FileOutputStream
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 import scala.collection.immutable.TreeSet
+import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions

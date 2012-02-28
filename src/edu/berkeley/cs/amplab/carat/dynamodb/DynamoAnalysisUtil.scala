@@ -8,13 +8,14 @@ import java.io.InputStreamReader
 import java.io.FileInputStream
 import java.io.FileWriter
 import collection.JavaConversions._
-import edu.berkeley.cs.amplab.carat._
+import edu.berkeley.cs.amplab.carat.s3.S3Decoder
 import scala.collection.mutable.ArrayBuffer
 import spark.timeseries.UniformDist
 import spark._
 import spark.SparkContext._
 import com.amazonaws.services.dynamodb.model.Key
 import scala.collection.immutable.HashMap
+import edu.berkeley.cs.amplab.carat.CaratRate
 
 object DynamoAnalysisUtil {
 
@@ -423,7 +424,7 @@ object DynamoAnalysisUtil {
 
   def removeDaemons(daemonSet: Set[String]) {
     // add hog table key (which is the same as bug table app key)
-    val kd = CaratDynamoDataAnalysis.DAEMONS_LIST.map(x => {
+    val kd = daemonSet.map(x => {
       (hogKey, x)
     }).toSeq
     DynamoDbItemLoop(DynamoDbDecoder.filterItems(hogsTable, kd: _*),

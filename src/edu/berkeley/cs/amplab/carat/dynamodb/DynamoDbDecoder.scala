@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.dynamodb
 
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import com.amazonaws.services.dynamodb.model.GetItemRequest
@@ -26,15 +26,17 @@ object DynamoDbDecoder {
  */
   def main(args: Array[String]) {
     val tables = DynamoDbEncoder.dd.listTables().getTableNames()
-    S3Decoder.printList(tables)
+    println(tables.mkString("\n"))
     val it = tables.iterator()
     while (it.hasNext) {
-      S3Decoder.printList(getAllItems(it.next)._2)
+      println(getAllItems(it.next)._2.mkString("\n"))
     }
     
-    debug_deleteSystemVersion()
   }
   
+  /** Used for deleting PowerMonitor samples from the database.
+   * 
+   */
   def debug_deleteSystemVersion(){
     deleteItems(registrationTable, regsUuid, regsTimestamp, ("systemVersion", "5.0.1"))
     deleteItems(registrationTable, regsUuid, regsTimestamp, ("systemVersion", "7.0.1RC1"))

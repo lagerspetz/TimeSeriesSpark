@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.s3
 
 import com.amazonaws.auth.PropertiesCredentials
 import com.amazonaws.services.s3.AmazonS3

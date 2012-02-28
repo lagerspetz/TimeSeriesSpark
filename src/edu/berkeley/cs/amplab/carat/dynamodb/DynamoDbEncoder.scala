@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.dynamodb
 
 import com.amazonaws.services.dynamodb.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodb.model.CreateTableRequest
@@ -12,6 +12,7 @@ import com.amazonaws.services.dynamodb.model.DeleteTableRequest
 import collection.JavaConversions._
 import java.util.HashSet
 import com.amazonaws.services.dynamodb.model.UpdateTableRequest
+import edu.berkeley.cs.amplab.carat.s3.S3Encoder
 
 object DynamoDbEncoder {
   val dd = new AmazonDynamoDBClient(S3Encoder.cred)

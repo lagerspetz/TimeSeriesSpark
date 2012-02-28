@@ -16,6 +16,8 @@ import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 import edu.berkeley.cs.amplab.carat.dynamodb.RemoveDaemons
 import java.io.File
 import com.amazonaws.services.dynamodb.model.Key
+import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
+import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbEncoder
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
