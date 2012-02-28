@@ -3,7 +3,6 @@ package edu.berkeley.cs.amplab.carat
 import spark._
 import spark.SparkContext._
 import spark.timeseries._
-import scala.actors.Scheduler
 import java.util.concurrent.Semaphore
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
@@ -24,6 +23,7 @@ import java.io.FileOutputStream
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 import scala.collection.immutable.TreeSet
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
+import scala.actors.scheduler.ResizableThreadPoolScheduler
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -49,6 +49,13 @@ object CaratDynamoDataToPlots {
 
   // How many concurrent plotting operations are allowed to run at once.
   val CONCURRENT_PLOTS = 100
+  
+  lazy val scheduler = {
+    scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+"")
+    val s = new ResizableThreadPoolScheduler(false)
+    s.start()
+    s
+  }
   
   // Bucketing and decimal constants
   val buckets = 100
@@ -583,7 +590,7 @@ object CaratDynamoDataToPlots {
   def plotDists(sem: Semaphore, sc:SparkContext, title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
-      Scheduler.execute({
+      scheduler.execute({
           sem.acquireUninterruptibly()
           plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
           sem.release()
@@ -625,7 +632,7 @@ object CaratDynamoDataToPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-        Scheduler.execute({
+        scheduler.execute({
           sem.acquireUninterruptibly()
         plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, apps.toSeq)
         sem.release()
