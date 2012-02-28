@@ -33,11 +33,19 @@ object DynamoAnalysisUtil {
   def start() = System.currentTimeMillis()
 
   def finish(start: Long) {
-    val functionstack = Thread.currentThread().getStackTrace()
-    if (functionstack != null && functionstack.length > 2){
-      println("%s: %d".format(functionstack(2), (System.currentTimeMillis() - start)))
-    }else
-      println("%s: %d".format("SomeFunction: ", (System.currentTimeMillis() - start)))
+    val functionStack = Thread.currentThread().getStackTrace()
+    val f = {
+      if (functionStack != null && functionStack.length > 0) {
+        if (functionStack.length > 3)
+          functionStack(2) + " from " + functionStack(3)
+        else if (functionStack.length > 2)
+          functionStack(2)
+        else if (functionStack.length > 1)
+          functionStack(1)
+      } else
+        "edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil.finish from UnknownFunction"
+    }
+    println("Time %s: %d".format(f, (System.currentTimeMillis() - start)))
   }
   
   def readDoubleFromFile(file: String) = {
