@@ -16,6 +16,7 @@ import com.amazonaws.services.dynamodb.model.QueryResult
 import com.amazonaws.AmazonClientException
 import com.amazonaws.AmazonServiceException
 import spark.timeseries.dynamodb.DynamoDbReader
+import com.amazonaws.services.dynamodb.model.ScanResult
 
 object DynamoDbDecoder {
   
@@ -103,87 +104,49 @@ object DynamoDbDecoder {
     }))
     val conds = DynamoDbEncoder.convertToMap[Condition](Array((vals.first._1, cond)))
     s.setScanFilter(conds)
-    val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    guaranteedScan(s)
   }
 
   def filterItemsFromKey(table: String, lastKey: Key,  vals: (String, Any)*) = {
     val s = new ScanRequest(table)
-    if (lastKey != null)
-      s.setExclusiveStartKey(lastKey)
     val cond = new Condition().withComparisonOperator("IN").withAttributeValueList(vals.map(x => {
       new AttributeValue(x._2.toString())
     }))
     val conds = DynamoDbEncoder.convertToMap[Condition](Array((vals.first._1, cond)))
     s.setScanFilter(conds)
-    val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    guaranteedScan(s, lastKey)
   }
 
   def filterItemsAfter(table: String, attrName: String, attrValue: String, lastKey: Key = null) = {
     val s = new ScanRequest(table)
-    if (lastKey != null)
-      s.setExclusiveStartKey(lastKey)
     val cond = new Condition().withComparisonOperator("GE").withAttributeValueList(new AttributeValue().withN(attrValue))
     val conds = DynamoDbEncoder.convertToMap[Condition](Array((attrName, cond)))
     s.setScanFilter(conds)
-    val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    guaranteedScan(s, lastKey)
   }
   
-  def getAllItems(table:String) = {
-    println("Getting all items from table " + table)
+  def getAllItems(table:String, lastKey:Key = null) = {
+    println("Getting all items from table " + table + " starting with " + lastKey)
     val s = new ScanRequest(table)
-    //s.setLimit(THROUGHPUT_LIMIT) 
-    val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems())
-  }
-  
-  def getAllItems(table:String, firstKey:Key) = {
-    println("Getting all items from table " + table + " starting with " + firstKey)
-    val s = new ScanRequest(table)
-    s.setExclusiveStartKey(firstKey)
     //s.setLimit(THROUGHPUT_LIMIT)
-    val sr = DynamoDbEncoder.dd.scan(s)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    guaranteedScan(s, lastKey)
   }
 
-  def getItems(table: String, keyName:String, keyPart: String) = {
-    val q = new ScanRequest(table)
+  def getItemsMatching(table: String, attrName:String, attrValue: String, lastKey:Key = null) = {
+    val s = new ScanRequest(table)
     val conds = new java.util.HashMap[String, Condition]
-    conds += ((keyName, new Condition().withComparisonOperator("EQ").withAttributeValueList(new AttributeValue(keyPart))))
+    conds += ((attrName, new Condition().withComparisonOperator("EQ").withAttributeValueList(new AttributeValue(attrValue))))
+    s.setExclusiveStartKey(lastKey)
     //q.setLimit(THROUGHPUT_LIMIT)
-    val sr = DynamoDbEncoder.dd.scan(q)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    guaranteedScan(s, lastKey)
   }
-  
-  def getItemsIN(table: String, keyName:String, keyPart: String) = {
+
+  def getItemsIN(table: String, keyName:String, keyPart: String, lastKey:Key = null) = {
     val q = new ScanRequest(table)
     val conds = new java.util.HashMap[String, Condition]
     conds += ((keyName, new Condition().withComparisonOperator("IN").withAttributeValueList(new AttributeValue(keyPart))))
     //q.setLimit(THROUGHPUT_LIMIT)
-    val sr = DynamoDbEncoder.dd.scan(q)
-    (sr.getLastEvaluatedKey(), sr.getItems())
-  }
-  
-  def getItems(table: String, keyName:String, keyPart: String, lastKey:Key) = {
-    val q = new ScanRequest(table)
-    val conds = new java.util.HashMap[String, Condition]
-    conds += ((keyName, new Condition().withComparisonOperator("EQ").withAttributeValueList(new AttributeValue(keyPart))))
-    q.setExclusiveStartKey(lastKey)
-    //q.setLimit(THROUGHPUT_LIMIT)
-    val sr = DynamoDbEncoder.dd.scan(q)
-    (sr.getLastEvaluatedKey(), sr.getItems())
-  }
-  
-  def getItemsIN(table: String, keyName:String, keyPart: String, lastKey:Key) = {
-    val q = new ScanRequest(table)
-    val conds = new java.util.HashMap[String, Condition]
-    conds += ((keyName, new Condition().withComparisonOperator("IN").withAttributeValueList(new AttributeValue(keyPart))))
-    q.setExclusiveStartKey(lastKey)
-    //q.setLimit(THROUGHPUT_LIMIT)
-    val sr = DynamoDbEncoder.dd.scan(q)
-    (sr.getLastEvaluatedKey(), sr.getItems())
+    guaranteedScan(q, lastKey)
   }
 
   def getItemsAfterRangeKey(table: String, keyPart: String, rangeKeyPart: String, lastKey: Key = null, attributesToGet: Seq[String] = null) = {
@@ -196,18 +159,22 @@ object DynamoDbDecoder {
       q.setRangeKeyCondition(new Condition().withComparisonOperator("GT").withAttributeValueList(new AttributeValue().withN(rangeKeyPart)))
     getItems(q)
   }
-  
-  def getItems(table: String, keyPart: String, lastKey: Key = null, attributesToGet: Seq[String] = null): (Key, List[Map[String, AttributeValue]]) = {
-    val q = new QueryRequest(table, new AttributeValue(keyPart))
-    if (lastKey != null)
-      q.setExclusiveStartKey(lastKey)
-    if (attributesToGet != null)
-      q.setAttributesToGet(attributesToGet)
-    getItems(q)
+
+  def getItem(table:String, keyPart:String) = {
+    val key = new Key().withHashKeyElement(new AttributeValue(keyPart))
+    val g = new GetItemRequest(table, key)
+    DynamoDbEncoder.dd.getItem(g).getItem()
   }
   
+  def getItem(table:String, keyParts:(String, String)) = {
+    val key = new Key().withHashKeyElement(new AttributeValue(keyParts._1))
+    .withRangeKeyElement(new AttributeValue(keyParts._2))
+    val g = new GetItemRequest(table, key)
+    getVals(DynamoDbEncoder.dd.getItem(g).getItem())
+  }
+
   def getItems(q: QueryRequest): (Key, List[Map[String, AttributeValue]]) = {
-     var timedOut = true
+    var timedOut = true
     var sr: QueryResult = null
     while (timedOut) {
       try {
@@ -223,6 +190,10 @@ object DynamoDbDecoder {
           timedOut = true
           println(timeout + " trying again in 1s...")
           Thread.sleep(1000)
+        } case timeout: RuntimeException => {
+          timedOut = true
+          println(timeout + " trying again in 1s...")
+          Thread.sleep(1000)
         }
         // Problem exception?
         case x => { throw x }
@@ -230,18 +201,36 @@ object DynamoDbDecoder {
     }
     (sr.getLastEvaluatedKey(), sr.getItems())
   }
-  
-  def getItem(table:String, keyPart:String) = {
-    val key = new Key().withHashKeyElement(new AttributeValue(keyPart))
-    val g = new GetItemRequest(table, key)
-    DynamoDbEncoder.dd.getItem(g).getItem()
-  }
-  
-  def getItem(table:String, keyParts:(String, String)) = {
-    val key = new Key().withHashKeyElement(new AttributeValue(keyParts._1))
-    .withRangeKeyElement(new AttributeValue(keyParts._2))
-    val g = new GetItemRequest(table, key)
-    getVals(DynamoDbEncoder.dd.getItem(g).getItem())
+
+  def guaranteedScan(s: ScanRequest, continueFrom:Key = null): (Key, List[Map[String, AttributeValue]]) = {
+    if (continueFrom != null)
+      s.setExclusiveStartKey(continueFrom)
+    var timedOut = true
+    var sr: ScanResult = null
+    while (timedOut) {
+      try {
+        sr = DynamoDbEncoder.dd.scan(s)
+        timedOut = false
+      } catch {
+        case timeout: AmazonClientException => {
+          timedOut = true
+          println(timeout + " trying again in 1s...")
+          Thread.sleep(1000)
+        }
+        case timeout: AmazonServiceException => {
+          timedOut = true
+          println(timeout + " trying again in 1s...")
+          Thread.sleep(1000)
+        } case timeout: RuntimeException => {
+          timedOut = true
+          println(timeout + " trying again in 1s...")
+          Thread.sleep(1000)
+        }
+        // Problem exception?
+        case x => { throw x }
+      }
+    }
+    (sr.getLastEvaluatedKey(), sr.getItems())
   }
   
    def getVals(map: Map[String, AttributeValue]) = {

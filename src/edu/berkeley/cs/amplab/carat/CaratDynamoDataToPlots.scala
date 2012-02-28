@@ -502,7 +502,7 @@ object CaratDynamoDataToPlots {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      plotDists(sc, "iOs " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory)
+      plotDists(sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory)
     }
 
     for (model <- models) {
