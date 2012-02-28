@@ -590,13 +590,19 @@ object CaratDynamoDataToPlots {
   def plotDists(sem: Semaphore, sc:SparkContext, title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
-      scheduler.execute({
-          sem.acquireUninterruptibly()
-          plot(title, titleNeg, xmax, bucketed.collect(), bucketedNeg.collect(), ev, evNeg, evDistance, plotDirectory)
-          sem.release()
-      })
+      scheduler.execute(
+          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
+      )
     }
     isBugOrHog && evDistance > 0
+  }
+
+  def plot(sem: Semaphore, title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
+    distWithout: RDD[(Int, Double)],
+    ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String, apps: Seq[String] = null) {
+    sem.acquireUninterruptibly()
+    plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory)
+    sem.release()
   }
 
    /**
@@ -632,18 +638,16 @@ object CaratDynamoDataToPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-        scheduler.execute({
-          sem.acquireUninterruptibly()
-        plot("Profile for " + k, "Other users", xmax, distWith.collect(), distWithout.collect(), ev, evNeg, jscore, plotDirectory, apps.toSeq)
-        sem.release()
-    })
+        scheduler.execute(
+        plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, apps.toSeq)
+    )
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
   }
   
-  def plot(title: String, titleNeg: String, xmax:Double,distWith: Array[(Int, Double)],
-    distWithout: Array[(Int, Double)],
+  def plotSerial(title: String, titleNeg: String, xmax:Double,distWith: RDD[(Int, Double)],
+    distWithout: RDD[(Int, Double)],
       ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, apps: Seq[String] = null) {
     
     var fixedTitle = title
@@ -722,7 +726,7 @@ object CaratDynamoDataToPlots {
     }
   }
   
-  def writeData(dir:String, name:String, dist: Array[(Int, Double)], xmax:Double){
+  def writeData(dir:String, name:String, dist: RDD[(Int, Double)], xmax:Double){
     val logbase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(ddir)
@@ -741,7 +745,7 @@ object CaratDynamoDataToPlots {
         val bucketEnd = xmax / (math.pow(logbase, buckets - x._1 - 1))
         
        ((bucketStart+bucketEnd)/2, x._2)
-      })
+      }).collect()
       var dataMap = new TreeMap[Double, Double]
       dataMap ++= dataPairs
       
