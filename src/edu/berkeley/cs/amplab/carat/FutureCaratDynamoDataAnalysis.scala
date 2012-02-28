@@ -400,8 +400,10 @@ object FutureCaratDynamoDataAnalysis {
 
         evDistance = DynamoAnalysisUtil.evDiff(ev, evNeg)
         if (evDistance > 0){
-          val impr = (100.0 /evNeg - 100.0 / ev) / 3600.0 / 24.0 
-          printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days\n", ev, evNeg, evDistance, impr)
+          var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
+          val imprD = (imprHr / 24.0).toInt
+          imprHr -= imprD * 24.0
+          printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours\n", ev, evNeg, evDistance, imprD, imprHr)
         }else{
           printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
         }

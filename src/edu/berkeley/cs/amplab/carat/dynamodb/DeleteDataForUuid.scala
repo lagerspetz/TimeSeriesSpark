@@ -5,7 +5,7 @@ import com.amazonaws.services.dynamodb.model.AttributeValue
 import collection.JavaConversions._
 
 /**
- * Program to copy analyzed data of a certain uuid under osVersion 5.0 for Simulator data access.
+ * Program to delete items of a certain uuid, for removing simulator data.
  */
 object DeleteDataForUuid {
   def main(args: Array[String]) {

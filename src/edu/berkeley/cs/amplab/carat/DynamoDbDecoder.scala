@@ -136,7 +136,6 @@ object DynamoDbDecoder {
     val s = new ScanRequest(table)
     val conds = new java.util.HashMap[String, Condition]
     conds += ((attrName, new Condition().withComparisonOperator("EQ").withAttributeValueList(new AttributeValue(attrValue))))
-    s.setExclusiveStartKey(lastKey)
     //q.setLimit(THROUGHPUT_LIMIT)
     guaranteedScan(s, lastKey)
   }
