@@ -93,6 +93,7 @@ object CaratDynamoDataAnalysis {
    */
 
   def analyzeData(sc: SparkContext) {
+    val startTime = DynamoAnalysisUtil.start
     // Unique uuIds, Oses, and Models from registrations.
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
     val allModels = new scala.collection.mutable.HashSet[String]
@@ -156,8 +157,10 @@ object CaratDynamoDataAnalysis {
       DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
       println("Analysing data")
       // cache RDD here
+      DynamoAnalysisUtil.finish(startTime)
       analyzeRateData(allRates.cache(), uuidToOsAndModel, allOses, allModels)
-    }
+    }else
+      DynamoAnalysisUtil.finish(startTime)
   }
 
   /**
@@ -239,7 +242,7 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
     oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
-
+    val startTime = DynamoAnalysisUtil.start
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -362,6 +365,7 @@ object CaratDynamoDataAnalysis {
     println("Saving J-Scores")
     // Save J-Scores of all users.
     writeJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
+    DynamoAnalysisUtil.finish(startTime)
   }
 
   /**
@@ -369,6 +373,7 @@ object CaratDynamoDataAnalysis {
    * Write them to DynamoDb.
    */
   def similarApps(all: RDD[CaratRate], uuid: String, uuidApps: Set[String]) {
+    val startTime = DynamoAnalysisUtil.start
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps uuid=%s sCount=%s uuidApps.size=%s\n", uuid, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -378,12 +383,14 @@ object CaratDynamoDataAnalysis {
     println("Considering similarApps uuid=" + uuid)
     writeTripletUngrouped(similar, dissimilar, DynamoDbEncoder.put(similarsTable, similarKey, uuid, _, _, _, _, _, _),
       { DynamoDbDecoder.deleteItem(similarsTable, uuid) }, false)
+      DynamoAnalysisUtil.finish(startTime)
   }
 
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
   def getDistanceAndDistributions(one: RDD[CaratRate], two: RDD[CaratRate]) = {
+    val startTime = DynamoAnalysisUtil.start
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
@@ -437,7 +444,7 @@ object CaratDynamoDataAnalysis {
       if (DEBUG) {
         ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
       }
-
+      DynamoAnalysisUtil.finish(startTime)
       (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
     } else
       (0.0, null, null, 0.0, 0.0, 0.0)
@@ -448,6 +455,7 @@ object CaratDynamoDataAnalysis {
    */
   def writeTripletUngrouped(one: RDD[CaratRate], two: RDD[CaratRate], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit,
     deleteFunction: => Unit, isBugOrHog: Boolean) = {
+    val startTime = DynamoAnalysisUtil.start
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = getDistanceAndDistributions(one, two)
     if (bucketed != null && bucketedNeg != null) {
       if (evDistance > 0 || !isBugOrHog) {
@@ -458,6 +466,7 @@ object CaratDynamoDataAnalysis {
       }
     } else
       deleteFunction
+    DynamoAnalysisUtil.finish(startTime)
     isBugOrHog && evDistance > 0
   }
 
@@ -473,6 +482,7 @@ object CaratDynamoDataAnalysis {
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
     appsByUuid: TreeMap[String, Set[String]]) {
+    val startTime = DynamoAnalysisUtil.start
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
@@ -499,5 +509,6 @@ object CaratDynamoDataAnalysis {
         printf("Error: Could not save jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
     //DynamoDbEncoder.put(xmax, bucketed.toArray[(Int, Double)], bucketedNeg.toArray[(Int, Double)], jScore, ev, evNeg)
+    DynamoAnalysisUtil.finish(startTime)
   }
 }

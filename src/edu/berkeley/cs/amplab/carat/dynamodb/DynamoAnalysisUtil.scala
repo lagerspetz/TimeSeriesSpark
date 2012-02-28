@@ -30,13 +30,25 @@ object DynamoAnalysisUtil {
   // Daemons list, read from S3
   val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
   
+  def start() = System.currentTimeMillis()
+
+  def finish(start: Double) {
+    val functionstack = Thread.currentThread().getStackTrace()
+    if (functionstack != null && functionstack.length > 1)
+      println("%s: %d".format(functionstack(1), (System.currentTimeMillis() - start)))
+    else
+      println("%s: %d".format("SomeFunction: ", (System.currentTimeMillis() - start)))
+  }
+  
   def readDoubleFromFile(file: String) = {
+    val startTime = start
     val f = new File(file)
     if (!f.exists() && !f.createNewFile())
       throw new Error("Could not create %s for reading!".format(file))
     val rd = new BufferedReader(new InputStreamReader(new FileInputStream(f)))
     var s = rd.readLine()
     rd.close()
+    finish(startTime)
     if (s != null && s.length > 0) {
       s.toDouble
     } else
@@ -44,15 +56,18 @@ object DynamoAnalysisUtil {
   }
 
   def saveDoubleToFile(d: Double, file: String) {
+    val startTime = start
     val f = new File(file)
     if (!f.exists() && !f.createNewFile())
       throw new Error("Could not create %s for saving %f!".format(file, d))
     val wr = new FileWriter(file)
     wr.write(d + "\n")
     wr.close()
+    finish(startTime)
   }
 
   def readS3LineSet(bucket: String, file: String) = {
+    val startTime = start
     var r: Set[String] = new HashSet[String]
     val rd = new BufferedReader(new InputStreamReader(S3Decoder.get(bucket, file)))
     var s = rd.readLine()
@@ -62,10 +77,12 @@ object DynamoAnalysisUtil {
     }
     rd.close()
     println("%s/%s downloaded: %s".format(bucket, file, r))
+    finish(startTime)
     r
   }
 
   def regSet(regs: java.util.List[java.util.Map[String, AttributeValue]]) = {
+    val startTime = start
     var regSet = new HashMap[String, (String, String)]
     regSet ++= regs.map(x => {
       val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
@@ -73,14 +90,17 @@ object DynamoAnalysisUtil {
       val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
       (uuid, (model, os))
     })
+    finish(startTime)
     regSet
   }
 
   def replaceOldRateFile(oldPath: String, newPath: String) {
+    val startTime = start
     val rem = Runtime.getRuntime().exec(Array("/bin/rm", "-rf", oldPath))
     rem.waitFor()
     val move = Runtime.getRuntime().exec(Array("/bin/mv", newPath, oldPath))
     move.waitFor()
+    finish(startTime)
   }
 
   /**
@@ -92,6 +112,7 @@ object DynamoAnalysisUtil {
     stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
     prefix: Boolean, /*prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],*/
     dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
+    val startTime = start
     var finished = false
 
     var (key, results) = tableAndValueToKeyAndResults
@@ -112,6 +133,7 @@ object DynamoAnalysisUtil {
 
       distRet = stepHandler(results, distRet)
     }
+    finish(startTime)
     distRet
   }
 
@@ -254,6 +276,7 @@ object DynamoAnalysisUtil {
   def rateMapperPairwise(uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
     observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
+    val startTime = start
     var prevUuid = ""
     var prevD = 0.0
     var prevBatt = 0.0
@@ -368,6 +391,7 @@ object DynamoAnalysisUtil {
       nzf("%s negative drain, ", negDrainSamples) +
       nzf("%s > " + ABNORMAL_RATE + " drain, ", abandonedSamples) +
       nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
+    finish(startTime)
     rates.toSeq
   }
 
@@ -413,6 +437,7 @@ object DynamoAnalysisUtil {
    * If this becomes a memory problem, averaging in the a priori dist should be done.
    */
   def getApriori(allRates: RDD[CaratRate]) = {
+    val startTime = start
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
     val ap = allRates.filter(!_.isRateRange())
@@ -423,7 +448,9 @@ object DynamoAnalysisUtil {
     }).groupByKey()
     // turn arrays of 1.0s to frequencies
     println("Collecting aPriori.")
-    grouped.map(x => { (x._1, x._2.sum) }).collect()
+    val ret = grouped.map(x => { (x._1, x._2.sum) }).collect()
+    finish(startTime)
+    ret
   }
   
   val DIST_THRESHOLD = 10
@@ -433,6 +460,7 @@ object DynamoAnalysisUtil {
    */
   def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
       buckets:Int, smallestBucket:Double, decimals:Int, DEBUG:Boolean = false) = {
+    val startTime = start
     // probability distribution: r, count/sumCount
 
     /* Figure out max x value (maximum rate) and bucket y values of 
@@ -485,15 +513,16 @@ object DynamoAnalysisUtil {
         if (DEBUG) {
           ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
         }
-
+        finish(startTime)
         (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance)
       } else{
         println("Not enough apriori points: threshold: %d withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(DIST_THRESHOLD, onec, withCount, twoc, withoutCount))
-        println("Not enough : withCount=%s < %d or withoutCount=%s < %d".format(onec, DIST_THRESHOLD, twoc, DIST_THRESHOLD))
+        finish(startTime)
         (0.0, null, null, 0.0, 0.0, 0.0)
       }
     } else{
       println("Not enough samples: withCount=%s < %d or withoutCount=%s < %d".format(onec, DIST_THRESHOLD, twoc, DIST_THRESHOLD))
+      finish(startTime)
       (0.0, null, null, 0.0, 0.0, 0.0)
     }
   }
@@ -503,7 +532,8 @@ object DynamoAnalysisUtil {
    * of `aPrioriDistribution`.
    */
   def getFrequencies(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
-    samples.flatMap(x => {
+    val startTime = start
+    val flatSamples = samples.flatMap(x => {
       if (x.isRateRange()) {
         val freqRange = aPrioriDistribution.filter(y => { x.rateRange.contains(y._1) })
         val arr = freqRange.map { x =>
@@ -519,12 +549,17 @@ object DynamoAnalysisUtil {
         arr.map(x => { (x._1, x._2 / sum) })
       } else
         Array((x.rate, 1.0))
-    }).groupByKey().map(x => {
+    })
+    
+    val ret = flatSamples.groupByKey().map(x => {
       (x._1, x._2.sum)
     })
+    finish(startTime)
+    ret
   }
 
   def daemons_globbed(allApps: Set[String]) = {
+    val startTime = start
     val globs = DAEMONS_LIST.filter(_.endsWith("*")).map(x => { x.substring(0, x.length - 1) })
 
     var matched = allApps.filter(x => {
@@ -533,7 +568,9 @@ object DynamoAnalysisUtil {
     })
     
     println("Matched daemons with globs: " + matched)
-    DAEMONS_LIST ++ matched
+    val ret = DAEMONS_LIST ++ matched
+    finish(startTime)
+    ret
   }
   
   def removeDaemons() {
@@ -541,6 +578,7 @@ object DynamoAnalysisUtil {
   }
     
   def removeDaemons(daemonSet: Set[String]) {
+    val startTime = start
     // add hog table key (which is the same as bug table app key)
     val kd = daemonSet.map(x => {
       (hogKey, x)
@@ -552,6 +590,8 @@ object DynamoAnalysisUtil {
     DynamoDbItemLoop(DynamoDbDecoder.filterItems(bugsTable, kd: _*),
       DynamoDbDecoder.filterItemsFromKey(bugsTable, _, kd: _*),
       removeBugs(_, _))
+      
+      finish(startTime)
   }
 
   def removeBugs(key: Key, results: java.util.List[java.util.Map[String, AttributeValue]]) {
@@ -578,6 +618,7 @@ object DynamoAnalysisUtil {
   def DynamoDbItemLoop(getKeyAndResults: => (Key, java.util.List[java.util.Map[String, AttributeValue]]),
     getKeyAndMoreResults: Key => (Key, java.util.List[java.util.Map[String, AttributeValue]]),
     handleResults: (Key, java.util.List[java.util.Map[String, AttributeValue]]) => Unit) {
+    val startTime = start
     var index = 0
     var (key, results) = getKeyAndResults
     println("Got: " + results.size + " results.")
@@ -592,5 +633,6 @@ object DynamoAnalysisUtil {
       key = key2
       println("Got: " + results.size + " results.")
     }
+    finish(startTime)
   }
 }
