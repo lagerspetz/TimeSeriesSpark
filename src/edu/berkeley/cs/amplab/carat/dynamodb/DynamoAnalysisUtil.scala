@@ -34,9 +34,9 @@ object DynamoAnalysisUtil {
 
   def finish(start: Long) {
     val functionstack = Thread.currentThread().getStackTrace()
-    if (functionstack != null && functionstack.length > 1)
-      println("%s: %d".format(functionstack(1), (System.currentTimeMillis() - start)))
-    else
+    if (functionstack != null && functionstack.length > 2){
+      println("%s: %d".format(functionstack(2), (System.currentTimeMillis() - start)))
+    }else
       println("%s: %d".format("SomeFunction: ", (System.currentTimeMillis() - start)))
   }
   
