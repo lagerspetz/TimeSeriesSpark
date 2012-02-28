@@ -32,7 +32,7 @@ import com.amazonaws.services.dynamodb.model.Key
  *    and comparing it with (A intersection sample.getAllApps()).size < ln(A).
  *
  * Where uuId is a unique device identifier.
- * 
+ *
  * Note: We do not store hogs or bugs with negative distance values.
  *
  * @author Eemil Lagerspetz
@@ -53,7 +53,7 @@ object CaratDynamoDataAnalysis {
 
   // For saving rates so they do not have to be fetched from DynamoDB every time
   val RATES_CACHED = "/mnt/TimeSeriesSpark/spark-temp/stable-cached-rates.dat"
-    // to make sure that the old RATES_CACHED is not overwritten while it is being worked on
+  // to make sure that the old RATES_CACHED is not overwritten while it is being worked on
   val RATES_CACHED_NEW = "/mnt/TimeSeriesSpark/spark-temp/stable-cached-rates-new.dat"
   val LAST_SAMPLE = "/mnt/TimeSeriesSpark/spark-temp/stable-last-sample.txt"
   val LAST_REG = "/mnt/TimeSeriesSpark/spark-temp/stable-last-reg.txt"
@@ -108,7 +108,7 @@ object CaratDynamoDataAnalysis {
       } else
         null
     }
-    
+
     if (oldRates != null) {
       val devices = oldRates.map(x => {
         (x.uuid, (x.os, x.model))
@@ -160,18 +160,18 @@ object CaratDynamoDataAnalysis {
       analyzeRateData(allRates.cache(), uuidToOsAndModel, allOses, allModels)
     }
   }
-  
+
   /**
    * Handles a set of registration messages from the Carat DynamoDb.
    * uuids, oses and models are filled in.
    */
-  def handleRegs(key:Key, regs: java.util.List[java.util.Map[String, AttributeValue]],
-      uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
-      oses: scala.collection.mutable.Set[String],
-      models: scala.collection.mutable.Set[String]) {
-    
+  def handleRegs(key: Key, regs: java.util.List[java.util.Map[String, AttributeValue]],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    oses: scala.collection.mutable.Set[String],
+    models: scala.collection.mutable.Set[String]) {
+
     // Get last reg timestamp for set saving
-    if (regs.size > 0){
+    if (regs.size > 0) {
       last_reg_write = regs.last.get(regsTimestamp).getN().toDouble
     }
 
@@ -183,7 +183,7 @@ object CaratDynamoDataAnalysis {
       models += model
       oses += os
     }
-        
+
     /*
      * TODO: Stddev of samples per user over time,
      * stddev of distributions (hog, etc) per all users over increasing number of users,
@@ -191,7 +191,7 @@ object CaratDynamoDataAnalysis {
      */
     //analyzeRateDataStdDevsOverTime(sc, distRet, uuid, os, model, plotDirectory)
   }
-  
+
   /**
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
@@ -240,7 +240,7 @@ object CaratDynamoDataAnalysis {
   def analyzeRateData(allRates: RDD[CaratRate],
     uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
     oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String]) {
-    
+
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -256,19 +256,19 @@ object CaratDynamoDataAnalysis {
     var appsByUuid = new TreeMap[String, Set[String]]
 
     var allApps = allRates.flatMap(_.allApps).collect().toSet
-    
-    val globs = DAEMONS_LIST.filter(_.endsWith("*")).map(x => {x.substring(0, x.length -1)})
-    
+
+    val globs = DAEMONS_LIST.filter(_.endsWith("*")).map(x => { x.substring(0, x.length - 1) })
+
     var matched = allApps.filter(x => {
       val globPrefix = globs.filter(x.startsWith(_))
       !globPrefix.isEmpty
     })
-    
+
     println("Matched daemons with globs: " + matched)
     val DAEMONS_LIST_GLOBBED = DAEMONS_LIST ++ matched
-    
+
     allApps --= DAEMONS_LIST_GLOBBED
-    
+
     //Remove Daemons
     println("Removing daemons from the database")
     DynamoAnalysisUtil.removeDaemons(DAEMONS_LIST_GLOBBED)
@@ -314,7 +314,7 @@ object CaratDynamoDataAnalysis {
     */
     println("Clearing bugs")
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
-    
+
     var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
@@ -342,7 +342,7 @@ object CaratDynamoDataAnalysis {
       val uuid = uuidArray(i)
       val fromUuid = allRates.filter(_.uuid == uuid).cache()
 
-       var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+      var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
       uuidApps --= DAEMONS_LIST_GLOBBED
       val nonHogApps = uuidApps -- allHogs
 
@@ -365,11 +365,11 @@ object CaratDynamoDataAnalysis {
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- nonHogApps) {
-          val appFromUuid = fromUuid.filter(_.allApps.contains(app))
-          val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-          println("Considering bug app=" + app + " uuid=" + uuid)
-          writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, hogKey), (uuid, app), _, _, _, _, _, _),
-            DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
+        val appFromUuid = fromUuid.filter(_.allApps.contains(app))
+        val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
+        println("Considering bug app=" + app + " uuid=" + uuid)
+        writeTripletUngrouped(appFromUuid, appNotFromUuid, DynamoDbEncoder.putBug(bugsTable, (resultKey, hogKey), (uuid, app), _, _, _, _, _, _),
+          DynamoDbDecoder.deleteItem(bugsTable, uuid, app), true)
       }
     }
     println("Saving J-Scores")
@@ -437,8 +437,15 @@ object CaratDynamoDataAnalysis {
       // Log bucketing:
       val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketDistributionsByX(flatOne, flatTwo, BUCKETS, SMALLEST_BUCKET, DECIMALS)
 
-      evDistance =  DynamoAnalysisUtil.evDiff(ev, evNeg)
-      printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
+      evDistance = DynamoAnalysisUtil.evDiff(ev, evNeg)
+
+      if (evDistance > 0) {
+        var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
+        val imprD = (imprHr / 24.0).toInt
+        imprHr -= imprD * 24.0
+        printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours\n", ev, evNeg, evDistance, imprD, imprHr)
+      } else
+        printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
 
       if (DEBUG) {
         ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")

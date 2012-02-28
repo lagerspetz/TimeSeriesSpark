@@ -55,6 +55,7 @@ object DynamoAnalysisUtil {
       r += s
       s = rd.readLine()
     }
+    rd.close()
     println("%s/%s downloaded: %s".format(bucket, file, r))
     r
   }
