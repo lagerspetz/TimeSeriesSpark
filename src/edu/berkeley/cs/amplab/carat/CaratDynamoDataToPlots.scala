@@ -618,7 +618,7 @@ object CaratDynamoDataToPlots {
         }).sum
         modelCorrelations += ((model, corr))
         }else
-          println("ERROR: zero stddev for %s: %s".format(model, rateModels))
+          println("ERROR: zero stddev for %s: %s".format(model, rateModels.map(x => {(x._1.model, x._2)})))
       }
 
       for (os <- oses) {
@@ -636,7 +636,7 @@ object CaratDynamoDataToPlots {
         }).sum
         osCorrelations += ((os, corr))
         }else
-          println("ERROR: zero stddev for %s: %s".format(os, rateOses))
+          println("ERROR: zero stddev for %s: %s".format(os, rateOses.map(x => {(x._1.os, x._2)})))
       }
 
       for (k <- modelCorrelations)
