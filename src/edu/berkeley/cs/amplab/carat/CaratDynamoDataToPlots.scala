@@ -177,11 +177,6 @@ object CaratDynamoDataToPlots {
    */
 
   def analyzeData(sc: SparkContext, plotDirectory:String) = {
-    // Unique uuIds, Oses, and Models from registrations.
-    val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
-    val allModels = new scala.collection.mutable.HashSet[String]
-    val allOses = new scala.collection.mutable.HashSet[String]
-
     // Master RDD for all data.
 
     val oldRates: spark.RDD[CaratRate] = {
@@ -192,54 +187,62 @@ object CaratDynamoDataToPlots {
         null
     }
     
-    if (oldRates != null) {
-      val devices = oldRates.map(x => {
-        (x.uuid, (x.os, x.model))
-      }).collect()
-      for (k <- devices) {
-        uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
-        allOses += k._2._1
-        allModels += k._2._2
-      }
-    }
-
     var allRates: spark.RDD[CaratRate] = oldRates.cache()
 
-    if (last_reg > 0) {
-      DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
-        DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-        handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-    } else {
-      DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
-        DynamoDbDecoder.getAllItems(registrationTable, _),
-        handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-    }
+    // closure to forget uuids, models and oses after assigning them to rates
+    {
+      // Unique uuIds, Oses, and Models from registrations.
+      val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
+      val allModels = new scala.collection.mutable.HashSet[String]
+      val allOses = new scala.collection.mutable.HashSet[String]
 
-    /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-    if (last_sample > 0) {
-      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
-        DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-        handleSamples(sc, _, uuidToOsAndModel, _),
-        true,
-        allRates)
-    } else {
-      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
-        DynamoDbDecoder.getAllItems(samplesTable, _),
-        handleSamples(sc, _, uuidToOsAndModel, _),
-        true,
-        allRates)
-    }
+      if (oldRates != null) {
+        val devices = oldRates.map(x => {
+          (x.uuid, (x.os, x.model))
+        }).collect()
+        for (k <- devices) {
+          uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
+          allOses += k._2._1
+          allModels += k._2._2
+        }
+      }
 
-    println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
-    println("All oses: " + allOses.mkString(", "))
-    println("All models: " + allModels.mkString(", "))
+      if (last_reg > 0) {
+        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+          DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
+          handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+      } else {
+        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+          DynamoDbDecoder.getAllItems(registrationTable, _),
+          handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+      }
+
+      /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
+      if (last_sample > 0) {
+        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
+          DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
+          handleSamples(sc, _, uuidToOsAndModel, _),
+          true,
+          allRates)
+      } else {
+        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+          DynamoDbDecoder.getAllItems(samplesTable, _),
+          handleSamples(sc, _, uuidToOsAndModel, _),
+          true,
+          allRates)
+      }
+
+      // we may not be interesed in these actually.
+      println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
+      println("All oses: " + allOses.mkString(", "))
+      println("All models: " + allModels.mkString(", "))
+    }
 
     if (allRates != null) {
       allRates.saveAsObjectFile(RATES_CACHED_NEW)
       DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
       DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
-      // cache allRates here?
-      analyzeRateData(sc, allRates.cache(), uuidToOsAndModel, allOses, allModels, plotDirectory)
+      analyzeRateData(sc, allRates, plotDirectory)
     }else
       null
   }
@@ -471,8 +474,23 @@ object CaratDynamoDataToPlots {
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
-  def analyzeRateData(sc:SparkContext, allRates: RDD[CaratRate],
-    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String], plotDirectory:String) = {
+  def analyzeRateData(sc:SparkContext, inputRates: RDD[CaratRate], plotDirectory:String) = {
+    // cache first
+    val allRates = inputRates.cache()
+    
+    // determine oses and models that appear in accepted data and use those
+    val uuidToOsAndModel = new  scala.collection.mutable.HashMap[String, (String, String)]
+    uuidToOsAndModel ++= allRates.map(x => {(x.uuid, (x.os, x.model)) }).collect()
+    
+    val oses = new scala.collection.mutable.HashSet[String]
+    oses ++= uuidToOsAndModel.map(_._2._1)
+    val models = new scala.collection.mutable.HashSet[String]
+    models ++= uuidToOsAndModel.map(_._2._2)
+    
+    println("uuIds with data: " + uuidToOsAndModel.keySet.mkString(", "))
+    println("oses with data: " + oses.mkString(", "))
+    println("models with data: " + models.mkString(", "))
+    
     val sem = new Semaphore(CONCURRENT_PLOTS)
     /**
      * uuid distributions, xmax, ev and evNeg

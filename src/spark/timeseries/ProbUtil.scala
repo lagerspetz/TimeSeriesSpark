@@ -4,6 +4,7 @@ import scala.collection.immutable.TreeMap
 import spark._
 import spark.SparkContext._
 import edu.berkeley.cs.amplab.carat.CaratRate
+import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 
 /**
  * Various utilities for probability distribution processing.
@@ -69,9 +70,13 @@ object ProbUtil extends Logging {
   }
   
   def normalize(items: scala.collection.mutable.Map[CaratRate, Double]) = {
+    val start = DynamoAnalysisUtil.start()
     val meanX = mean(items.map(_._2).toSeq)
     val devX = stddev(items.map(_._2).toSeq, meanX)
-    items.map(x => {(x._1, (x._2 - meanX)/devX)})
+    println("Norm mean=%f dev=%f".format(meanX, devX))
+    val ret = items.map(x => {(x._1, (x._2 - meanX)/devX)})
+    DynamoAnalysisUtil.finish(start)
+    ret
   }
   
   def normalize(items: Seq[Double]) = {
