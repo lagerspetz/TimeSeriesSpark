@@ -600,42 +600,51 @@ object CaratDynamoDataToPlots {
   def correlation(name:String, rates: RDD[CaratRate], aPriori: Array[(Double, Double)], models: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String]) = {
     val modelCorrelations = new HashMap[String, Double]
     val osCorrelations = new HashMap[String, Double]
-    
+
     val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).collectAsMap)
-    for (model <- models) {
-      /* correlation with this model */
-      val rateModels = rates.map(x => {
-        if (x.model == model)
-          (x, 1.0)
-        else
-          (x, 0.0)
-      }).collectAsMap()
-      val norm = ProbUtil.normalize(rateModels)
-      val corr = rateEvs.map(x => {
-        x._2 * norm.getOrElse(x._1, 0.0)
-      }).sum
-      modelCorrelations += ((model, corr))
-    }
-    
-    for (os <- oses){
-      /* correlation with this OS */
-      val rateOses = rates.map(x => {
-        if (x.os == os)
-          (x, 1.0)
-        else
-          (x, 0.0)
-      }).collectAsMap()
-      val norm = ProbUtil.normalize(rateOses)
-      val corr = rateEvs.map(x => {
-        x._2 * norm.getOrElse(x._1, 0.0)
-      }).sum
-      osCorrelations += ((os, corr))
-    }
-    
-    for (k <- modelCorrelations)
-      println("%s and %s correlated with %s".format(name, k._1, k._2))
-    for (k <- osCorrelations)
-      println("%s and %s correlated with %s".format(name, k._1, k._2))
+    if (rateEvs != null) {
+      for (model <- models) {
+        /* correlation with this model */
+        val rateModels = rates.map(x => {
+          if (x.model == model)
+            (x, 1.0)
+          else
+            (x, 0.0)
+        }).collectAsMap()
+        val norm = ProbUtil.normalize(rateModels)
+        if (norm != null){
+        val corr = rateEvs.map(x => {
+          x._2 * norm.getOrElse(x._1, 0.0)
+        }).sum
+        modelCorrelations += ((model, corr))
+        }else
+          println("ERROR: zero stddev for %s: %s".format(model, rateModels))
+      }
+
+      for (os <- oses) {
+        /* correlation with this OS */
+        val rateOses = rates.map(x => {
+          if (x.os == os)
+            (x, 1.0)
+          else
+            (x, 0.0)
+        }).collectAsMap()
+        val norm = ProbUtil.normalize(rateOses)
+        if (norm != null){
+        val corr = rateEvs.map(x => {
+          x._2 * norm.getOrElse(x._1, 0.0)
+        }).sum
+        osCorrelations += ((os, corr))
+        }else
+          println("ERROR: zero stddev for %s: %s".format(os, rateOses))
+      }
+
+      for (k <- modelCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+      for (k <- osCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+    } else
+      println("ERROR: Rates had a zero stddev, something is wrong!")
   }
 
   /**

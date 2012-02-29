@@ -68,15 +68,20 @@ object ProbUtil extends Logging {
     val devX = stddev(items, meanX)
     items.map(x => {(x - meanX)/devX})
   }
-  
+
   def normalize(items: scala.collection.mutable.Map[CaratRate, Double]) = {
     val start = DynamoAnalysisUtil.start()
     val meanX = mean(items.map(_._2).toSeq)
     val devX = stddev(items.map(_._2).toSeq, meanX)
     println("Norm mean=%f dev=%f".format(meanX, devX))
-    val ret = items.map(x => {(x._1, (x._2 - meanX)/devX)})
-    DynamoAnalysisUtil.finish(start)
-    ret
+    if (devX == 0) {
+      DynamoAnalysisUtil.finish(start)
+      null
+    } else {
+      val ret = items.map(x => { (x._1, (x._2 - meanX) / devX) })
+      DynamoAnalysisUtil.finish(start)
+      ret
+    }
   }
   
   def normalize(items: Seq[Double]) = {
