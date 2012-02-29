@@ -3,6 +3,7 @@ package spark.timeseries
 import scala.collection.immutable.TreeMap
 import spark._
 import spark.SparkContext._
+import edu.berkeley.cs.amplab.carat.CaratRate
 
 /**
  * Various utilities for probability distribution processing.
@@ -31,6 +32,55 @@ object ProbUtil extends Logging {
     m.sum
   }
 
+  /**
+   * Pearson correlation (sample correlation) for two features.
+   * sum ( (x(i) - meanX) (y(i) - meanY)) /
+   * ( sqrt ( sum  (x(i) - meanX)^2) sqrt ( sum (y(i) - meanY)^2))
+   * i.e. sum ((x(i) - meanX) (y(i) - meanY)) / (stddev(x) * stddev(y))
+   */
+  def pearsonCorrelation(x: RDD[(Double, Double)], y: RDD[(Double, Double)]) = {
+    // get means
+    val xvals = x.map(_._2)
+    val yvals = y.map(_._2)
+    val meanX = mean(xvals)
+    val meanY = mean(yvals)
+    
+    /* Sample correlation coefficient r:
+     * sum ((x(i) - meanX) (y(i) - meanY)) / (stddev(x) * stddev(y))
+     */
+    val yColl = y.collect().toMap
+    
+    val varProducts = x.map(r => {
+      (r._2 - meanX) * (yColl.getOrElse(r._1, 0.0)- meanY)
+    })
+    
+    val varProductSum = varProducts.reduce(_ + _)
+    
+    val devX = stddev(xvals, meanX)
+    val devY = stddev(yvals, meanY)
+    
+    varProductSum / (devX*devY)
+  }
+  
+  /**
+   * Mean for a random variable stored in an RDD.
+   */
+  def mean(items: RDD[Double]) = {
+    val sum = items.reduce(_ + _)
+    sum / items.count
+  }
+  
+  /**
+   * Standard deviation for a random variable stored in an RDD.
+   */
+  def stddev(items: RDD[Double], mean:Double) = {
+    // get diffs from mean squared
+    var powDiffs = items.map(x => {math.pow(x - mean, 2)})
+    // sum them up
+    val sum = powDiffs.reduce(_ + _)
+    math.sqrt ( sum )
+  }
+  
   /**
    * Debug: Print non-zero values of two sets.
    */
