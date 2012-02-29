@@ -24,6 +24,7 @@ import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 import scala.collection.immutable.TreeSet
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
 import scala.actors.scheduler.ResizableThreadPoolScheduler
+import scala.collection.mutable.HashMap
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -202,7 +203,7 @@ object CaratDynamoDataToPlots {
       }
     }
 
-    var allRates: spark.RDD[CaratRate] = oldRates
+    var allRates: spark.RDD[CaratRate] = oldRates.cache()
 
     if (last_reg > 0) {
       DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
@@ -513,14 +514,20 @@ object CaratDynamoDataToPlots {
       // no distance check, not bug or hog
       plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory)
     }
+    
+    /** Calculate correlation for each model and os version with all rates */
+    correlation("All", allRates, aPrioriDistribution, models, oses)
 
     var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app))
-      val filteredNeg = allRates.filter(!_.allApps.contains(app))
+      val filtered = allRates.filter(_.allApps.contains(app)).cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()      
+      
       if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
         // this is a hog
+        /** Calculate correlation for each model and os version with this app */
+        correlation("Hog " + app, filtered, aPrioriDistribution, models, oses)
         allHogs += app
       }
     }
@@ -554,9 +561,13 @@ object CaratDynamoDataToPlots {
 
       /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
       for (app <- nonHogApps) {
-        val appFromUuid = fromUuid.filter(_.allApps.contains(app))
-        val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-        plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)
+        val appFromUuid = fromUuid.filter(_.allApps.contains(app)).cache()
+        val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app)).cache()
+        if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)){
+          // bug: calculate correlation
+          correlation("Bug " + app + " running on client " + i, appFromUuid, aPrioriDistribution, models, oses)
+        }
+          
       }
     }
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
@@ -566,6 +577,47 @@ object CaratDynamoDataToPlots {
     sem.release(CONCURRENT_PLOTS)
     // return plot directory for caller
     dateString + "/" + PLOTS
+  }
+  
+  def correlation(name:String, rates: RDD[CaratRate], aPriori: Array[(Double, Double)], models: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String]) = {
+    val modelCorrelations = new HashMap[String, Double]
+    val osCorrelations = new HashMap[String, Double]
+    
+    val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).collectAsMap)
+    for (model <- models) {
+      /* correlation with this model */
+      val rateModels = rates.map(x => {
+        if (x.model == model)
+          (x, 1.0)
+        else
+          (x, 0.0)
+      }).collectAsMap()
+      val norm = ProbUtil.normalize(rateModels)
+      val corr = rateEvs.map(x => {
+        x._2 * norm.getOrElse(x._1, 0.0)
+      }).sum
+      modelCorrelations += ((model, corr))
+    }
+    
+    for (os <- oses){
+      /* correlation with this OS */
+      val rateOses = rates.map(x => {
+        if (x.model == os)
+          (x, 1.0)
+        else
+          (x, 0.0)
+      }).collectAsMap()
+      val norm = ProbUtil.normalize(rateOses)
+      val corr = rateEvs.map(x => {
+        x._2 * norm.getOrElse(x._1, 0.0)
+      }).sum
+      osCorrelations += ((os, corr))
+    }
+    
+    for (k <- modelCorrelations)
+      println("%s and %s correlated with %s".format(name, k._1, k._2))
+    for (k <- osCorrelations)
+      println("%s and %s correlated with %s".format(name, k._1, k._2))
   }
 
   /**

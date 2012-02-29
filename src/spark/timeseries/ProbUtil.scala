@@ -62,6 +62,24 @@ object ProbUtil extends Logging {
     varProductSum / (devX*devY)
   }
   
+  def normalize(items: RDD[Double]) = {
+    val meanX = mean(items)
+    val devX = stddev(items, meanX)
+    items.map(x => {(x - meanX)/devX})
+  }
+  
+  def normalize(items: scala.collection.mutable.Map[CaratRate, Double]) = {
+    val meanX = mean(items.map(_._2).toSeq)
+    val devX = stddev(items.map(_._2).toSeq, meanX)
+    items.map(x => {(x._1, (x._2 - meanX)/devX)})
+  }
+  
+  def normalize(items: Seq[Double]) = {
+    val meanX = mean(items)
+    val devX = stddev(items, meanX)
+    items.map(x => {(x - meanX)/devX})
+  }
+  
   /**
    * Mean for a random variable stored in an RDD.
    */
@@ -70,10 +88,26 @@ object ProbUtil extends Logging {
     sum / items.count
   }
   
+  def mean(items: Seq[Double]) = {
+    val sum = items.reduce(_ + _)
+    sum / items.length
+  }
+  
   /**
    * Standard deviation for a random variable stored in an RDD.
    */
   def stddev(items: RDD[Double], mean:Double) = {
+    // get diffs from mean squared
+    var powDiffs = items.map(x => {math.pow(x - mean, 2)})
+    // sum them up
+    val sum = powDiffs.reduce(_ + _)
+    math.sqrt ( sum )
+  }
+  
+   /**
+   * Standard deviation for a random variable stored in an Array.
+   */
+  def stddev(items: Seq[Double], mean:Double) = {
     // get diffs from mean squared
     var powDiffs = items.map(x => {math.pow(x - mean, 2)})
     // sum them up

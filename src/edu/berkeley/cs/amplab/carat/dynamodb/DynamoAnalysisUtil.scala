@@ -514,6 +514,9 @@ object DynamoAnalysisUtil {
           val imprD = (imprHr / 24.0).toInt
           imprHr -= imprD * 24.0
           printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours\n", ev, evNeg, evDistance, imprD, imprHr)
+          /*val sumPdf = freqWith.map(_._2).reduce(_ + _)
+          val pdf = freqWith.map(x => {x._1, x._2/sumPdf})
+          correlations(pdf, one)*/
         }else{
           printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
         }
@@ -534,6 +537,14 @@ object DynamoAnalysisUtil {
       (0.0, null, null, 0.0, 0.0, 0.0)
     }
   }
+  
+  /*def correlations(pdf:RDD[(Double, Double)], dist: RDD[(Double, CaratRate)]) = {
+    // correlation with model:
+    // FIXME: If I map this to its model, it will always be the same for uuid and bugs with-distributions.
+    // is this supposed to be calculated from the entire set of rates? or perhaps aPriori?
+    val modelDist = dist.map(x => { (x._1, x._2.model) })
+    val cModel = ProbUtil.pearsonCorrelation(pdf, dist.)
+  }*/
   
   /**
    * Convert a set of rates into their frequencies, interpreting rate ranges as slices
@@ -564,6 +575,33 @@ object DynamoAnalysisUtil {
     })
     finish(startTime)
     ret
+  }
+  
+  def mapToRateEv(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+    val startTime = start
+    val evSamples = samples.map(x => {
+      if (x.isRateRange()) {
+        val freqRange = aPrioriDistribution.filter(y => { x.rateRange.contains(y._1) })
+        val arr = freqRange.map { x =>
+          {
+            (x._1, x._2)
+          }
+        }.toArray
+
+        var sum = 0.0
+        for (k <- arr) {
+          sum += k._2
+        }
+        val norm = arr.map(x => { (x._1, x._2 / sum) })
+        var ret = 0.0
+        for (k <- norm)
+          ret += k._1 * k._2
+        (x, ret)
+      } else
+        (x, x.rate)
+    })
+    finish(start)
+    evSamples
   }
 
   def daemons_globbed(allApps: Set[String]) = {
