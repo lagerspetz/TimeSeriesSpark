@@ -187,7 +187,7 @@ object CaratDynamoDataToPlots {
         null
     }
     
-    var allRates: spark.RDD[CaratRate] = oldRates.cache()
+    var allRates: spark.RDD[CaratRate] = oldRates
 
     // closure to forget uuids, models and oses after assigning them to rates
     {
