@@ -620,7 +620,7 @@ object CaratDynamoDataToPlots {
     for (os <- oses){
       /* correlation with this OS */
       val rateOses = rates.map(x => {
-        if (x.model == os)
+        if (x.os == os)
           (x, 1.0)
         else
           (x, 0.0)
