@@ -583,9 +583,9 @@ object CaratDynamoDataToPlots {
         val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app)).cache()
         if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)){
           // bug: calculate correlation
-          correlation("Bug " + app + " running on client " + i, appFromUuid, aPrioriDistribution, models, oses)
+          val filtered = allRates.filter(_.allApps.contains(app)).cache()
+          correlation("Bug " + app + " running on client " + i, filtered, aPrioriDistribution, models, oses)
         }
-          
       }
     }
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
