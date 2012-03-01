@@ -409,14 +409,14 @@ object CaratDynamoDataToPlots {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory)
+      plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null)
     }
 
     for (model <- models) {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory)
+      plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null)
     }
 
     var allHogs = new HashSet[String]
@@ -424,7 +424,7 @@ object CaratDynamoDataToPlots {
     for (app <- allApps) {
       val filtered = allRates.filter(_.allApps.contains(app))
       val filteredNeg = allRates.filter(!_.allApps.contains(app))
-      if (plotDists(sem, sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
+      if (plotDists(sem, sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, null, null, null)) {
         // this is a hog
         allHogs += app
       }
@@ -462,7 +462,7 @@ object CaratDynamoDataToPlots {
       for (app <- nonHogApps) {
           val appFromUuid = fromUuid.filter(_.allApps.contains(app))
           val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-          plotDists(sem, sc, "Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)
+          plotDists(sem, sc, "Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory, null, null, null)
         }
     }
     
@@ -482,10 +482,8 @@ object CaratDynamoDataToPlots {
     val uuidToOsAndModel = new  scala.collection.mutable.HashMap[String, (String, String)]
     uuidToOsAndModel ++= allRates.map(x => {(x.uuid, (x.os, x.model)) }).collect()
     
-    val oses = new scala.collection.mutable.HashSet[String]
-    oses ++= uuidToOsAndModel.map(_._2._1)
-    val models = new scala.collection.mutable.HashSet[String]
-    models ++= uuidToOsAndModel.map(_._2._2)
+    val oses = uuidToOsAndModel.map(_._2._1).toSet
+    val models = uuidToOsAndModel.map(_._2._2).toSet
     
     println("uuIds with data: " + uuidToOsAndModel.keySet.mkString(", "))
     println("oses with data: " + oses.mkString(", "))
@@ -523,18 +521,18 @@ object CaratDynamoDataToPlots {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory)
+      plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null)
     }
 
     for (model <- models) {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory)
+      plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null)
     }
     
     /** Calculate correlation for each model and os version with all rates */
-    correlation("All", allRates, aPrioriDistribution, models, oses)
+    val (osCorrelations, modelCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses)
 
     var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
@@ -542,10 +540,8 @@ object CaratDynamoDataToPlots {
       val filtered = allRates.filter(_.allApps.contains(app)).cache()
       val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()      
       
-      if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory)) {
+      if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models)) {
         // this is a hog
-        /** Calculate correlation for each model and os version with this app */
-        correlation("Hog " + app, filtered, aPrioriDistribution, models, oses)
         allHogs += app
       }
     }
@@ -581,15 +577,14 @@ object CaratDynamoDataToPlots {
       for (app <- nonHogApps) {
         val appFromUuid = fromUuid.filter(_.allApps.contains(app)).cache()
         val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app)).cache()
-        if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory)){
-          // bug: calculate correlation
-          val filtered = allRates.filter(_.allApps.contains(app)).cache()
-          correlation("Bug " + app + " running on client " + i, filtered, aPrioriDistribution, models, oses)
+        if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
+            allRates.filter(_.allApps.contains(app)).cache(), oses, models)){
         }
       }
     }
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
     
+    writeCorrelationFile(plotDirectory, "All", osCorrelations, modelCorrelations)
     // not allowed to return before everything is done
     sem.acquireUninterruptibly(CONCURRENT_PLOTS)
     sem.release(CONCURRENT_PLOTS)
@@ -597,9 +592,9 @@ object CaratDynamoDataToPlots {
     dateString + "/" + PLOTS
   }
   
-  def correlation(name:String, rates: RDD[CaratRate], aPriori: Array[(Double, Double)], models: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String]) = {
-    val modelCorrelations = new HashMap[String, Double]
-    val osCorrelations = new HashMap[String, Double]
+  def correlation(name:String, rates: RDD[CaratRate], aPriori: Array[(Double, Double)], models: Set[String], oses: Set[String]) = {
+    var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
+    var osCorrelations = new scala.collection.immutable.HashMap[String, Double]
 
     val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).collectAsMap)
     if (rateEvs != null) {
@@ -645,6 +640,8 @@ object CaratDynamoDataToPlots {
         println("%s and %s correlated with %s".format(name, k._1, k._2))
     } else
       println("ERROR: Rates had a zero stddev, something is wrong!")
+      
+      (osCorrelations, modelCorrelations)
   }
 
   /**
@@ -658,7 +655,7 @@ object CaratDynamoDataToPlots {
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    plotDists(sem, sc, "Similar to client " + i, "Not similar to client "+i, similar, dissimilar, aPrioriDistribution, false, plotDirectory)
+    plotDists(sem, sc, "Similar to client " + i, "Not similar to client "+i, similar, dissimilar, aPrioriDistribution, false, plotDirectory, null, null, null)
   }
 
   /* TODO: Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -666,11 +663,17 @@ object CaratDynamoDataToPlots {
    * Save it as "plots/data/titleWith-titleWithout".txt.
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
-  def plotDists(sem: Semaphore, sc:SparkContext, title: String, titleNeg: String, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String) = {
+  def plotDists(sem: Semaphore, sc:SparkContext, title: String, titleNeg: String,
+      one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String,
+      filtered: RDD[CaratRate], oses: Set[String], models:Set[String]) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       //scheduler.execute(
-          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
+      if (isBugOrHog && filtered != null){
+        val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
+          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations)
+      }else
+        plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null,null)
       //)
     }
     isBugOrHog && evDistance > 0
@@ -678,9 +681,11 @@ object CaratDynamoDataToPlots {
 
   def plot(sem: Semaphore, title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
     distWithout: RDD[(Int, Double)],
-    ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String, apps: Seq[String] = null) {
+    ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
+    osCorrelations:Map[String, Double], modelCorrelations:Map[String, Double], 
+    apps: Seq[String] = null) {
     sem.acquireUninterruptibly()
-    plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory)
+    plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, apps)
     sem.release()
   }
 
@@ -718,7 +723,7 @@ object CaratDynamoDataToPlots {
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
         //scheduler.execute(
-        plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, apps.toSeq)
+        plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, null, null, apps.toSeq)
         //)
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
@@ -727,7 +732,9 @@ object CaratDynamoDataToPlots {
   
   def plotSerial(title: String, titleNeg: String, xmax:Double,distWith: RDD[(Int, Double)],
     distWithout: RDD[(Int, Double)],
-      ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, apps: Seq[String] = null) {
+      ev:Double, evNeg:Double, evDistance:Double, plotDirectory:String, 
+      osCorrelations:Map[String, Double], modelCorrelations:Map[String, Double], 
+      apps: Seq[String] = null) {
     
     var fixedTitle = title
     if (title.startsWith("Hog "))
@@ -741,6 +748,8 @@ object CaratDynamoDataToPlots {
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
     writeData(dateString, evTitle, distWith, xmax)
     writeData(dateString, evTitleNeg, distWithout, xmax)
+    if (osCorrelations != null)
+      writeCorrelationFile(dateString, title, osCorrelations, modelCorrelations)
     plotData(dateString, title)
   }
 
@@ -832,6 +841,23 @@ object CaratDynamoDataToPlots {
         datafile.write(k._1 +" "+k._2 +"\n")
       datafile.close
     }
+  }
+
+  def writeCorrelationFile(plotDirectory: String, name: String, osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double]) {
+    val path = plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + "-correlation.txt"
+    val datafile = new java.io.FileWriter(path)
+    val arr = osCorrelations.toArray.sortWith((x, y) => { x._2 < y._2 })
+    datafile.write("Correlation with OS versions:\n")
+    for (k <- arr) {
+      datafile.write(k._1 + " " + k._2 + "\n")
+    }
+
+    val mArr = modelCorrelations.toArray.sortWith((x, y) => { x._2 < y._2 })
+    datafile.write("Correlation with device models:\n")
+    for (k <- mArr) {
+      datafile.write(k._1 + " " + k._2 + "\n")
+    }
+    datafile.close
   }
 
   def plotData(dir: String, title: String) {
