@@ -50,13 +50,13 @@ object CaratDynamoDataToPlots {
 
   // How many concurrent plotting operations are allowed to run at once.
   val CONCURRENT_PLOTS = 100
-  /*
+  
   lazy val scheduler = {
     scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+"")
     val s = new ResizableThreadPoolScheduler(false)
     s.start()
     s
-  }*/
+  }
   
   // Bucketing and decimal constants
   val buckets = 100
@@ -151,6 +151,7 @@ object CaratDynamoDataToPlots {
   }
 
   def plotEverything(master: String, debug: Boolean, plotDirectory: String) = {
+    val start = DynamoAnalysisUtil.start()
     if (debug) {
       DEBUG = true
     } else {
@@ -170,7 +171,10 @@ object CaratDynamoDataToPlots {
     val sc = new SparkContext(master, "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
     DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
+    DynamoAnalysisUtil.finish(start)
   }
+  
+  val SPARK_SPLITS_OLDRATES = 3000
   
   /**
    * Main function. Called from main() after sc initialization.
@@ -182,7 +186,7 @@ object CaratDynamoDataToPlots {
     val oldRates: spark.RDD[CaratRate] = {
       val f = new File(RATES_CACHED)
       if (f.exists()) {
-        sc.objectFile(RATES_CACHED)
+        sc.objectFile(RATES_CACHED, SPARK_SPLITS_OLDRATES)
       } else
         null
     }
@@ -313,7 +317,7 @@ object CaratDynamoDataToPlots {
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
-    })
+    }, samples.size)
     if (rates != null)
       rateRdd = rateRdd.union(rates)
     rateRdd
@@ -722,9 +726,9 @@ object CaratDynamoDataToPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-        //scheduler.execute(
+        scheduler.execute(
         plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, null, null, apps.toSeq)
-        //)
+        )
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
