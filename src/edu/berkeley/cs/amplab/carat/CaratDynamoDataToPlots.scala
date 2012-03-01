@@ -749,7 +749,7 @@ object CaratDynamoDataToPlots {
     writeData(dateString, evTitle, distWith, xmax)
     writeData(dateString, evTitleNeg, distWithout, xmax)
     if (osCorrelations != null)
-      writeCorrelationFile(dateString, title, osCorrelations, modelCorrelations)
+      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations)
     plotData(dateString, title)
   }
 
@@ -845,19 +845,26 @@ object CaratDynamoDataToPlots {
 
   def writeCorrelationFile(plotDirectory: String, name: String, osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double]) {
     val path = plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + "-correlation.txt"
-    val datafile = new java.io.FileWriter(path)
-    val arr = osCorrelations.toArray.sortWith((x, y) => { x._2 < y._2 })
-    datafile.write("Correlation with OS versions:\n")
-    for (k <- arr) {
-      datafile.write(k._1 + " " + k._2 + "\n")
-    }
 
-    val mArr = modelCorrelations.toArray.sortWith((x, y) => { x._2 < y._2 })
-    datafile.write("Correlation with device models:\n")
-    for (k <- mArr) {
-      datafile.write(k._1 + " " + k._2 + "\n")
+    if (modelCorrelations.size > 0 || osCorrelations.size > 0) {
+      val datafile = new java.io.FileWriter(path)
+      if (osCorrelations.size > 0) {
+        val arr = osCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
+        datafile.write("Correlation with OS versions:\n")
+        for (k <- arr) {
+          datafile.write(k._2 + " " + k._1 + "\n")
+        }
+      }
+
+      if (modelCorrelations.size > 0) {
+        val mArr = modelCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
+        datafile.write("Correlation with device models:\n")
+        for (k <- mArr) {
+          datafile.write(k._2 + " " + k._1 + "\n")
+        }
+      }
+      datafile.close
     }
-    datafile.close
   }
 
   def plotData(dir: String, title: String) {

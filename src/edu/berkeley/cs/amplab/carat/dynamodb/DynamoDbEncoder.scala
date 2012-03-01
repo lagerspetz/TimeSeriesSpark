@@ -82,7 +82,7 @@ object DynamoDbEncoder {
   }
   
   // max allowed write caps per sec
-  val capMax = 80.0
+  val capMax = 1400.0
   // write caps used
   var capUsedPerSec = 0.0
   // time write caps were used in
