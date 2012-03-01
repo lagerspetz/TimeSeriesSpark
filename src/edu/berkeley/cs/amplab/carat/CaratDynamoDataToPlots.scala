@@ -317,9 +317,9 @@ object CaratDynamoDataToPlots {
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
-    }, samples.size)
+    })
     if (rates != null)
-      rateRdd = rateRdd.union(rates)
+      rateRdd = rates.union(rateRdd)
     rateRdd
   }
   
