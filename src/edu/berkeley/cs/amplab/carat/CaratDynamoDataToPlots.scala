@@ -423,51 +423,51 @@ object CaratDynamoDataToPlots {
       plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null)
     }
 
-    var allHogs = new HashSet[String]
-    /* Hogs: Consider all apps except daemons. */
-    for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app))
-      val filteredNeg = allRates.filter(!_.allApps.contains(app))
-      if (plotDists(sem, sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, null, null, null)) {
-        // this is a hog
-        allHogs += app
-      }
-    }
-    
     val uuidArray = uuids.toArray.sortWith((s, t) => {
       s < t
     })
     
-    for (i <- 0 until uuidArray.length) {
-      val uuid = uuidArray(i)
-      val fromUuid = allRates.filter(_.uuid == uuid)
+    var allHogs = new HashSet[String]
+    /* Hogs: Consider all apps except daemons. */
+    for (app <- allApps) {
+      val filtered = allRates.filter(_.allApps.contains(app)).cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
+      if (plotDists(sem, sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, null, null, null)) {
+        // this is a hog
+        allHogs += app
+      }else{
+        // not a hog. Is it a bug for anyone?
 
-      var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
-      uuidApps --= DynamoAnalysisUtil.DAEMONS_LIST
-      val nonHogApps = uuidApps -- allHogs
+        for (i <- 0 until uuidArray.length) {
+          val uuid = uuidArray(i)
+          val fromUuid = allRates.filter(_.uuid == uuid)
 
-      if (uuidApps.size > 0)
-        similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
-      //else
-      // Remove similar apps entry?
+          var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+          uuidApps --= DynamoAnalysisUtil.DAEMONS_LIST
+          val nonHogApps = uuidApps -- allHogs
 
-      val notFromUuid = allRates.filter(_.uuid != uuid)
-      // no distance check, not bug or hog
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
-      if (bucketed != null && bucketedNeg != null) {
-        distsWithUuid += ((uuid, bucketed))
-        distsWithoutUuid += ((uuid, bucketedNeg))
-        parametersByUuid += ((uuid, (xmax, ev, evNeg)))
-        evDistanceByUuid += ((uuid, evDistance))
-      }
-      appsByUuid += ((uuid, uuidApps))
+          if (uuidApps.size > 0)
+            similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
+          //else
+          // Remove similar apps entry?
 
-      /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-      for (app <- nonHogApps) {
-          val appFromUuid = fromUuid.filter(_.allApps.contains(app))
-          val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app))
-          plotDists(sem, sc, "Bug "+app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory, null, null, null)
+          val notFromUuid = allRates.filter(_.uuid != uuid)
+          // no distance check, not bug or hog
+          val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+          if (bucketed != null && bucketedNeg != null) {
+            distsWithUuid += ((uuid, bucketed))
+            distsWithoutUuid += ((uuid, bucketedNeg))
+            parametersByUuid += ((uuid, (xmax, ev, evNeg)))
+            evDistanceByUuid += ((uuid, evDistance))
+          }
+          appsByUuid += ((uuid, uuidApps))
+
+          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+          val appFromUuid = filtered.filter(_.uuid == uuid)
+          val appNotFromUuid = filtered.filter(_.uuid != uuid)
+          plotDists(sem, sc, "Bug " + app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory, null, null, null)
         }
+      }
     }
     
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
@@ -539,61 +539,59 @@ object CaratDynamoDataToPlots {
     /** Calculate correlation for each model and os version with all rates */
     val (osCorrelations, modelCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses)
 
+    val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
+      s < t
+    })
+    
     var allHogs = new HashSet[String]
+    var allBugs = new HashSet[String]
+
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
       val filtered = allRates.filter(_.allApps.contains(app)).cache()
-      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()      
-      
+      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
+
       if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models)) {
         // this is a hog
         allHogs += app
+      } else {
+        // not a hog. is it a bug for anyone?
+
+        for (i <- 0 until uuidArray.length) {
+          val uuid = uuidArray(i)
+          /* cache these because they will be used numberOfApps times */
+          val fromUuid = allRates.filter(_.uuid == uuid).cache()
+
+          var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+          uuidApps --= DAEMONS_LIST_GLOBBED
+
+          if (uuidApps.size > 0)
+            similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
+          /* cache these because they will be used numberOfApps times */
+          val notFromUuid = allRates.filter(_.uuid != uuid).cache()
+          // no distance check, not bug or hog
+          val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+          if (bucketed != null && bucketedNeg != null) {
+            distsWithUuid += ((uuid, bucketed))
+            distsWithoutUuid += ((uuid, bucketedNeg))
+            parametersByUuid += ((uuid, (xmax, ev, evNeg)))
+            evDistanceByUuid += ((uuid, evDistance))
+          }
+          appsByUuid += ((uuid, uuidApps))
+
+          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+          val appFromUuid = filtered.filter(_.uuid == uuid).cache()
+          val appNotFromUuid = filtered.filter(_.uuid != uuid).cache()
+          if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
+            allRates.filter(_.allApps.contains(app)).cache(), oses, models))
+            allBugs += app
+        }
       }
     }
     
     val globalNonHogs = allApps -- allHogs
     println("Non-daemon non-hogs: " + globalNonHogs)
-    
-    val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
-      s < t
-    })
-
-    
-    var allBugs = new HashSet[String]
-    
-    
-    for (i <- 0 until uuidArray.length) {
-      val uuid = uuidArray(i)
-      /* cache these because they will be used numberOfApps times */ 
-      val fromUuid = allRates.filter(_.uuid == uuid).cache()
-
-      var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
-      uuidApps --= DAEMONS_LIST_GLOBBED
-      val nonHogApps = uuidApps -- allHogs
-    
-      if (uuidApps.size > 0)
-        similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
-        /* cache these because they will be used numberOfApps times */
-      val notFromUuid = allRates.filter(_.uuid != uuid).cache()
-      // no distance check, not bug or hog
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
-      if (bucketed != null && bucketedNeg != null) {
-        distsWithUuid += ((uuid, bucketed))
-        distsWithoutUuid += ((uuid, bucketedNeg))
-        parametersByUuid += ((uuid, (xmax, ev, evNeg)))
-        evDistanceByUuid += ((uuid, evDistance))
-      }
-      appsByUuid += ((uuid, uuidApps))
-
-      /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-      for (app <- nonHogApps) {
-        val appFromUuid = fromUuid.filter(_.allApps.contains(app)).cache()
-        val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app)).cache()
-        if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-            allRates.filter(_.allApps.contains(app)).cache(), oses, models))
-          allBugs += app
-      }
-    }
+    println("All hogs: " + allHogs)
     println("All bugs: " + allBugs)
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
     
