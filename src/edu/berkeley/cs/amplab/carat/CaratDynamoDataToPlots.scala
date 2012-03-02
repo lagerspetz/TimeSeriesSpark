@@ -52,6 +52,8 @@ object CaratDynamoDataToPlots {
   val CONCURRENT_PLOTS = 100
   // How many partitions to split oldRates to.
   val SPARK_SPLITS_OLDRATES = 16
+  // How many Rates must there be in a dist for it to be plotted?
+  val DIST_THRESHOLD = 10
   
   /*lazy val scheduler = {
     scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+"")
@@ -549,22 +551,30 @@ object CaratDynamoDataToPlots {
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
       val filtered = allRates.filter(_.allApps.contains(app))//.cache()
-      val filteredNeg = allRates.filter(!_.allApps.contains(app))//.cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app)) //.cache()
 
-      if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models)) {
-        // this is a hog
-        allHogs += app
-      } else {
-        // not a hog. is it a bug for anyone?
-        for (i <- 0 until uuidArray.length) {
-          val uuid = uuidArray(i)
-          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-          val appFromUuid = filtered.filter(_.uuid == uuid)//.cache()
-          val appNotFromUuid = filtered.filter(_.uuid != uuid)//.cache()
-          if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-            filtered, oses, models))
-            allBugs += app
+      // skip if counts are too low:
+      val fCount = filtered.count
+      val nCount = filteredNeg.count
+
+      if (fCount > DIST_THRESHOLD && nCount > DIST_THRESHOLD) {
+        if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, fCount, nCount)) {
+          // this is a hog
+          allHogs += app
+        } else {
+          // not a hog. is it a bug for anyone?
+          for (i <- 0 until uuidArray.length) {
+            val uuid = uuidArray(i)
+            /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+            val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+            val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+            if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
+              filtered, oses, models))
+              allBugs += app
+          }
         }
+      }else{
+        println("Skipped app " + app +" for too few points: %s <= %s || %s <= %s".format(fCount, DIST_THRESHOLD, nCount, DIST_THRESHOLD))
       }
     }
     
@@ -673,15 +683,16 @@ object CaratDynamoDataToPlots {
     plotDists(sem, sc, "Similar to client " + i, "Not similar to client "+i, similar, dissimilar, aPrioriDistribution, false, plotDirectory, null, null, null)
   }
 
-  /* TODO: Generate a gnuplot-readable plot file of the bucketed distribution.
+  /* Generate a gnuplot-readable plot file of the bucketed distribution.
    * Create folders plots/data plots/plotfiles
    * Save it as "plots/data/titleWith-titleWithout".txt.
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
-  def plotDists(sem: Semaphore, sc:SparkContext, title: String, titleNeg: String,
+
+    def plotDists(sem: Semaphore, sc:SparkContext, title: String, titleNeg: String,
       one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory:String,
-      filtered: RDD[CaratRate], oses: Set[String], models:Set[String]) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+      filtered: RDD[CaratRate], oses: Set[String], models:Set[String], count:Long= 0, negCount:Long = 0) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, count, negCount)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       //scheduler.execute(
       if (isBugOrHog && filtered != null){

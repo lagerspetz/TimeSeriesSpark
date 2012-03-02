@@ -462,12 +462,12 @@ object DynamoAnalysisUtil {
   }
   
   val DIST_THRESHOLD = 10
-
+  
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
   def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
-      buckets:Int, smallestBucket:Double, decimals:Int, DEBUG:Boolean = false) = {
+      buckets:Int, smallestBucket:Double, decimals:Int, DEBUG:Boolean = false, count:Long = 0, negCount:Long = 0) = {
     val startTime = start
     // probability distribution: r, count/sumCount
 
@@ -478,8 +478,12 @@ object DynamoAnalysisUtil {
     /* FIXME: Should not flatten RDD's, but figure out how to transform an
      * RDD of Rates => RDD of UniformDists => RDD of Double,Double pairs (Bucketed values)  
      */
-    val onec = one.count
-    val twoc = two.count
+    var onec = count
+    if (count == 0)
+      onec = one.count
+    var twoc = negCount
+    if (negCount == 0)
+      twoc = two.count
 
     if (onec > DIST_THRESHOLD && twoc > DIST_THRESHOLD) {
 
