@@ -22,7 +22,7 @@ object GetDataForUuidPeriod {
         val key = k.get(sampleKey).getS()
         val time = k.get(sampleTime).getN().toDouble
         val bl = k.get(sampleBatteryLevel).getN().toDouble
-        val bs = k.get(sampleBatteryState).getS().toDouble
+        val bs = k.get(sampleBatteryState).getS()
         printf("key %s time %s bl %s bs %s\n", key, time, bl, bs)
       }
     }
