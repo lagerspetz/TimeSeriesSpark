@@ -517,6 +517,7 @@ object CaratDynamoDataToPlots {
       println("a priori dist:\n" + aPrioriDistribution.mkString("\n"))
 
     var allApps = allRates.flatMap(_.allApps).collect().toSet
+    println("AllApps (with daemons): " + allApps)
     val DAEMONS_LIST_GLOBBED = DynamoAnalysisUtil.daemons_globbed(allApps)
     allApps --= DAEMONS_LIST_GLOBBED
     println("AllApps (no daemons): " + allApps)
@@ -550,9 +551,16 @@ object CaratDynamoDataToPlots {
       }
     }
     
+    val globalNonHogs = allApps -- allHogs
+    println("Non-daemon non-hogs: " + globalNonHogs)
+    
     val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
+
+    
+    var allBugs = new HashSet[String]
+    
     
     for (i <- 0 until uuidArray.length) {
       val uuid = uuidArray(i)
@@ -582,10 +590,11 @@ object CaratDynamoDataToPlots {
         val appFromUuid = fromUuid.filter(_.allApps.contains(app)).cache()
         val appNotFromUuid = notFromUuid.filter(_.allApps.contains(app)).cache()
         if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-            allRates.filter(_.allApps.contains(app)).cache(), oses, models)){
-        }
+            allRates.filter(_.allApps.contains(app)).cache(), oses, models))
+          allBugs += app
       }
     }
+    println("All bugs: " + allBugs)
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
     
     writeCorrelationFile(plotDirectory, "All", osCorrelations, modelCorrelations)
