@@ -51,7 +51,7 @@ object CaratDynamoDataToPlots {
   // How many concurrent plotting operations are allowed to run at once.
   val CONCURRENT_PLOTS = 100
   // How many partitions to split oldRates to.
-  val SPARK_SPLITS_OLDRATES = 100
+  val SPARK_SPLITS_OLDRATES = 16
   
   /*lazy val scheduler = {
     scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+"")
