@@ -50,13 +50,15 @@ object CaratDynamoDataToPlots {
 
   // How many concurrent plotting operations are allowed to run at once.
   val CONCURRENT_PLOTS = 100
+  // How many partitions to split oldRates to.
+  val SPARK_SPLITS_OLDRATES = 100
   
-  lazy val scheduler = {
+  /*lazy val scheduler = {
     scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+"")
     val s = new ResizableThreadPoolScheduler(false)
     s.start()
     s
-  }
+  }*/
   
   // Bucketing and decimal constants
   val buckets = 100
@@ -173,8 +175,6 @@ object CaratDynamoDataToPlots {
     DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
     DynamoAnalysisUtil.finish(start)
   }
-  
-  val SPARK_SPLITS_OLDRATES = 3000
   
   /**
    * Main function. Called from main() after sc initialization.
@@ -688,9 +688,9 @@ object CaratDynamoDataToPlots {
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
     osCorrelations:Map[String, Double], modelCorrelations:Map[String, Double], 
     apps: Seq[String] = null) {
-    sem.acquireUninterruptibly()
+    //sem.acquireUninterruptibly()
     plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, apps)
-    sem.release()
+    //sem.release()
   }
 
    /**
@@ -726,9 +726,9 @@ object CaratDynamoDataToPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-        scheduler.execute(
+        //scheduler.execute(
         plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, null, null, apps.toSeq)
-        )
+        //)
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
