@@ -186,7 +186,7 @@ object CaratDynamoDataToPlots {
     val oldRates: spark.RDD[CaratRate] = {
       val f = new File(RATES_CACHED)
       if (f.exists()) {
-        sc.objectFile(RATES_CACHED, SPARK_SPLITS_OLDRATES)
+        sc.objectFile(RATES_CACHED/*, SPARK_SPLITS_OLDRATES*/)
       } else
         null
     }
@@ -430,8 +430,8 @@ object CaratDynamoDataToPlots {
     var allHogs = new HashSet[String]
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app)).cache()
-      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
+      val filtered = allRates.filter(_.allApps.contains(app))//.cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app))//.cache()
       if (plotDists(sem, sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, null, null, null)) {
         // this is a hog
         allHogs += app
@@ -480,7 +480,7 @@ object CaratDynamoDataToPlots {
    */
   def analyzeRateData(sc:SparkContext, inputRates: RDD[CaratRate], plotDirectory:String) = {
     // cache first
-    val allRates = inputRates.cache()
+    val allRates = inputRates//.cache()
     
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new  scala.collection.mutable.HashMap[String, (String, String)]
@@ -548,8 +548,8 @@ object CaratDynamoDataToPlots {
 
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app)).cache()
-      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
+      val filtered = allRates.filter(_.allApps.contains(app))//.cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app))//.cache()
 
       if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models)) {
         // this is a hog
@@ -559,8 +559,8 @@ object CaratDynamoDataToPlots {
         for (i <- 0 until uuidArray.length) {
           val uuid = uuidArray(i)
           /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-          val appFromUuid = filtered.filter(_.uuid == uuid).cache()
-          val appNotFromUuid = filtered.filter(_.uuid != uuid).cache()
+          val appFromUuid = filtered.filter(_.uuid == uuid)//.cache()
+          val appNotFromUuid = filtered.filter(_.uuid != uuid)//.cache()
           if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
             filtered, oses, models))
             allBugs += app
@@ -577,7 +577,7 @@ object CaratDynamoDataToPlots {
      for (i <- 0 until uuidArray.length) {
           val uuid = uuidArray(i)
           /* cache these because they will be used numberOfApps times */
-          val fromUuid = allRates.filter(_.uuid == uuid).cache()
+          val fromUuid = allRates.filter(_.uuid == uuid)//.cache()
 
           var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
           uuidApps --= DAEMONS_LIST_GLOBBED
@@ -585,7 +585,7 @@ object CaratDynamoDataToPlots {
           if (uuidApps.size > 0)
             similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
           /* cache these because they will be used numberOfApps times */
-          val notFromUuid = allRates.filter(_.uuid != uuid).cache()
+          val notFromUuid = allRates.filter(_.uuid != uuid)//.cache()
           // no distance check, not bug or hog
           val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
           if (bucketed != null && bucketedNeg != null) {
