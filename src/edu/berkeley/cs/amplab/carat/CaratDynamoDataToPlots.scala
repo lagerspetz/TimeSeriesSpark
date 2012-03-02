@@ -556,8 +556,25 @@ object CaratDynamoDataToPlots {
         allHogs += app
       } else {
         // not a hog. is it a bug for anyone?
-
         for (i <- 0 until uuidArray.length) {
+          val uuid = uuidArray(i)
+          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+          val appFromUuid = filtered.filter(_.uuid == uuid).cache()
+          val appNotFromUuid = filtered.filter(_.uuid != uuid).cache()
+          if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
+            filtered, oses, models))
+            allBugs += app
+        }
+      }
+    }
+    
+    val globalNonHogs = allApps -- allHogs
+    println("Non-daemon non-hogs: " + globalNonHogs)
+    println("All hogs: " + allHogs)
+    println("All bugs: " + allBugs)
+    
+    /* uuid stuff */
+     for (i <- 0 until uuidArray.length) {
           val uuid = uuidArray(i)
           /* cache these because they will be used numberOfApps times */
           val fromUuid = allRates.filter(_.uuid == uuid).cache()
@@ -578,21 +595,8 @@ object CaratDynamoDataToPlots {
             evDistanceByUuid += ((uuid, evDistance))
           }
           appsByUuid += ((uuid, uuidApps))
-
-          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-          val appFromUuid = filtered.filter(_.uuid == uuid).cache()
-          val appNotFromUuid = filtered.filter(_.uuid != uuid).cache()
-          if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-            allRates.filter(_.allApps.contains(app)).cache(), oses, models))
-            allBugs += app
         }
-      }
-    }
     
-    val globalNonHogs = allApps -- allHogs
-    println("Non-daemon non-hogs: " + globalNonHogs)
-    println("All hogs: " + allHogs)
-    println("All bugs: " + allBugs)
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
     
     writeCorrelationFile(plotDirectory, "All", osCorrelations, modelCorrelations)
