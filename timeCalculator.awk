@@ -1,13 +1,12 @@
-#!/usr/bin/awk -f
-
-$1 ~ "^Time edu.berkeley.cs." { a[$1] += $2 }
-$1 ~ "^Time spark.timeseries." { a[$1] += $2 }
+#![$2] += $NF }
+$0 ~ "^Time edu.berkeley.cs.amplab.carat." { a[$2] += $NF }
+$0 ~ "^Time spark.timeseries." { a[$2] += $NF }
 
 END {
         for (k in a){
                 name=k
-                gsub("Time edu.berkeley.cs.amplab.carat", "", name)
-                gsub("Time spark.timeseries.", "", name)
+                gsub("edu.berkeley.cs.amplab.carat.", "", name)
+                gsub("spark.timeseries.", "", name)
                 print a[k], name
         }
 }
