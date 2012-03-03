@@ -19,7 +19,7 @@ object PlotAndMakeAvailable extends App {
       k.delete()
   }
 
-  val plotDir = CaratDynamoDataToPlots.plotEverything("local[2]", true, plotwww)
+  val plotDir = CaratDynamoDataToPlots.plotEverything("local[8]", true, plotwww)
   // /mnt/www/treethumbnailer.sh /mnt/www/plots
 
   val temp = Runtime.getRuntime().exec(Array("/bin/bash", "/mnt/www/treethumbnailer.sh", plotwww))

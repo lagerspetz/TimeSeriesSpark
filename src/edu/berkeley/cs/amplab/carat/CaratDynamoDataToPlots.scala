@@ -111,7 +111,7 @@ object CaratDynamoDataToPlots {
       master = args(0)
     }
     plotEverything(master, args != null && args.length > 1 && args(1) == "DEBUG", null)
-    sys.exit(0)
+    //sys.exit(0)
   }
   
   def plotSampleTimes(){
@@ -172,7 +172,7 @@ object CaratDynamoDataToPlots {
 
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
-    val sc = new SparkContext(master, "CaratDynamoDataToPlots")
+    val sc = TimeSeriesSpark.init(master, "kryo", "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
     DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
     DynamoAnalysisUtil.finish(start)
