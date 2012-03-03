@@ -56,12 +56,12 @@ object CaratDynamoDataToPlots {
   // How many Rates must there be in a dist for it to be plotted?
   val DIST_THRESHOLD = 10
   
-  /*lazy val scheduler = {
+  lazy val scheduler = {
     scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+"")
     val s = new ResizableThreadPoolScheduler(false)
     s.start()
     s
-  }*/
+  }
   
   // Bucketing and decimal constants
   val buckets = 100
@@ -175,7 +175,7 @@ object CaratDynamoDataToPlots {
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
     
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
-    val sc = TimeSeriesSpark.init(master, "bounded", "CaratDynamoDataToPlots")
+    val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
     DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
     DynamoAnalysisUtil.finish(start)
@@ -704,13 +704,13 @@ object CaratDynamoDataToPlots {
       filtered: RDD[CaratRate], oses: Set[String], models:Set[String], count:Long= 0, negCount:Long = 0) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, count, negCount)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
-      //scheduler.execute(
+      scheduler.execute(
       if (isBugOrHog && filtered != null){
         val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
           plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations)
       }else
         plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null,null)
-      //)
+      )
     }
     isBugOrHog && evDistance > 0
   }
@@ -758,9 +758,9 @@ object CaratDynamoDataToPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-        //scheduler.execute(
+        scheduler.execute(
         plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, null, null, apps.toSeq)
-        //)
+        )
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
