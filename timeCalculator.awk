@@ -1,11 +1,17 @@
 #![$2] += $NF }
 $0 ~ "^Time edu.berkeley.cs.amplab.carat." {
-  sums[$2] += $NF
-  count[$2] += 1
+  k = $2
+  if ($0 ~ "^Time edu.berkeley.cs.amplab.carat.* from ")
+    k = $2" "$4
+  sums[k] += $NF
+  count[k] += 1
 }
 $0 ~ "^Time spark.timeseries." {
-  sums[$2] += $NF
-  count[$2] += 1
+  k = $2
+  if ($0 ~ "^Time spark.timeseries.* from ")
+    k = $2" "$4
+  sums[k] += $NF
+  count[k] += 1
 }
 
 END {
