@@ -31,19 +31,22 @@ object DynamoAnalysisUtil {
   val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
   
   def start() = System.currentTimeMillis()
-
-  def finish(start: Long) {
+  
+  def finish(start: Long, message:String = null) {
+    var fmt = ""
+    if (message != null)
+      fmt = "-%s".format(message)
     val functionStack = Thread.currentThread().getStackTrace()
     val f = {
       if (functionStack != null && functionStack.length > 0) {
         if (functionStack.length > 3)
-          functionStack(2) + " from " + functionStack(3)
+          functionStack(2) + fmt+" from " + functionStack(3)
         else if (functionStack.length > 2)
-          functionStack(2)
+          functionStack(2) + fmt
         else if (functionStack.length > 1)
-          functionStack(1)
+          functionStack(1)+ fmt
       } else
-        "edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil.finish from UnknownFunction"
+        "edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil.finish"+fmt
     }
     println("Time %s: %d".format(f, (System.currentTimeMillis() - start)))
   }
@@ -484,16 +487,19 @@ object DynamoAnalysisUtil {
     var twoc = negCount
     if (negCount == 0)
       twoc = two.count
+    finish(startTime, "Counting")
 
     if (onec > DIST_THRESHOLD && twoc > DIST_THRESHOLD) {
-
+      var fStart = start
       val freqWith = getFrequencies(aPrioriDistribution, one)
       val freqWithout = getFrequencies(aPrioriDistribution, two)
-
+      finish(fStart, "GetFreq")
       var evDistance = 0.0
-
+      
+      fStart = start
       val withCount = freqWith.count
       val withoutCount = freqWithout.count
+      finish(startTime, "FreqCount")
       println("withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(onec, withCount, twoc, withoutCount))
 
       if (withCount < DIST_THRESHOLD) {
@@ -509,9 +515,11 @@ object DynamoAnalysisUtil {
         if (DEBUG) {
           ProbUtil.debugNonZero(freqWith.map(_._1).collect(), freqWithout.map(_._1).collect(), "rates")
         }
+        fStart = start
         // Log bucketing:
         val (xmax, bucketed, bucketedNeg, ev, evNeg) = ProbUtil.logBucketRDDFreqs(sc, freqWith, freqWithout, buckets, smallestBucket, decimals)
-
+        finish(fStart, "LogBucketing")
+        
         evDistance = evDiff(ev, evNeg)
         if (evDistance > 0){
           var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
