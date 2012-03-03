@@ -61,7 +61,7 @@ object TimeSeriesSpark {
       }
     }
   }
-
+  
   /**
    * Map a line of text of comma-separated numbers into an [[scala.Array]] of [[scala.Double]]s.
    * 

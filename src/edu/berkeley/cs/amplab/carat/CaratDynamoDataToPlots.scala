@@ -25,6 +25,7 @@ import scala.collection.immutable.TreeSet
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
 import scala.actors.scheduler.ResizableThreadPoolScheduler
 import scala.collection.mutable.HashMap
+import com.esotericsoftware.kryo.Kryo
 
 /**
  * Analyzes data in the Carat Amazon DynamoDb to obtain probability distributions
@@ -172,10 +173,19 @@ object CaratDynamoDataToPlots {
 
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
+    
+    System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
     val sc = TimeSeriesSpark.init(master, "kryo", "CaratDynamoDataToPlots")
     analyzeData(sc, plotDirectory)
     DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
     DynamoAnalysisUtil.finish(start)
+  }
+  
+  class CaratRateRegistrator extends KryoRegistrator{
+    def registerClasses(kryo: Kryo){
+      kryo.register(classOf[Array[edu.berkeley.cs.amplab.carat.CaratRate]])
+      kryo.register(classOf[edu.berkeley.cs.amplab.carat.CaratRate])
+    }
   }
   
   /**
