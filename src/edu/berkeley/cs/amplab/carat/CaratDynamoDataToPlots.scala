@@ -188,7 +188,7 @@ object CaratDynamoDataToPlots {
     val oldRates: spark.RDD[CaratRate] = {
       val f = new File(RATES_CACHED)
       if (f.exists()) {
-        sc.objectFile(RATES_CACHED/*, SPARK_SPLITS_OLDRATES*/)
+        sc.objectFile(RATES_CACHED, SPARK_SPLITS_OLDRATES)
       } else
         null
     }
@@ -319,9 +319,9 @@ object CaratDynamoDataToPlots {
         (uuid, time, batteryLevel, event, batteryState, apps)
       })
       DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
-    })
+    }, SPARK_SPLITS_OLDRATES)
     if (rates != null)
-      rateRdd = rates.union(rateRdd)
+      rateRdd = rateRdd.union(rates)
     rateRdd
   }
   
@@ -482,7 +482,7 @@ object CaratDynamoDataToPlots {
    */
   def analyzeRateData(sc:SparkContext, inputRates: RDD[CaratRate], plotDirectory:String) = {
     // cache first
-    val allRates = inputRates//.cache()
+    val allRates = inputRates.cache()
     
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new  scala.collection.mutable.HashMap[String, (String, String)]
