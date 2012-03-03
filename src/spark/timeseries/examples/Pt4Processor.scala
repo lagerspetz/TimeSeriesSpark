@@ -96,7 +96,7 @@ object Pt4Processor {
     }
     new String(chars)
   }
-  
+
   def readLong(reader: java.io.RandomAccessFile) = {
     val b1 = reader.readUnsignedByte()
     val b2 = reader.readUnsignedByte()
@@ -123,10 +123,10 @@ object Pt4Processor {
     //println("headSize=" + headSize + " name=" + name + " batterySize=" + batterySize);
     /*val  = 
        DateTime.FromBinary(*/
-    val captureDate = new java.util.Date(readLong(reader)/10000+new java.util.Date(70,0,1).getTime())
+    val captureDate = new java.util.Date(readLong(reader) / 10000 + new java.util.Date(70, 0, 1).getTime())
     //); 
     val serialNumber = csReadString(reader).trim();
-     //println("headSize=" + headSize + " name=" + name + " batterySize=" + batterySize + " serial=" + serialNumber);
+    //println("headSize=" + headSize + " name=" + name + " batterySize=" + batterySize + " serial=" + serialNumber);
     /*val calibrationStatus = 
        (CalibrationStatus)*/ (reader.readUnsignedShort >> 8) + reader.readUnsignedShort();
     /*val voutSetting = (VoutSetting)*/ (reader.readUnsignedShort >> 8) + reader.readUnsignedShort();
@@ -148,21 +148,21 @@ object Pt4Processor {
     (reader.readUnsignedShort >> 8) + reader.readUnsignedShort();
     val exitCode = (reader.readUnsignedShort >> 8) + reader.readUnsignedShort();
     val totalCount = reader.readLong()
-    val statusOffset = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val statusSize = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val sampleOffset = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val sampleSize = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val initialMainVoltage = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val initialUsbVoltage = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val initialAuxVoltage = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    val statusOffset = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val statusSize = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val sampleOffset = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val sampleSize = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val initialMainVoltage = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val initialUsbVoltage = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val initialAuxVoltage = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
     val cdmPos = reader.getFilePointer()
-    val captureDataMask = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    val captureDataMask = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
     val sampleCount = readLong(reader) //UInt64(); // FIXME: may cause issues!! 
     val missingCount = readLong(reader) //ReadUInt64();  // FIXME: may cause issues!!
 
     printf("%s %s %s %s %s %s %s %s %s\n",
-            headSize, name, batterySize, captureDate,
-            serialNumber, captureDataMask, sampleCount, missingCount, cdmPos);
+      headSize, name, batterySize, captureDate,
+      serialNumber, captureDataMask, sampleCount, missingCount, cdmPos);
 
     val count = math.max(1, sampleCount -
       missingCount)
@@ -256,32 +256,32 @@ object Pt4Processor {
       println("Buggy data, protocolVersion < 16!")
       System.exit(1)
     }
-    /*val fineObs.mainCurrent = */ reader.readByte()  + (reader.readByte() << 8);
-    /*val fineObs.usbCurrent =*/ reader.readByte()  + (reader.readByte() << 8);
-    /*val fineObs.auxCurrent =*/ reader.readByte()  + (reader.readByte() << 8);
-    /*val fineObs.voltage =*/ reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    /*val coarseObs.mainCurrent =*/ reader.readByte()  + (reader.readByte() << 8);
-    /*val coarseObs.usbCurrent =*/ reader.readByte()  + (reader.readByte() << 8);
-    /*val coarseObs.auxCurrent =*/ reader.readByte()  + (reader.readByte() << 8);
-    /*val coarseObs.voltage =*/ reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    /*val fineObs.mainCurrent = */ reader.readByte() + (reader.readByte() << 8);
+    /*val fineObs.usbCurrent =*/ reader.readByte() + (reader.readByte() << 8);
+    /*val fineObs.auxCurrent =*/ reader.readByte() + (reader.readByte() << 8);
+    /*val fineObs.voltage =*/ reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    /*val coarseObs.mainCurrent =*/ reader.readByte() + (reader.readByte() << 8);
+    /*val coarseObs.usbCurrent =*/ reader.readByte() + (reader.readByte() << 8);
+    /*val coarseObs.auxCurrent =*/ reader.readByte() + (reader.readByte() << 8);
+    /*val coarseObs.voltage =*/ reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
     val outputVoltageSetting = reader.readUnsignedByte();
     val temperature = reader.readByte();
     val pmStatus = /*(PmStatus)*/ reader.readUnsignedByte();
     val reserved = reader.readUnsignedByte();
     val leds = reader.readUnsignedByte();
     val mainFineResistorOffset = reader.readByte();
-    val serialNumber = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    val serialNumber = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
     val sampleRate = reader.readUnsignedByte();
-    val dacCalLow = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val dacCalHigh = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val powerupCurrentLimit = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
-    val runtimeCurrentLimit = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    val dacCalLow = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val dacCalHigh = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val powerupCurrentLimit = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
+    val runtimeCurrentLimit = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
     val powerupTime = reader.readUnsignedByte();
     val usbFineResistorOffset = reader.readByte();
     val auxFineResistorOffset = reader.readByte();
-    val initialUsbVoltage = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    val initialUsbVoltage = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
 
-    val initialAuxVoltage = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    val initialAuxVoltage = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
     val hardwareRevision = /*(HardwareRev)*/ reader.readUnsignedByte();
     val temperatureLimit = reader.readUnsignedByte();
     val usbPassthroughMode = reader.readUnsignedByte();
@@ -298,7 +298,7 @@ object Pt4Processor {
     val factoryAuxCoarseResistorOffset =
       reader.readByte();
     val eventCode = reader.readUnsignedByte();
-    val eventData = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+    val eventData = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
     val checksum = reader.readUnsignedByte();
 
     // restore original position 
@@ -397,7 +397,7 @@ object Pt4Processor {
       val newPos = SamplePosition(sampleIndex, captureDataMask)
       if (oldPos != newPos)
         reader.seek(newPos)
-      
+
       //println("Position " + newPos)
       // get default voltages (V) for the three channels 
       var mainVoltage =
@@ -421,7 +421,7 @@ object Pt4Processor {
       var raw: Int = 0
       // Main current (mA) 
       if (mainPresent) {
-        raw = reader.readByte()  + (reader.readByte() << 8);
+        raw = reader.readByte() + (reader.readByte() << 8);
         //println("Raw current: " + raw)
 
         missing = missing ||
@@ -437,7 +437,7 @@ object Pt4Processor {
 
       // Aux1 current (mA) 
       if (usbPresent) {
-        raw = reader.readByte()  + (reader.readByte() << 8);
+        raw = reader.readByte() + (reader.readByte() << 8);
 
         missing = missing ||
           raw == missingRawCurrent;
@@ -453,7 +453,7 @@ object Pt4Processor {
 
       // Aux2 current (mA) 
       if (auxPresent) {
-        raw = reader.readByte()  + (reader.readByte() << 8);
+        raw = reader.readByte() + (reader.readByte() << 8);
         missing = missing ||
           raw == missingRawCurrent;
         if (!missing) {
@@ -467,7 +467,7 @@ object Pt4Processor {
 
       // Markers and Voltage (V) 
       {
-        var uraw = reader.readUnsignedByte()  + (reader.readUnsignedByte() << 8);
+        var uraw = reader.readUnsignedByte() + (reader.readUnsignedByte() << 8);
 
         missing = missing ||
           uraw == missingRawVoltage;
@@ -515,15 +515,18 @@ object Pt4Processor {
     val scount = sampleCount(f, header.captureDataMask)
     f.seek(sampleOffset)
 
-//    println("num, time, current, voltage");
+    //    println("num, time, current, voltage");
     println("time, current");
     var sampleIndex = 0L
     while (sampleIndex < scount) {
       // read the next sample
       val sample = getSample(sampleIndex, header.captureDataMask, statusPacket, f);
       // process the sample 
-//      printf("%d, %.4f, %.2f, %.4f\n", sampleIndex, sample.timeStamp, sample.mainCurrent, sample.mainVoltage)
-      printf("%.4f, %.2f\n", sample.timeStamp, sample.mainCurrent)
+      //      printf("%d, %.4f, %.2f, %.4f\n", sampleIndex, sample.timeStamp, sample.mainCurrent, sample.mainVoltage)
+      if (sample.mainPresent)
+        printf("%.4f, %.2f\n", sample.timeStamp, sample.mainCurrent)
+      if (sample.auxPresent) /* different field for aux */
+        printf("%.4f, %.2f %4.2f\n", sample.timeStamp, sample.auxCurrent, sample.auxVoltage)
       sampleIndex += 1
     }
     f.close()
