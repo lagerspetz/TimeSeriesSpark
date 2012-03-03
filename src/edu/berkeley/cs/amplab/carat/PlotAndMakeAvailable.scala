@@ -3,7 +3,7 @@ import java.io.File
 
 object PlotAndMakeAvailable extends App {
   val plotwww = "/mnt/www/plots"
-    
+  
   // rm -rf /mnt/www/plots/*.eps
   // rm -rf /mnt/www/plots/*/*.eps
   val f = new File(plotwww)
@@ -19,7 +19,12 @@ object PlotAndMakeAvailable extends App {
       k.delete()
   }
 
-  val plotDir = CaratDynamoDataToPlots.plotEverything("local[8]", true, plotwww)
+  var master = "local[8]"
+  if (args != null && args.length > 0) {
+    master = args(0)
+  }
+  
+  val plotDir = CaratDynamoDataToPlots.plotEverything(master, true, plotwww)
   // /mnt/www/treethumbnailer.sh /mnt/www/plots
 
   val temp = Runtime.getRuntime().exec(Array("/bin/bash", "/mnt/www/treethumbnailer.sh", plotwww))
