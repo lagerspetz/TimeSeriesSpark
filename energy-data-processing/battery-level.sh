@@ -43,6 +43,10 @@ for k in *csv
   if [ "$ending" != "$k" ]
     then continue
   fi
+  ending=$( basename "$k" "-slopes.csv" )
+  if [ "$ending" != "$k" ]
+    then continue
+  fi
 
   if [ ! -f "$k"-temp.csv ]
     then  "$dir"/battery-drain-average.awk -v span=$span -v battery=$battery \
