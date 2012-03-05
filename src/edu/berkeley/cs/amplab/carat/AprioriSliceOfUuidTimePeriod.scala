@@ -108,7 +108,7 @@ object AprioriSliceOfUuidTimePeriod {
       if (args.length > 3)
         time1 = args(3).toLong
       if (args.length > 4)
-        time1 = args(4).toLong
+        time2 = args(4).toLong
 
       if (debug) {
         DEBUG = true
@@ -129,7 +129,7 @@ object AprioriSliceOfUuidTimePeriod {
 
       //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
 
-      if (givenUuid != "" && (time1 != 0 || time2 != 0)) {
+      if (givenUuid != "" && (time1 < time2) && (time1 != 0 || time2 != 0)) {
         val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataToPlots")
         analyzeData(sc, givenUuid, time1, time2)
       }else{
