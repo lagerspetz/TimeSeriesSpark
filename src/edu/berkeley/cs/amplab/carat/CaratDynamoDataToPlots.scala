@@ -463,7 +463,7 @@ object CaratDynamoDataToPlots {
 
           val notFromUuid = allRates.filter(_.uuid != uuid)
           // no distance check, not bug or hog
-          val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+          val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
           if (bucketed != null && bucketedNeg != null) {
             distsWithUuid += ((uuid, bucketed))
             distsWithoutUuid += ((uuid, bucketedNeg))
@@ -625,7 +625,7 @@ object CaratDynamoDataToPlots {
         /* cache these because they will be used numberOfApps times */
         val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
         // no distance check, not bug or hog
-        val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+        val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance,usersWith,usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
         bottleNeck.acquireUninterruptibly()
         if (bucketed != null && bucketedNeg != null) {
           distsWithUuid += ((uuid, bucketed))
@@ -651,7 +651,7 @@ object CaratDynamoDataToPlots {
     uuidSem.release(CONCURRENT_PLOTS)
     plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
 
-    writeCorrelationFile(plotDirectory, "All", osCorrelations, modelCorrelations)
+    writeCorrelationFile(plotDirectory, "All", osCorrelations, modelCorrelations, 0, 0)
     // not allowed to return before everything is done
     sem.acquireUninterruptibly(CONCURRENT_PLOTS)
     sem.release(CONCURRENT_PLOTS)
@@ -734,14 +734,14 @@ object CaratDynamoDataToPlots {
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
     filtered: RDD[CaratRate], oses: Set[String], models: Set[String], count: Long = 0, negCount: Long = 0) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, count, negCount)
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, count, negCount)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       scheduler.execute(
         if (isBugOrHog && filtered != null) {
           val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
-          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations)
+          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout)
         } else
-          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null, null))
+          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout))
     }
     isBugOrHog && evDistance > 0
   }
@@ -750,9 +750,11 @@ object CaratDynamoDataToPlots {
     distWithout: RDD[(Int, Double)],
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
+    usersWith:Int, usersWithout:Int,
     apps: Seq[String] = null) {
     //sem.acquireUninterruptibly()
-    plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, apps)
+    plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations,
+        usersWith, usersWithout, apps)
     //sem.release()
   }
 
@@ -790,7 +792,7 @@ object CaratDynamoDataToPlots {
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
         scheduler.execute(
-          plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, null, null, apps.toSeq))
+          plot(sem, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, plotDirectory, null, null, 0, 0, apps.toSeq))
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
@@ -800,6 +802,7 @@ object CaratDynamoDataToPlots {
     distWithout: RDD[(Int, Double)],
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
+    usersWith:Int, usersWithout:Int,
     apps: Seq[String] = null) {
 
     var fixedTitle = title
@@ -815,7 +818,7 @@ object CaratDynamoDataToPlots {
     writeData(dateString, evTitle, distWith, xmax)
     writeData(dateString, evTitleNeg, distWithout, xmax)
     if (osCorrelations != null)
-      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations)
+      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations,usersWith,usersWithout)
     plotData(dateString, title)
   }
 
@@ -909,11 +912,22 @@ object CaratDynamoDataToPlots {
     }
   }
 
-  def writeCorrelationFile(plotDirectory: String, name: String, osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double]) {
+  def writeCorrelationFile(plotDirectory: String, name: String,
+      osCorrelations: Map[String, Double],
+      modelCorrelations: Map[String, Double],
+      usersWith:Int,usersWithout:Int) {
     val path = plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + "-correlation.txt"
 
+    
+    var datafile:java.io.FileWriter = null
+    
+    if (usersWith != 0 || usersWithout != 0){
+      if (datafile == null) datafile = new java.io.FileWriter(path)
+      datafile.write("%s users with\n%s users without\n".format(usersWith,usersWithout))
+    }
+        
     if (modelCorrelations.size > 0 || osCorrelations.size > 0) {
-      val datafile = new java.io.FileWriter(path)
+      if (datafile == null) datafile = new java.io.FileWriter(path)
       if (osCorrelations.size > 0) {
         val arr = osCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
         datafile.write("Correlation with OS versions:\n")
