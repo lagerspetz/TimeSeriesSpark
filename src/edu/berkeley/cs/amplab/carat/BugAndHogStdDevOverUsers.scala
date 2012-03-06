@@ -267,31 +267,26 @@ object BugAndHogStdDevOverUsers {
       val filtered = allRates.filter(_.allApps.contains(app)).cache()
       val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
 
-      val emptyWith = filtered.take(1) match {
-        case Array(t) => false
-        case _ => true
-      }
+      val enoughWith = filtered.take(DynamoAnalysisUtil.DIST_THRESHOLD).length == DynamoAnalysisUtil.DIST_THRESHOLD
+      
+      val enoughWithout = filteredNeg.take(DynamoAnalysisUtil.DIST_THRESHOLD).length == DynamoAnalysisUtil.DIST_THRESHOLD
 
-      val emptyWithout = filteredNeg.take(1) match {
-        case Array(t) => false
-        case _ => true
-      }
-
-      if (!emptyWith && !emptyWithout && !getDistances(sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true)) {
+      if (enoughWith && enoughWithout && !getDistances(sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, enoughWith, enoughWithout)) {
         // not a hog. is it a bug for anyone?
         for (i <- 0 until uuidArray.length) {
           val uuid = uuidArray(i)
           /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
           val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
           val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-          getDistances(sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true)
+          getDistances(sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, enoughWith, enoughWithout)
         }
       }
     }
 
     def getDistances(sc: SparkContext, title: String, titleNeg: String,
-      one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean) = {
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributionsNoCount(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+      one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean,
+      enoughWith:Boolean, enoughWithout:Boolean) = {
+      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, enoughWith, enoughWithout)
       if (bucketed != null && bucketedNeg != null) {
         printf("%s vs %s (%s vs %s users) evWith=%s evWithout=%s evDistance=%s\n", title, titleNeg, usersWith, usersWithout, ev, evNeg, evDistance)
       }

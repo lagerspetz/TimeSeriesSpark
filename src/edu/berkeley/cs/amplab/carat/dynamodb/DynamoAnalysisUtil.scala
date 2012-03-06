@@ -26,7 +26,9 @@ object DynamoAnalysisUtil {
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 9
-
+  
+  val DIST_THRESHOLD = 10
+  
   // Daemons list, read from S3
   val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
   
@@ -463,8 +465,7 @@ object DynamoAnalysisUtil {
     finish(startTime)
     ret
   }
-  
-  val DIST_THRESHOLD = 10
+
   
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
