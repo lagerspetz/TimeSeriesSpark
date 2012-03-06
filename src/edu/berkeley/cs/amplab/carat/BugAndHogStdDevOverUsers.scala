@@ -267,7 +267,17 @@ object BugAndHogStdDevOverUsers {
       val filtered = allRates.filter(_.allApps.contains(app)).cache()
       val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
 
-      if (!getDistances(sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true)) {
+      val emptyWith = filtered.take(1) match {
+        case Array(t) => false
+        case _ => true
+      }
+
+      val emptyWithout = filteredNeg.take(1) match {
+        case Array(t) => false
+        case _ => true
+      }
+
+      if (!emptyWith && !emptyWithout && !getDistances(sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true)) {
         // not a hog. is it a bug for anyone?
         for (i <- 0 until uuidArray.length) {
           val uuid = uuidArray(i)

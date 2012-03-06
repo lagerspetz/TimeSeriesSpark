@@ -340,7 +340,17 @@ object ProbUtil extends Logging {
    *
    */
   def logBucketRDDFreqs(sc: SparkContext, withDist: RDD[(Double, Double)], withoutDist: RDD[(Double, Double)], buckets: Int, smallestBucket: Double, decimals: Int) = {
-
+    val emptyWith = withDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+    
+    val emptyWithout = withoutDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+    
+    if (!emptyWith && !emptyWithout){
     /* Find max x*/
     val xmax = withDist.union(withoutDist).map(_._1).reduce((x, y) => {
       if (x > y)
@@ -396,6 +406,8 @@ object ProbUtil extends Logging {
     (xmax, bucketed.map(x => { (x._1, nDecimal(x._2, decimals)) }),
       bucketedNeg.map(x => { (x._1, nDecimal(x._2, decimals)) }),
       ev1, ev2)
+    }else
+      (0.0, null, null, 0.0, 0.0)
   }
 
   def getEv(sc: SparkContext, bucketedDist: RDD[(Int, Double)], xmax: Double, logbase: Double, buckets: Int) = {

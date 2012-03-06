@@ -601,14 +601,12 @@ object DynamoAnalysisUtil {
     } else {
       printf("evWith=%s evWithout=%s evDistance=%s\n", ev, evNeg, evDistance)
     }
-    
-    
 
-    if (DEBUG) {
+    if (DEBUG && bucketed != null && bucketedNeg != null) {
       ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
     }
     finish(startTime)
-    (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance,usersWith,usersWithout)
+    (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout)
   }
   
   /*def correlations(pdf:RDD[(Double, Double)], dist: RDD[(Double, CaratRate)]) = {
