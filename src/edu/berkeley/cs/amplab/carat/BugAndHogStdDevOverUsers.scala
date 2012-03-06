@@ -261,9 +261,9 @@ object BugAndHogStdDevOverUsers {
   def hogsAndBugs(sc: SparkContext, allApps: Set[String],
     aPrioriDistribution: Array[(Double, Double)], allRates: RDD[CaratRate],
     oses: Set[String], models: Set[String], uuidArray: Array[String]) = {
+    println("Distances for all apps and %d users".format(uuidArray.size))
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      println("Distances for all apps and %d users".format(uuidArray.size))
       val filtered = allRates.filter(_.allApps.contains(app)).cache()
       val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
 
