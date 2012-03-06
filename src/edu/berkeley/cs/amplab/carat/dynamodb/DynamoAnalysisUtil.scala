@@ -470,7 +470,7 @@ object DynamoAnalysisUtil {
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
   def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
-      buckets:Int, smallestBucket:Double, decimals:Int, DEBUG:Boolean = false, count:Long = 0, negCount:Long = 0) = {
+      buckets:Int, smallestBucket:Double, decimals:Int, DEBUG:Boolean = false, enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
     val startTime = start
     // probability distribution: r, count/sumCount
 
@@ -481,15 +481,15 @@ object DynamoAnalysisUtil {
     /* FIXME: Should not flatten RDD's, but figure out how to transform an
      * RDD of Rates => RDD of UniformDists => RDD of Double,Double pairs (Bucketed values)  
      */
-    var onec = count
-    if (count == 0)
-      onec = one.count
-    var twoc = negCount
-    if (negCount == 0)
-      twoc = two.count
+    var checkedWith = enoughWith
+    if (!checkedWith)
+      checkedWith = one.take(DIST_THRESHOLD).length == DIST_THRESHOLD
+    var checkedWithout = enoughWithout
+    if (!checkedWithout)
+      checkedWithout = two.take(DIST_THRESHOLD).length == DIST_THRESHOLD
     finish(startTime, "Counting")
 
-    if (onec > DIST_THRESHOLD && twoc > DIST_THRESHOLD) {
+    if (checkedWith && checkedWithout) {
       var fStart = start
       val freqWith = getFrequencies(aPrioriDistribution, one)
       val freqWithout = getFrequencies(aPrioriDistribution, two)
@@ -497,21 +497,19 @@ object DynamoAnalysisUtil {
       var evDistance = 0.0
       
       fStart = start
-      val withCount = freqWith.count
-      val withoutCount = freqWithout.count
+      val withCount = freqWith.take(DIST_THRESHOLD).length == DIST_THRESHOLD
+      val withoutCount = freqWithout.take(DIST_THRESHOLD).length == DIST_THRESHOLD
       finish(startTime, "FreqCount")
-      println("withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(onec, withCount, twoc, withoutCount))
 
-      if (withCount < DIST_THRESHOLD) {
-        println("Less than 10 rates in \"with\": " + freqWith.map(_.toString).collect())
+      if (withCount) {
+        println("Less than %s rates in \"with\": %s".format(DIST_THRESHOLD, freqWith.map(_.toString).collect()))
       }
 
-      if (withoutCount < DIST_THRESHOLD) {
-        println("Less than 10 rates in \"without\": " + freqWithout.map(_.toString).collect())
+      if (withoutCount) {
+        println("Less than %s rates in \"without\": %s".format(DIST_THRESHOLD, freqWithout.map(_.toString).collect()))
       }
 
-      if (withCount >= DIST_THRESHOLD && withoutCount >= DIST_THRESHOLD) {
-
+      if (withCount && withoutCount) {
         fStart = start
         val usersWith = one.map(_.uuid).collect().toSet.size
         val usersWithout = two.map(_.uuid).collect().toSet.size
@@ -544,12 +542,12 @@ object DynamoAnalysisUtil {
         finish(startTime)
         (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout)
       } else{
-        println("Not enough apriori points: threshold: %d withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(DIST_THRESHOLD, onec, withCount, twoc, withoutCount))
+        println("Not enough apriori points: threshold: %d withCount=%s aprioriPoints=%s withoutCount=%s aprioriPoints=%s".format(DIST_THRESHOLD, enoughWith, withCount, enoughWithout, withoutCount))
         finish(startTime)
         (0.0, null, null, 0.0, 0.0, 0.0, 0, 0)
       }
     } else{
-      println("Not enough samples: withCount=%s < %d or withoutCount=%s < %d".format(onec, DIST_THRESHOLD, twoc, DIST_THRESHOLD))
+      println("Not enough samples: withCount=%s < %d or withoutCount=%s < %d".format(enoughWith, DIST_THRESHOLD, enoughWithout, DIST_THRESHOLD))
       finish(startTime)
       (0.0, null, null, 0.0, 0.0, 0.0, 0, 0)
     }

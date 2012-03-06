@@ -574,12 +574,12 @@ object CaratDynamoDataToPlots {
 
         // skip if counts are too low:
         val fCountStart = DynamoAnalysisUtil.start
-        val fCount = filtered.count
-        val nCount = filteredNeg.count
+        val enoughWith = filtered.take(DIST_THRESHOLD).length == DIST_THRESHOLD
+        val enoughWithout = filteredNeg.take(DIST_THRESHOLD).length == DIST_THRESHOLD
         DynamoAnalysisUtil.finish(fCountStart, "fCount")
 
-        if (fCount > DIST_THRESHOLD && nCount > DIST_THRESHOLD) {
-          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, fCount, nCount)) {
+        if (enoughWith && enoughWithout) {
+          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, enoughWith, enoughWithout)) {
             // this is a hog
             appsBottleneck.acquireUninterruptibly()
             allHogs += app
@@ -600,7 +600,7 @@ object CaratDynamoDataToPlots {
             }
           }
         } else {
-          println("Skipped app " + app + " for too few points: %s <= %s || %s <= %s".format(fCount, DIST_THRESHOLD, nCount, DIST_THRESHOLD))
+          println("Skipped app " + app + " for too few points in: with=%s || without=%s thresh=%s".format(enoughWith, enoughWithout, DIST_THRESHOLD))
         }
         appsSem.release()
       })
@@ -733,8 +733,8 @@ object CaratDynamoDataToPlots {
 
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
-    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], count: Long = 0, negCount: Long = 0) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, count, negCount)
+    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, enoughWith, enoughWithout)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       scheduler.execute(
         if (isBugOrHog && filtered != null) {
