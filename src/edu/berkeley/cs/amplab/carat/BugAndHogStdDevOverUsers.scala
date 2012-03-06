@@ -49,15 +49,6 @@ import com.esotericsoftware.kryo.Kryo
 
 object BugAndHogStdDevOverUsers {
 
-  val CONCURRENT_PLOTS = 100
-      
-  lazy val scheduler = {
-    scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS + "")
-    val s = new ResizableThreadPoolScheduler(false)
-    s.start()
-    s
-  }
-
   // Bucketing and decimal constants
   val buckets = 100
   val smallestBucket = 0.0001
@@ -106,7 +97,7 @@ object BugAndHogStdDevOverUsers {
     if (args != null && args.length >= 1) {
       master = args(0)
     }
-    
+
     val start = DynamoAnalysisUtil.start()
     if (args != null && args.length > 1 && args(1) == "DEBUG") {
       DEBUG = true
@@ -206,7 +197,7 @@ object BugAndHogStdDevOverUsers {
     } else
       null
   }
-  
+
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
@@ -225,7 +216,6 @@ object BugAndHogStdDevOverUsers {
     println("oses with data: " + oses.mkString(", "))
     println("models with data: " + models.mkString(", "))
 
-    val sem = new Semaphore(CONCURRENT_PLOTS)
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -257,115 +247,45 @@ object BugAndHogStdDevOverUsers {
     val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
-    
     // do all apps for an increasing number of users:
-    
-    val appsSem = new Semaphore(CONCURRENT_PLOTS)
-    
-    for (users <- 1 until uuidArray.size+1){
-      val uuids = uuidArray.slice(0,users).toSet
-      val uuidRates = rates.filter(x => {uuids.contains(x.uuid)})
-      if (users == uuidArray.length)
-        println("Distances for all apps and all users")
-      else
-        println("Distances for all apps and %d users".format(users))
-      hogsAndBugs(sc,appsSem,sem,allApps,aPrioriDistribution,uuidRates,oses,models,uuidArray)
+    for (users <- 1 until uuidArray.size + 1) {
+      val uuids = uuidArray.slice(0, users)
+      val uuidRates = rates.filter(x => { uuids.contains(x.uuid) })
+      hogsAndBugs(sc, allApps, aPrioriDistribution, uuidRates, oses, models, uuids)
     }
-    
-    appsSem.acquireUninterruptibly(CONCURRENT_PLOTS)
-    appsSem.release(CONCURRENT_PLOTS)
-    
-    // not allowed to return before everything is done
-    sem.acquireUninterruptibly(CONCURRENT_PLOTS)
-    sem.release(CONCURRENT_PLOTS)
+
     // return plot directory for caller
     dateString + "/" + PLOTS
   }
 
-  def hogsAndBugs(sc: SparkContext, appsSem: Semaphore, sem: Semaphore, allApps: Set[String],
+  def hogsAndBugs(sc: SparkContext, allApps: Set[String],
     aPrioriDistribution: Array[(Double, Double)], allRates: RDD[CaratRate],
     oses: Set[String], models: Set[String], uuidArray: Array[String]) = {
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      scheduler.execute({
-        appsSem.acquireUninterruptibly()
-        val filtered = allRates.filter(_.allApps.contains(app)).cache()
-        val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
+      println("Distances for all apps and %d users".format(uuidArray.size))
+      val filtered = allRates.filter(_.allApps.contains(app)).cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
 
-        if (!plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true)) {
-          // not a hog. is it a bug for anyone?
-          for (i <- 0 until uuidArray.length) {
-            val uuid = uuidArray(i)
-            /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-            val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
-            val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-            plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true)
-          }
+      if (!getDistances(sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true)) {
+        // not a hog. is it a bug for anyone?
+        for (i <- 0 until uuidArray.length) {
+          val uuid = uuidArray(i)
+          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+          val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+          val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+          getDistances(sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true)
         }
-        appsSem.release()
-      })
+      }
     }
 
-
-  def correlation(name: String, rates: RDD[CaratRate], aPriori: Array[(Double, Double)], models: Set[String], oses: Set[String]) = {
-    var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
-    var osCorrelations = new scala.collection.immutable.HashMap[String, Double]
-
-    val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).collectAsMap)
-    if (rateEvs != null) {
-      for (model <- models) {
-        /* correlation with this model */
-        val rateModels = rates.map(x => {
-          if (x.model == model)
-            (x, 1.0)
-          else
-            (x, 0.0)
-        }).collectAsMap()
-        val norm = ProbUtil.normalize(rateModels)
-        if (norm != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * norm.getOrElse(x._1, 0.0)
-          }).sum
-          modelCorrelations += ((model, corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format(model, rateModels.map(x => { (x._1.model, x._2) })))
+    def getDistances(sc: SparkContext, title: String, titleNeg: String,
+      one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean) = {
+      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributionsNoCount(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+      if (bucketed != null && bucketedNeg != null) {
+        printf("%s vs %s (%s vs %s users) evWith=%s evWithout=%s evDistance=%s\n", title, titleNeg, usersWith, usersWithout, ev, evNeg, evDistance)
       }
-
-      for (os <- oses) {
-        /* correlation with this OS */
-        val rateOses = rates.map(x => {
-          if (x.os == os)
-            (x, 1.0)
-          else
-            (x, 0.0)
-        }).collectAsMap()
-        val norm = ProbUtil.normalize(rateOses)
-        if (norm != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * norm.getOrElse(x._1, 0.0)
-          }).sum
-          osCorrelations += ((os, corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format(os, rateOses.map(x => { (x._1.os, x._2) })))
-      }
-
-      for (k <- modelCorrelations)
-        println("%s and %s correlated with %s".format(name, k._1, k._2))
-      for (k <- osCorrelations)
-        println("%s and %s correlated with %s".format(name, k._1, k._2))
-    } else
-      println("ERROR: Rates had a zero stddev, something is wrong!")
-
-    (osCorrelations, modelCorrelations)
-  }
-
-  def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
-    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance,usersWith,usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributionsNoCount(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
-    if (bucketed != null && bucketedNeg != null) {
-      printf("%s vs %s (%s vs %s users) evWith=%s evWithout=%s evDistance=%s\n", title, titleNeg, usersWith, usersWithout, ev, evNeg, evDistance)
-    }
-    isBugOrHog && evDistance > 0
+      isBugOrHog && evDistance > 0
     }
   }
 }
