@@ -21,6 +21,16 @@ object ProbUtil extends Logging {
     }).toSeq
     m.sum
   }
+  
+  /**
+   * Get the expected value of a probability distribution.
+   * The EV is x*y / sum(y), where sum(y) is 1 for a probability distribution.
+   */
+  def getEv(values: RDD[(Double, Double)]) = {
+    values.map(x => {
+      x._1 * x._2
+    }).reduce(_ + _)
+  }
 
   /**
    * Get the expected value of a probability distribution.

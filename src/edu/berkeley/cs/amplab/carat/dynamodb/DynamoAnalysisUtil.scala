@@ -554,6 +554,36 @@ object DynamoAnalysisUtil {
     }
   }
 
+  /**
+   * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
+   */
+  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], enoughWith: Boolean = false) = {
+    val startTime = start
+
+    var checkedWith = enoughWith
+    if (!checkedWith)
+      checkedWith = one.take(DIST_THRESHOLD).length == DIST_THRESHOLD
+    finish(startTime, "Counting")
+
+    if (checkedWith) {
+      var fStart = start
+      val probWith = getProbDist(aPrioriDistribution, one)
+      finish(fStart, "GetFreq")
+      val ev = ProbUtil.getEv(probWith)
+
+      fStart = start
+      val usersWith = one.map(_.uuid).collect().toSet.size
+      finish(fStart, "userCount")
+
+      finish(startTime)
+      (probWith, ev, usersWith)
+    } else {
+      println("Not enough samples: withCount < %d".format(DIST_THRESHOLD))
+      finish(startTime)
+      (null, 0.0, 0)
+    }
+  }
+
   def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
     buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
     val startTime = start
@@ -645,6 +675,12 @@ object DynamoAnalysisUtil {
     })
     finish(startTime)
     ret
+  }
+  
+  def getProbDist(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+    val freq = getFrequencies(aPrioriDistribution, samples)
+    val sum = freq.map(_._2).reduce(_ + _)
+    freq.map(x => {(x._1, x._2/sum)})
   }
   
   def mapToRateEv(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {

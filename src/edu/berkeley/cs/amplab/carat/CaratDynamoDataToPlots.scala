@@ -751,15 +751,15 @@ object CaratDynamoDataToPlots {
     filtered: RDD[CaratRate], oses: Set[String], models: Set[String], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, enoughWith, enoughWithout)
     // the ev is over all the points in the distribution
-    val freqOne = DynamoAnalysisUtil.getFrequencies(aPrioriDistribution, one)
+    val (probOne, ev2, usersWith2) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution, enoughWith)
     // convert to prob dist
-    val sum = freqOne.map(_._2).reduce(_ + _)
-    val evOne = freqOne.map(x => {(x._1 * x._2/sum)})
+    val evOne = probOne.map(x => {(x._1 * x._2)})
     val mean = ProbUtil.mean(evOne)
     val variance = ProbUtil.stddev(evOne, mean)
     val sampleCount = one.count()
     
-    println("%s mean=%s variance=%s, samplecount=%s".format(title,mean,variance,sampleCount))
+    println("%s ev=%s mean=%s variance=%s, samplecount=%s".format(title,ev,mean,variance,sampleCount))
+    println("%s ev2=%s mean=%s variance=%s, samplecount=%s".format(title,ev2,mean,variance,sampleCount))
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       scheduler.execute(
         if (isBugOrHog && filtered != null) {
