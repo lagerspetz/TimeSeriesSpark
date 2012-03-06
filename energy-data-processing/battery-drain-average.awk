@@ -3,7 +3,7 @@
 # measurement number, timestamp, milliamperes, volts
 
 BEGIN{
-  FS=","
+#  FS=","
   # With 5kHz, this gives 2 samples per second.
   if ( span < 1){
       span=2500
@@ -29,9 +29,9 @@ function floor(x)
 
 # Data lines:
 {
-    sumA+=$3
-    sumV+=$4
-    sec+=$2
+    sumA+=$2
+#    sumV+=$4
+    sec+=$1
     count+=1
 }
 
@@ -62,3 +62,4 @@ END{
     print hrs":"mins":"secs,(battery-prev-sumA/count/3600)/battery*100,sumV/count
   }
 }
+
