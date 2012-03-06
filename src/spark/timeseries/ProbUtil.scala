@@ -107,11 +107,17 @@ object ProbUtil extends Logging {
    * Standard deviation for a random variable stored in an RDD.
    */
   def stddev(items: RDD[Double], mean:Double) = {
+    math.sqrt(variance(items, mean))
+  }
+  
+  /**
+   * Variance for a random variable stored in an RDD.
+   */
+  def variance(items: RDD[Double], mean:Double) = {
     // get diffs from mean squared
     var powDiffs = items.map(x => {math.pow(x - mean, 2)})
     // sum them up
-    val sum = powDiffs.reduce(_ + _)
-    math.sqrt ( sum )
+    powDiffs.reduce(_ + _)
   }
   
    /**

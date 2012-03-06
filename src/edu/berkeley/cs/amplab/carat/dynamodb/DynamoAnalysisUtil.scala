@@ -500,7 +500,7 @@ object DynamoAnalysisUtil {
       fStart = start
       val withCount = freqWith.take(DIST_THRESHOLD).length == DIST_THRESHOLD
       val withoutCount = freqWithout.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-      finish(startTime, "FreqCount")
+      finish(fStart, "FreqCount")
 
       if (withCount) {
         println("Less than %s rates in \"with\": %s".format(DIST_THRESHOLD, freqWith.map(_.toString).collect()))

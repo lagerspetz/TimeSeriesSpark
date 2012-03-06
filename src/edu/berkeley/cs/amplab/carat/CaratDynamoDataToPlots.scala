@@ -538,7 +538,7 @@ object CaratDynamoDataToPlots {
         val fromOs = allRates.filter(_.os == os)
         val notFromOs = allRates.filter(_.os != os)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null)
+        val ret = plotDistsStdDevAndSampleCount(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null)
       })
     }
 
@@ -548,7 +548,7 @@ object CaratDynamoDataToPlots {
         val fromModel = allRates.filter(_.model == model)
         val notFromModel = allRates.filter(_.model != model)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null)
+        val ret = plotDistsStdDevAndSampleCount(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null)
       })
     }
 
@@ -735,6 +735,31 @@ object CaratDynamoDataToPlots {
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
     filtered: RDD[CaratRate], oses: Set[String], models: Set[String], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, enoughWith, enoughWithout)
+    if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
+      scheduler.execute(
+        if (isBugOrHog && filtered != null) {
+          val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
+          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout)
+        } else
+          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout))
+    }
+    isBugOrHog && evDistance > 0
+  }
+  
+  def plotDistsStdDevAndSampleCount(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
+    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
+    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, enoughWith, enoughWithout)
+    // the ev is over all the points in the distribution
+    val freqOne = DynamoAnalysisUtil.getFrequencies(aPrioriDistribution, one)
+    // convert to prob dist
+    val sum = freqOne.map(_._2).reduce(_ + _)
+    val evOne = freqOne.map(x => {(x._1 * x._2/sum)})
+    val mean = ProbUtil.mean(evOne)
+    val variance = ProbUtil.stddev(evOne, mean)
+    val sampleCount = one.count()
+    
+    println("%s mean=%s variance=%s, samplecount=%s".format(title,mean,variance,sampleCount))
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       scheduler.execute(
         if (isBugOrHog && filtered != null) {
