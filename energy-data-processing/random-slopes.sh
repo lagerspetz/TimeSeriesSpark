@@ -25,7 +25,7 @@ for k in $( seq 1 $n )
 do
   br=$( echo "scale=10;$RANDOM / 32767 * ${RANGE2}" | bc )
   dr=$( echo "scale=10;$RANDOM / 32767 * ( ${RANGE2} - $br )" | bc )
-  begin=$( date -d "9:43" +%s )
+  begin=$( date -d "0:00" +%s )
   begin=$( echo "$begin + $br" | bc )
   end=$( echo "$begin + $dr" | bc )
   begin=$( date -d "@$begin" "+%H:%M" )
@@ -36,9 +36,10 @@ do
     slopef=$( basename "$file" "-temp.csv" )-slopes.csv
     
     slope=$( "${dir}"/specific-data-slope.awk -v start=$begin -v end=$end $file )
-    dydx=$( echo "scale=2;$slope * $period / $dr" | bc )
-    #echo "$slope $dydx $file"
-    echo "$dydx" >> $slopef
+    if  [ "$slope" != "same" ]
+    then
+      echo "$slope" >> $slopef
+    fi
   done
 done
 
