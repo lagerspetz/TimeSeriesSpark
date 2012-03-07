@@ -51,11 +51,11 @@ object CaratDynamoDataToPlots {
 
   // How many concurrent plotting operations are allowed to run at once.
   val CONCURRENT_PLOTS = 100
-  // How many Rates must there be in a dist for it to be plotted?
-  val DIST_THRESHOLD = 10
+  // How many clients do we need to consider data reliable?
+  val ENOUGH_USERS = 5
 
   lazy val scheduler = {
-    scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS + "")
+    scala.util.Properties.setProp("actors.corePoolSize", 32 + "")
     val s = new ResizableThreadPoolScheduler(false)
     s.start()
     s
@@ -383,107 +383,7 @@ object CaratDynamoDataToPlots {
    * The stddevs would then be added to by a future iteration of this function, etc., until we have a time series of stddevs for all the distributions
    * that are calculated from the data. Those would then be plotted as their own distributions.
    */
-  def analyzeRateDataStdDevsOverTime(sc: SparkContext, allRates: RDD[CaratRate],
-    uuids: scala.collection.mutable.Set[String], oses: scala.collection.mutable.Set[String], models: scala.collection.mutable.Set[String], plotDirectory: String) = {
-    val sem = new Semaphore(CONCURRENT_PLOTS)
-    /**
-     * uuid distributions, xmax, ev and evNeg
-     * FIXME: With many users, this is a lot of data to keep in memory.
-     * Consider changing the algorithm and using RDDs.
-     */
-    var distsWithUuid = new TreeMap[String, RDD[(Int, Double)]]
-    var distsWithoutUuid = new TreeMap[String, RDD[(Int, Double)]]
-    /* xmax, ev, evNeg */
-    var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
-    /* evDistances*/
-    var evDistanceByUuid = new TreeMap[String, Double]
-
-    var appsByUuid = new TreeMap[String, Set[String]]
-
-    val aPrioriDistribution = DynamoAnalysisUtil.getApriori(allRates)
-    if (aPrioriDistribution.size == 0)
-      println("WARN: a priori dist is empty!")
-    else
-      println("a priori dist:\n" + aPrioriDistribution.mkString("\n"))
-
-    val apps = allRates.map(x => {
-      var sampleApps = x.allApps
-      sampleApps --= DynamoAnalysisUtil.DAEMONS_LIST
-      sampleApps
-    }).collect()
-
-    var allApps = new HashSet[String]
-    for (k <- apps)
-      allApps ++= k
-
-    // mediaremoted does not get removed here, why?
-    println("AllApps (no daemons): " + allApps)
-
-    for (os <- oses) {
-      val fromOs = allRates.filter(_.os == os)
-      val notFromOs = allRates.filter(_.os != os)
-      // no distance check, not bug or hog
-      plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null)
-    }
-
-    for (model <- models) {
-      val fromModel = allRates.filter(_.model == model)
-      val notFromModel = allRates.filter(_.model != model)
-      // no distance check, not bug or hog
-      plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null)
-    }
-
-    val uuidArray = uuids.toArray.sortWith((s, t) => {
-      s < t
-    })
-
-    var allHogs = new HashSet[String]
-    /* Hogs: Consider all apps except daemons. */
-    for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app)) //.cache()
-      val filteredNeg = allRates.filter(!_.allApps.contains(app)) //.cache()
-      if (plotDists(sem, sc, "Hog " + app, "Other apps", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, null, null, null)) {
-        // this is a hog
-        allHogs += app
-      } else {
-        // not a hog. Is it a bug for anyone?
-
-        for (i <- 0 until uuidArray.length) {
-          val uuid = uuidArray(i)
-          val fromUuid = allRates.filter(_.uuid == uuid)
-
-          var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
-          uuidApps --= DynamoAnalysisUtil.DAEMONS_LIST
-          val nonHogApps = uuidApps -- allHogs
-
-          if (uuidApps.size > 0)
-            similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
-          //else
-          // Remove similar apps entry?
-
-          val notFromUuid = allRates.filter(_.uuid != uuid)
-          // no distance check, not bug or hog
-          val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
-          if (bucketed != null && bucketedNeg != null) {
-            distsWithUuid += ((uuid, bucketed))
-            distsWithoutUuid += ((uuid, bucketedNeg))
-            parametersByUuid += ((uuid, (xmax, ev, evNeg)))
-            evDistanceByUuid += ((uuid, evDistance))
-          }
-          appsByUuid += ((uuid, uuidApps))
-
-          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-          val appFromUuid = filtered.filter(_.uuid == uuid)
-          val appNotFromUuid = filtered.filter(_.uuid != uuid)
-          plotDists(sem, sc, "Bug " + app + " on " + uuid, app + " elsewhere", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory, null, null, null)
-        }
-      }
-    }
-
-    plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
-    // return plot directory for caller
-    dateString + "/" + PLOTS
-  }
+  def analyzeRateDataStdDevsOverTime(){}
 
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
@@ -574,12 +474,13 @@ object CaratDynamoDataToPlots {
 
         // skip if counts are too low:
         val fCountStart = DynamoAnalysisUtil.start
-        val enoughWith = filtered.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-        val enoughWithout = filteredNeg.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-        DynamoAnalysisUtil.finish(fCountStart, "fCount")
+        val usersWith = filtered.map(_.uuid).collect().toSet.size
 
-        if (enoughWith && enoughWithout) {
-          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, enoughWith, enoughWithout)) {
+        if (usersWith >= ENOUGH_USERS) {
+          val usersWithout = filteredNeg.map(_.uuid).collect().toSet.size
+          DynamoAnalysisUtil.finish(fCountStart, "clientCount")
+          if (usersWithout >= ENOUGH_USERS){
+          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models)) {
             // this is a hog
             appsBottleneck.acquireUninterruptibly()
             allHogs += app
@@ -599,8 +500,11 @@ object CaratDynamoDataToPlots {
               }
             }
           }
+          }else{
+            println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
+          }
         } else {
-          println("Skipped app " + app + " for too few points in: with=%s || without=%s thresh=%s".format(enoughWith, enoughWithout, DIST_THRESHOLD))
+          println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
         }
         appsSem.release()
       })
@@ -733,8 +637,8 @@ object CaratDynamoDataToPlots {
 
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
-    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, enoughWith, enoughWithout)
+    filtered: RDD[CaratRate], oses: Set[String], models: Set[String]) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       scheduler.execute(
         if (isBugOrHog && filtered != null) {

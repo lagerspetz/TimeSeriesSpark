@@ -469,63 +469,38 @@ object DynamoAnalysisUtil {
     ret
   }
 
-  
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
   def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
-      buckets:Int, smallestBucket:Double, decimals:Int, DEBUG:Boolean = false, enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
+    buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
     val startTime = start
 
-    /* Figure out max x value (maximum rate) and bucket y values of 
-     * both distributions into n buckets, averaging inside a bucket
-     */
-    var checkedWith = enoughWith
-    if (!checkedWith)
-      checkedWith = one.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-    var checkedWithout = enoughWithout
-    if (!checkedWithout)
-      checkedWithout = two.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-    finish(startTime, "Counting")
+    val (probWith, ev, usersWith) = getEvAndDistribution(one, aPrioriDistribution)
+    val (probWithout, evNeg, usersWithout) = getEvAndDistribution(two, aPrioriDistribution)
+    finish(startTime, "GetDists")
+    var evDistance = 0.0
 
-    if (checkedWith && checkedWithout) {
-      var fStart = start
-      val (probWith, ev, usersWith) = getEvAndDistribution(one, aPrioriDistribution, enoughWith)
-      val (probWithout, evNeg, usersWithout) = getEvAndDistribution(two, aPrioriDistribution, enoughWithout)
-      finish(fStart, "GetFreq")
-      var evDistance = 0.0
+    var fStart = start
+    // Log bucketing:
+    val (xmax, bucketed, bucketedNeg) = ProbUtil.logBucketDists(sc, probWith, probWithout, buckets, smallestBucket, decimals)
+    finish(fStart, "LogBucketing")
 
-      fStart = start
-      val withCount = probWith.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-      val withoutCount = probWithout.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-      finish(fStart, "FreqCount")
-
-      fStart = start
-      // Log bucketing:
-      val (xmax, bucketed, bucketedNeg) = ProbUtil.logBucketDists(sc, probWith, probWithout, buckets, smallestBucket, decimals)
-      finish(fStart, "LogBucketing")
-
-      evDistance = evDiff(ev, evNeg)
-      if (evDistance > 0) {
-        var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
-        val imprD = (imprHr / 24.0).toInt
-        imprHr -= imprD * 24.0
-        printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
-
-      } else {
-        printf("evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", ev, evNeg, evDistance, usersWith, usersWithout)
-      }
-
-      if (DEBUG) {
-        ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
-      }
-      finish(startTime)
-      (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout)
+    evDistance = evDiff(ev, evNeg)
+    if (evDistance > 0) {
+      var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
+      val imprD = (imprHr / 24.0).toInt
+      imprHr -= imprD * 24.0
+      printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
     } else {
-      println("Not enough samples: withCount=%s < %d or withoutCount=%s < %d".format(enoughWith, DIST_THRESHOLD, enoughWithout, DIST_THRESHOLD))
-      finish(startTime)
-      (0.0, null, null, 0.0, 0.0, 0.0, 0, 0)
+      printf("evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", ev, evNeg, evDistance, usersWith, usersWithout)
     }
+
+    if (DEBUG) {
+      ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
+    }
+    finish(startTime)
+    (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout)
   }
 
   /**

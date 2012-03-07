@@ -222,9 +222,9 @@ object HogBugExcludingDatesForUuid {
     for (k <- excludedTimeRanges)
       buggyArr += allRates.filter(x => {
         var bad = false
-        // Remove all of uuid2's samples (test device)
-        if (x.uuid == givenUuid2)
-          bad = true
+        // Add all of uuid2's samples (test device)
+        //if (x.uuid == givenUuid2)
+        //  bad = true
         if (x.uuid == givenUuid1 && ((k._1 < x.time1 && x.time1 < k._2) ||
           (k._1 < x.time2 && x.time2 < k._2)))
           bad = true
@@ -242,12 +242,9 @@ object HogBugExcludingDatesForUuid {
 
     // skip if counts are too low:
     val fCountStart = DynamoAnalysisUtil.start
-    val enoughWith = filtered.take(DIST_THRESHOLD).length == DIST_THRESHOLD
-    val enoughWithout = filteredNeg.take(DIST_THRESHOLD).length == DIST_THRESHOLD
     DynamoAnalysisUtil.finish(fCountStart, "fCount")
 
-    if (enoughWith && enoughWithout) {
-      if (plotDists(sc, "Hog " + appName + " running", appName + " not running", filtered, filteredNeg, aPrioriDistribution, plotDirectory, true, enoughWith, enoughWithout)) {
+      if (plotDists(sc, "Hog " + appName + " running", appName + " not running", filtered, filteredNeg, aPrioriDistribution, plotDirectory, true)) {
         // this is a hog
         if (anyway){
           {
@@ -307,9 +304,6 @@ object HogBugExcludingDatesForUuid {
           }
         }
       }
-    } else {
-      println("Skipped app " + appName + " for too few points in: with=%s || without=%s thresh=%s".format(enoughWith, enoughWithout, DIST_THRESHOLD))
-    }
   }
 
   /* Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -319,8 +313,8 @@ object HogBugExcludingDatesForUuid {
    */
 
   def plotDists(sc: SparkContext, title: String, titleNeg: String,
-    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], plotDirectory:String, isBugOrHog: Boolean, enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG, enoughWith, enoughWithout)
+    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], plotDirectory:String, isBugOrHog: Boolean) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout, plotDirectory)
     }
