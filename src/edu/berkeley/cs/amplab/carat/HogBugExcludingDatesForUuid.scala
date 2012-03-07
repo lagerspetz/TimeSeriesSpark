@@ -202,6 +202,11 @@ object HogBugExcludingDatesForUuid {
           bad = true
       !bad
     })
+    
+    // did exclusion work? one uuid should be removed
+    val excount = excluded.map(_.uuid).collect().toSet.size
+    if (excount >= uuidArray.size)
+      throw new Error("Excluded 1 uuid but excount=%s and there are %s uuids!".format(excount, uuidArray.size))
 
     val buggyArr = new ArrayBuffer[RDD[CaratRate]]
     for (k <- excludedTimeRanges)
@@ -210,7 +215,7 @@ object HogBugExcludingDatesForUuid {
         // Remove all of uuid2's samples (test device)
         if (x.uuid == givenUuid2)
           bad = true
-        if ((x.uuid == givenUuid1) && ((k._1 < x.time1 && x.time1 < k._2) ||
+        if (x.uuid == givenUuid1 && ((k._1 < x.time1 && x.time1 < k._2) ||
           (k._1 < x.time2 && x.time2 < k._2)))
           bad = true
         bad
