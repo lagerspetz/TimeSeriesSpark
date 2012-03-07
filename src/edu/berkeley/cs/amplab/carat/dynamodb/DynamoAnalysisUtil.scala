@@ -545,9 +545,10 @@ object DynamoAnalysisUtil {
 */
       finish(startTime)
       (probWith, ev/*, usersWith*/)
-      }
+      }else{
       finish(startTime)
       (null, 0.0)
+      }
   }
 
   def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
