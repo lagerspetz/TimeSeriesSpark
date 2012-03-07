@@ -25,10 +25,9 @@ object DynamoAnalysisUtil {
   val STATE_CHARGING = "charging"
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
-  val ABNORMAL_RATE = 9
+  val ABNORMAL_RATE = 0.04
   
   val DIST_THRESHOLD = 10
-  val A_PRIORI_IS_BROKEN_THRESHOLD = 0.04
   
   // Daemons list, read from S3
   val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
@@ -433,10 +432,7 @@ object DynamoAnalysisUtil {
 
   def considerRate(r: CaratRate) = {
     if (r.isRateRange()) {
-      if (r.rateRange.getEv() > ABNORMAL_RATE) {
-        false
-      } else
-        true
+      true
     } else {
       if (r.rate() > ABNORMAL_RATE) {
         printf("Abandoning abnormally high rate " + r.toString(false))
@@ -455,9 +451,9 @@ object DynamoAnalysisUtil {
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
     val ap = allRates.filter(x =>{
-      !x.isRateRange() && x.rate < A_PRIORI_IS_BROKEN_THRESHOLD
+      !x.isRateRange()
     })
-    assert(ap.count > 0, "AllRates should contain some rates that are not rateRanges and less than %s when calculating aPriori.".format(A_PRIORI_IS_BROKEN_THRESHOLD))
+    assert(ap.count > 0, "AllRates should contain some rates that are not rateRanges and less than %s when calculating aPriori.".format(ABNORMAL_RATE))
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {
       ((x.rate, 1.0))
@@ -496,6 +492,28 @@ object DynamoAnalysisUtil {
     (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance/*, usersWith, usersWithout*/)
     } else
       (0.0, null, null, 0.0, 0.0, 0.0/*, usersWith, usersWithout*/)
+  }
+
+  def getDistanceAndDistributionsUnBucketed(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
+    buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
+    val startTime = start
+
+    val (probWith, ev /*, usersWith*/ ) = getEvAndDistribution(one, aPrioriDistribution)
+    val (probWithout, evNeg /*, usersWithout*/ ) = getEvAndDistribution(two, aPrioriDistribution)
+    finish(startTime, "GetDists")
+    var evDistance = 0.0
+
+    if (probWith != null && probWithout != null) {
+      var fStart = start
+      // Log bucketing:
+      val xmax = ProbUtil.getxmax(probWith, probWithout)
+      finish(fStart, "LogBucketing")
+
+      evDistance = evDiff(ev, evNeg)
+      finish(startTime)
+      (xmax, probWith, probWithout, ev, evNeg, evDistance)
+    } else
+      (0.0, null, null, 0.0, 0.0, 0.0)
   }
 
   /**

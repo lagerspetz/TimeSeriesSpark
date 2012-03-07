@@ -292,10 +292,10 @@ object ModelAndOsNumbers {
     println("%s ev=%s mean=%s variance=%s (%s d %s h %s min), clients=%s samples=%s".format(title, ev, mean, variance, imprD, imprHr, imprMin, usersWith, sampleCount))
         
     var imprMinU = (100.0 / (ev) - 100.0 / (ev + varianceU)) / 60.0
-    var imprHrU = (imprMin / 60.0).toInt
-    imprMin -= imprHr * 60.0
-    var imprDU = (imprHr / 24.0).toInt
-    imprHr -= imprD * 24
+    var imprHrU = (imprMinU / 60.0).toInt
+    imprMinU -= imprHrU * 60.0
+    var imprDU = (imprHrU / 24.0).toInt
+    imprHrU -= imprDU * 24
     
     println("%s ev=%s meanU=%s varianceU=%s (%s d %s h %s min), clients=%s samples=%s".format(title, ev, meanU, varianceU, imprDU, imprHrU, imprMinU, usersWith, sampleCount))
   }
