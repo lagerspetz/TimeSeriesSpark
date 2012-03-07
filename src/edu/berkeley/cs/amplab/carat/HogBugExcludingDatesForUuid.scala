@@ -45,19 +45,6 @@ object HogBugExcludingDatesForUuid {
   val DIST_THRESHOLD = 10
 
   val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
-  val RATES_CACHED_NEW = tmpdir + "cached-rates-new.dat"
-  val RATES_CACHED = tmpdir + "cached-rates.dat"
-  val LAST_SAMPLE = tmpdir + "last-sample.txt"
-  val LAST_REG = tmpdir + "last-reg.txt"
-
-  val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
-
-  var last_sample_write = 0.0
-
-  val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
-
-  var last_reg_write = 0.0
-  
   
   val dfs = "yyyy-MM-dd"
   val df = new SimpleDateFormat(dfs)
@@ -135,16 +122,7 @@ object HogBugExcludingDatesForUuid {
 
   def analyzeData(sc: SparkContext) = {
     // Master RDD for all data.
-
-    val oldRates: spark.RDD[CaratRate] = {
-      val f = new File(RATES_CACHED)
-      if (f.exists()) {
-        sc.objectFile(RATES_CACHED)
-      } else
-        null
-    }
-
-    var allRates: spark.RDD[CaratRate] = oldRates
+    var allRates: spark.RDD[CaratRate] = null
 
     // closure to forget uuids, models and oses after assigning them to rates
     {
@@ -153,41 +131,16 @@ object HogBugExcludingDatesForUuid {
       val allModels = new scala.collection.mutable.HashSet[String]
       val allOses = new scala.collection.mutable.HashSet[String]
 
-      if (oldRates != null) {
-        val devices = oldRates.map(x => {
-          (x.uuid, (x.os, x.model))
-        }).collect()
-        for (k <- devices) {
-          uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
-          allOses += k._2._1
-          allModels += k._2._2
-        }
-      }
-
-      if (last_reg > 0) {
-        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
-          DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-          CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-      } else {
-        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
-          DynamoDbDecoder.getAllItems(registrationTable, _),
-          CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-      }
+      DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+        DynamoDbDecoder.getAllItems(registrationTable, _),
+        CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      if (last_sample > 0) {
-        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
-          DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-          CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
-          true,
-          allRates)
-      } else {
-        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
-          DynamoDbDecoder.getAllItems(samplesTable, _),
-          CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
-          true,
-          allRates)
-      }
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+        DynamoDbDecoder.getAllItems(samplesTable, _),
+        CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
+        true,
+        allRates)
 
       // we may not be interesed in these actually.
       println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
@@ -196,9 +149,6 @@ object HogBugExcludingDatesForUuid {
     }
 
     if (allRates != null) {
-      allRates.saveAsObjectFile(RATES_CACHED_NEW)
-      DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
-      DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
       allRates
     } else
       null
