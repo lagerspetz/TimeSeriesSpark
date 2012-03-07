@@ -174,8 +174,17 @@ object CaratDynamoDataToPlots {
 
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
     val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataToPlots")
-    analyzeData(sc, plotDirectory)
-    DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
+    // getRates
+    val allRates = getRates(sc)
+    if (allRates != null) {
+      // analyze data
+      analyzeRateData(sc, allRates, plotDirectory)
+      // save rates for next time
+      allRates.saveAsObjectFile(RATES_CACHED_NEW)
+      DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
+      DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
+      DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
+    }
     DynamoAnalysisUtil.finish(start)
   }
   /*
@@ -190,7 +199,7 @@ object CaratDynamoDataToPlots {
    * Main function. Called from main() after sc initialization.
    */
 
-  def analyzeData(sc: SparkContext, plotDirectory: String) = {
+  def getRates(sc: SparkContext) = {
     // Master RDD for all data.
 
     val oldRates: spark.RDD[CaratRate] = {
@@ -252,13 +261,7 @@ object CaratDynamoDataToPlots {
       println("All models: " + allModels.mkString(", "))
     }
 
-    if (allRates != null) {
-      allRates.saveAsObjectFile(RATES_CACHED_NEW)
-      DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
-      DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
-      analyzeRateData(sc, allRates, plotDirectory)
-    } else
-      null
+    allRates
   }
 
   /**
