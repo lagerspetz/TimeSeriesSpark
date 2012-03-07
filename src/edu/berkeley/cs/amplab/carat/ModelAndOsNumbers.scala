@@ -217,7 +217,7 @@ object ModelAndOsNumbers {
 
       val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
       // no distance check, not bug or hog
-      val (dist, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(fromUuid, aPrioriDistribution)
+      val (dist, ev) = DynamoAnalysisUtil.getEvAndDistribution(fromUuid, aPrioriDistribution)
       evByUuid += ((uuid, ev))
     }
 
@@ -267,8 +267,9 @@ object ModelAndOsNumbers {
   def plotDistsStdDevAndSampleCount(sem: Semaphore, sc: SparkContext, title: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean,
     allEvs: scala.collection.immutable.TreeMap[String,Double], uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
+    val usersWith = one.map(_.uuid).collect().toSet.size
     // the ev is over all the points in the distribution
-    val (probOne, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution)
+    val (probOne, ev) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution)
     // convert to prob dist
     val evOne = probOne.map(x => { (x._1 * x._2) })
     val mean = ProbUtil.mean(evOne)

@@ -316,7 +316,7 @@ object FutureCaratDynamoDataAnalysis {
       val notFromUuid = allRates.filter(_.uuid != uuid)
       // no distance check, not bug or hog
       println("Considering jscore uuid=" + uuid)
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, BUCKETS, SMALLEST_BUCKET, DECIMALS, DEBUG)
+      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, BUCKETS, SMALLEST_BUCKET, DECIMALS, DEBUG)
       if (bucketed != null && bucketedNeg != null) {
         distsWithUuid += ((uuid, bucketed))
         distsWithoutUuid += ((uuid, bucketedNeg))
@@ -361,7 +361,7 @@ object FutureCaratDynamoDataAnalysis {
    */
   def writeTripletUngrouped(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit,
     deleteFunction: => Unit, isBugOrHog: Boolean) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, BUCKETS, SMALLEST_BUCKET, DECIMALS, DEBUG)
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, BUCKETS, SMALLEST_BUCKET, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null) {
       if (evDistance > 0 || !isBugOrHog) {
         putFunction(xmax, bucketed.collect(), bucketedNeg.collect(), evDistance, ev, evNeg)

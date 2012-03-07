@@ -310,9 +310,9 @@ object HogBugExcludingDatesForUuid {
 
   def plotDists(sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], plotDirectory:String, isBugOrHog: Boolean) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
-      plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout, plotDirectory)
+      plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
     }
     isBugOrHog && evDistance > 0
   }
@@ -321,16 +321,15 @@ object HogBugExcludingDatesForUuid {
   def plot(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
     distWithout: RDD[(Int, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
-    usersWith: Int, usersWithout: Int, plotDirectory:String,
+    plotDirectory:String,
     apps: Seq[String] = null) {
     plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance,
-      plotDirectory,usersWith, usersWithout, apps)
+      plotDirectory, apps)
   }
 
   def plotSerial(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
     distWithout: RDD[(Int, Double)],
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory:String,
-    usersWith: Int, usersWithout: Int,
     apps: Seq[String] = null) {
     var fixedTitle = title
     if (title.startsWith("Hog "))
