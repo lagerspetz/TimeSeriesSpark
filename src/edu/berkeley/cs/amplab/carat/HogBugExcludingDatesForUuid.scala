@@ -199,12 +199,8 @@ object HogBugExcludingDatesForUuid {
     val excluded = allRates.filter(x => {
       var bad = false
       // Remove all of uuid2's samples (test device)
-      if (x.uuid == givenUuid2)
+      if (x.uuid == givenUuid2 || x.uuid == givenUuid1)
         bad = true
-      for (k <- excludedTimeRanges)
-        if (x.uuid == givenUuid1 && ((k._1 < x.time1 && x.time1 < k._2) ||
-          (k._1 < x.time2 && x.time2 < k._2)))
-          bad = true
       !bad
     })
     
