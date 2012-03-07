@@ -63,6 +63,8 @@ object HogBugExcludingDatesForUuid {
   val HOGS = "hogs"
   val SIM = "similarApps"
   val UUIDS = "uuIds"
+    
+    var anyway = false
 
   /**
    * Main program entry point.
@@ -91,6 +93,9 @@ object HogBugExcludingDatesForUuid {
         excludedTimeRanges += ((time1, time2))
         n += 2
       }
+      
+      if (args.length > n-1)
+        anyway=true
 
       val start = DynamoAnalysisUtil.start()
       
@@ -238,6 +243,26 @@ object HogBugExcludingDatesForUuid {
     if (enoughWith && enoughWithout) {
       if (plotDists(sc, "Hog " + appName + " running", appName + " not running", filtered, filteredNeg, aPrioriDistribution, plotDirectory, true, enoughWith, enoughWithout)) {
         // this is a hog
+        if (anyway){
+          {
+          val appNotFromUuid = filtered.filter(_.uuid != givenUuid1).cache()
+          // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
+          for (k <- 0 until buggyArr.length) {
+            val appFromUuid = buggyArr(k)
+            val timePeriod = excludedTimeRanges(k)
+            plotDists(sc, "Bug " + appName + " running on client " + i1 + "(%s to %s)".format(timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
+          }
+        }
+        {
+          val appNotFromUuid = filtered.filter(_.uuid != givenUuid2).cache()
+          // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
+          for (k <- 0 until buggyArr.length) {
+            val appFromUuid = buggyArr(k)
+            val timePeriod = excludedTimeRanges(k)
+            plotDists(sc, "Bug " + appName + " running on client " + i2 + "(%s to %s)".format(timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
+          }
+        }
+        }
       } else {
         {
           val appNotFromUuid = filtered.filter(_.uuid != givenUuid1).cache()
