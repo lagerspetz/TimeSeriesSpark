@@ -55,7 +55,7 @@ object CaratDynamoDataToPlots {
   val ENOUGH_USERS = 5
 
   lazy val scheduler = {
-    scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+ "")
+    scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS + "")
     val s = new ResizableThreadPoolScheduler(false)
     s.start()
     s
@@ -383,7 +383,7 @@ object CaratDynamoDataToPlots {
    * The stddevs would then be added to by a future iteration of this function, etc., until we have a time series of stddevs for all the distributions
    * that are calculated from the data. Those would then be plotted as their own distributions.
    */
-  def analyzeRateDataStdDevsOverTime(){}
+  def analyzeRateDataStdDevsOverTime() {}
 
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
@@ -438,7 +438,7 @@ object CaratDynamoDataToPlots {
         val fromOs = allRates.filter(_.os == os)
         val notFromOs = allRates.filter(_.os != os)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null,0,0)
+        val ret = plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0)
       })
     }
 
@@ -448,7 +448,7 @@ object CaratDynamoDataToPlots {
         val fromModel = allRates.filter(_.model == model)
         val notFromModel = allRates.filter(_.model != model)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null,0,0)
+        val ret = plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0)
       })
     }
 
@@ -459,16 +459,13 @@ object CaratDynamoDataToPlots {
       s < t
     })
 
+    
+    scheduler.execute({
     var allHogs = new HashSet[String]
     var allBugs = new HashSet[String]
-    val appsBottleneck = new Semaphore(1)
 
-    val appsSem = new Semaphore(CONCURRENT_PLOTS)
-
-    /* Hogs: Consider all apps except daemons. */
-    for (app <- allApps) {
-      scheduler.execute({
-        appsSem.acquireUninterruptibly()
+      /* Hogs: Consider all apps except daemons. */
+      for (app <- allApps) {
         val filtered = allRates.filter(_.allApps.contains(app)).cache()
         val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
 
@@ -479,37 +476,37 @@ object CaratDynamoDataToPlots {
         if (usersWith >= ENOUGH_USERS) {
           val usersWithout = filteredNeg.map(_.uuid).collect().toSet.size
           DynamoAnalysisUtil.finish(fCountStart, "clientCount")
-          if (usersWithout >= ENOUGH_USERS){
-          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models,usersWith,usersWithout)) {
+          if (usersWithout >= ENOUGH_USERS) {
+            if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, usersWith, usersWithout)) {
               // this is a hog
-            
-            appsBottleneck.acquireUninterruptibly()
-            allHogs += app
-            appsBottleneck.release()
-          } else {
-            // not a hog. is it a bug for anyone?
-            for (i <- 0 until uuidArray.length) {
-              val uuid = uuidArray(i)
-              /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-              val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
-              val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-              if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-                filtered, oses, models,1,uuidArray.length-1)) {
-                appsBottleneck.acquireUninterruptibly()
-                allBugs += app
-                appsBottleneck.release()
+
+              allHogs += app
+            } else {
+              // not a hog. is it a bug for anyone?
+              for (i <- 0 until uuidArray.length) {
+                val uuid = uuidArray(i)
+                /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+                val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+                val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+                if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
+                  filtered, oses, models, 1, uuidArray.length - 1)) {
+                  allBugs += app
+                }
               }
             }
-          }
-          }else{
-            println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
+          } else {
+            println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
           }
         } else {
           println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
         }
-        appsSem.release()
-      })
-    }
+      }
+
+      val globalNonHogs = allApps -- allHogs
+      println("Non-daemon non-hogs: " + globalNonHogs)
+      println("All hogs: " + allHogs)
+      println("All bugs: " + allBugs)
+    })
 
     /* uuid stuff */
     val uuidSem = new Semaphore(CONCURRENT_PLOTS)
@@ -543,13 +540,6 @@ object CaratDynamoDataToPlots {
         uuidSem.release()
       })
     }
-
-    appsSem.acquireUninterruptibly(CONCURRENT_PLOTS)
-    appsSem.release(CONCURRENT_PLOTS)
-    val globalNonHogs = allApps -- allHogs
-    println("Non-daemon non-hogs: " + globalNonHogs)
-    println("All hogs: " + allHogs)
-    println("All bugs: " + allBugs)
 
     // need to collect uuid stuff here:
     uuidSem.acquireUninterruptibly(CONCURRENT_PLOTS)
@@ -638,8 +628,8 @@ object CaratDynamoDataToPlots {
 
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
-    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], usersWith:Int, usersWithout:Int) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance/*, usersWith, usersWithout*/) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], usersWith: Int, usersWithout: Int) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ ) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       if (evDistance > 0) {
         var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
@@ -647,7 +637,7 @@ object CaratDynamoDataToPlots {
         imprHr -= imprD * 24.0
         printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
       } else {
-        printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout )
+        printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout)
       }
       scheduler.execute(
         if (isBugOrHog && filtered != null) {
