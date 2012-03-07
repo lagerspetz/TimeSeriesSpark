@@ -35,7 +35,7 @@ object DynamoAnalysisUtil {
   
   def start() = System.currentTimeMillis()
   
-  def finish(start: Long, message:String = null) {
+  def finish(startTime: Long, message:String = null) {
     var fmt = ""
     if (message != null)
       fmt = "-%s".format(message)
@@ -51,7 +51,7 @@ object DynamoAnalysisUtil {
       } else
         "edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil.finish"+fmt
     }
-    println("Time %s: %d".format(f, (System.currentTimeMillis() - start)))
+    println("Time %s: %d".format(f, (System.currentTimeMillis() - startTime)))
   }
   
   def readDoubleFromFile(file: String) = {
