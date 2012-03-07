@@ -207,6 +207,11 @@ object HogBugExcludingDatesForUuid {
     val excount = excluded.map(_.uuid).collect().toSet.size
     if (excount >= uuidArray.size)
       throw new Error("Excluded 1 uuid but excount=%s and there are %s uuids!".format(excount, uuidArray.size))
+    else{
+      val exSampleCount = excluded.count()
+      val sampleCount = allRates.count()
+      println("Excluded %d users and %d samples.".format(uuidArray.size-excount, sampleCount-exSampleCount))
+    }
 
     val buggyArr = new ArrayBuffer[RDD[CaratRate]]
     for (k <- excludedTimeRanges)
