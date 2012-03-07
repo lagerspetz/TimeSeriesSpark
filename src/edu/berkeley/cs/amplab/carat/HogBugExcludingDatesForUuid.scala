@@ -224,7 +224,7 @@ object HogBugExcludingDatesForUuid {
         if (x.uuid == givenUuid1 && ((k._1 < x.time1 && x.time1 < k._2) ||
           (k._1 < x.time2 && x.time2 < k._2)))
           bad = true
-        bad
+        bad && x.allApps.contains(appName)
       })
       
     // sanity check buggy samples
