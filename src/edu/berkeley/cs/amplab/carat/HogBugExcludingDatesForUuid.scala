@@ -313,7 +313,8 @@ object HogBugExcludingDatesForUuid {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
-    }
+    }else
+      printf("Not plotting %s vs %s, ev=%s evNeg=%s distance=%s\n", title, titleNeg, ev, evNeg, evDistance)
     isBugOrHog && evDistance > 0
   }
 
