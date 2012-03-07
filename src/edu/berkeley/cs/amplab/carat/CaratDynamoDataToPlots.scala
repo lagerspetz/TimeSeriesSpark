@@ -463,7 +463,7 @@ object CaratDynamoDataToPlots {
     })
 
     
-    scheduler.execute({
+    //scheduler.execute({
     var allHogs = new HashSet[String]
     var allBugs = new HashSet[String]
 
@@ -509,7 +509,7 @@ object CaratDynamoDataToPlots {
       println("Non-daemon non-hogs: " + globalNonHogs)
       println("All hogs: " + allHogs)
       println("All bugs: " + allBugs)
-    })
+    //})
 
     /* uuid stuff */
     val uuidSem = new Semaphore(CONCURRENT_PLOTS)
