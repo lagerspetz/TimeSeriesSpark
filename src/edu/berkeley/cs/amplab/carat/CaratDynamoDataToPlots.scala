@@ -489,7 +489,7 @@ object CaratDynamoDataToPlots {
                 val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
                 val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
                 if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-                  filtered, oses, models, 1, uuidArray.length - 1)) {
+                  filtered, oses, models, 0, 0)) {
                   allBugs += app
                 }
               }
