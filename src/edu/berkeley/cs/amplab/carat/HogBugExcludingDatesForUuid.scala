@@ -337,8 +337,8 @@ object HogBugExcludingDatesForUuid {
     else if (title.startsWith("Bug "))
       fixedTitle = title.substring(4)
     // bump up accuracy here so that not everything gets blurred
-    val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, DECIMALS + 1) + ")"
-    val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, DECIMALS + 1) + ")"
+    val evTitle = fixedTitle + " (EV=" + ev + ")"
+    val evTitleNeg = titleNeg + " (EV=" + evNeg + ")"
     printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
     writeData(dateString, evTitle, distWith, xmax)
