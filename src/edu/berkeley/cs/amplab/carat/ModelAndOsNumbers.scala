@@ -47,7 +47,19 @@ import com.esotericsoftware.kryo.Kryo
  * @author Eemil Lagerspetz
  */
 
-object BugAndHogStdDevOverUsers {
+object ModelAndOsNumbers {
+
+  // How many concurrent plotting operations are allowed to run at once.
+  val CONCURRENT_PLOTS = 100
+  // How many Rates must there be in a dist for it to be plotted?
+  val DIST_THRESHOLD = 10
+
+  lazy val scheduler = {
+    scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS + "")
+    val s = new ResizableThreadPoolScheduler(false)
+    s.start()
+    s
+  }
 
   // Bucketing and decimal constants
   val buckets = 100
@@ -58,18 +70,6 @@ object BugAndHogStdDevOverUsers {
   val ABNORMAL_RATE = 9
 
   val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
-  val RATES_CACHED_NEW = tmpdir + "cached-rates-new.dat"
-  val RATES_CACHED = tmpdir + "cached-rates.dat"
-  val LAST_SAMPLE = tmpdir + "last-sample.txt"
-  val LAST_REG = tmpdir + "last-reg.txt"
-
-  val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
-
-  var last_sample_write = 0.0
-
-  val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
-
-  var last_reg_write = 0.0
 
   val dfs = "yyyy-MM-dd"
   val df = new SimpleDateFormat(dfs)
@@ -97,9 +97,13 @@ object BugAndHogStdDevOverUsers {
     if (args != null && args.length >= 1) {
       master = args(0)
     }
+    plotEverything(master, args != null && args.length > 1 && args(1) == "DEBUG", null)
+    //sys.exit(0)
+  }
 
+  def plotEverything(master: String, debug: Boolean, plotDirectory: String) = {
     val start = DynamoAnalysisUtil.start()
-    if (args != null && args.length > 1 && args(1) == "DEBUG") {
+    if (debug) {
       DEBUG = true
     } else {
       // turn off INFO logging for spark:
@@ -118,10 +122,16 @@ object BugAndHogStdDevOverUsers {
 
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
     val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataToPlots")
-    analyzeData(sc, null)
-    DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
+    analyzeData(sc, plotDirectory)
     DynamoAnalysisUtil.finish(start)
   }
+  /*
+  class CaratRateRegistrator extends KryoRegistrator{
+    def registerClasses(kryo: Kryo){
+      kryo.register(classOf[Array[edu.berkeley.cs.amplab.carat.CaratRate]])
+      kryo.register(classOf[edu.berkeley.cs.amplab.carat.CaratRate])
+    }
+  }*/
 
   /**
    * Main function. Called from main() after sc initialization.
@@ -129,16 +139,7 @@ object BugAndHogStdDevOverUsers {
 
   def analyzeData(sc: SparkContext, plotDirectory: String) = {
     // Master RDD for all data.
-
-    val oldRates: spark.RDD[CaratRate] = {
-      val f = new File(RATES_CACHED)
-      if (f.exists()) {
-        sc.objectFile(RATES_CACHED)
-      } else
-        null
-    }
-
-    var allRates: spark.RDD[CaratRate] = oldRates
+    var allRates: spark.RDD[CaratRate] = null
 
     // closure to forget uuids, models and oses after assigning them to rates
     {
@@ -147,41 +148,16 @@ object BugAndHogStdDevOverUsers {
       val allModels = new scala.collection.mutable.HashSet[String]
       val allOses = new scala.collection.mutable.HashSet[String]
 
-      if (oldRates != null) {
-        val devices = oldRates.map(x => {
-          (x.uuid, (x.os, x.model))
-        }).collect()
-        for (k <- devices) {
-          uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
-          allOses += k._2._1
-          allModels += k._2._2
-        }
-      }
-
-      if (last_reg > 0) {
-        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
-          DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-          CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-      } else {
         DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
           DynamoDbDecoder.getAllItems(registrationTable, _),
           CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-      }
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      if (last_sample > 0) {
-        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
-          DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-          CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
-          true,
-          allRates)
-      } else {
         allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
           DynamoDbDecoder.getAllItems(samplesTable, _),
           CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
           true,
           allRates)
-      }
 
       // we may not be interesed in these actually.
       println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
@@ -190,9 +166,6 @@ object BugAndHogStdDevOverUsers {
     }
 
     if (allRates != null) {
-      allRates.saveAsObjectFile(RATES_CACHED_NEW)
-      DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
-      DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
       analyzeRateData(sc, allRates, plotDirectory)
     } else
       null
@@ -203,42 +176,25 @@ object BugAndHogStdDevOverUsers {
    */
   def analyzeRateData(sc: SparkContext, inputRates: RDD[CaratRate], plotDirectory: String) = {
     // cache first
-    val rates = inputRates.cache()
+    val allRates = inputRates.cache()
 
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
-    uuidToOsAndModel ++= rates.map(x => { (x.uuid, (x.os, x.model)) }).collect()
+    uuidToOsAndModel ++= allRates.map(x => { (x.uuid, (x.os, x.model)) }).collect()
 
-    val oses = uuidToOsAndModel.map(_._2._1).toSet
-    val models = uuidToOsAndModel.map(_._2._2).toSet
-
-    println("uuIds with data: " + uuidToOsAndModel.keySet.mkString(", "))
-    println("oses with data: " + oses.mkString(", "))
-    println("models with data: " + models.mkString(", "))
-
-    /**
-     * uuid distributions, xmax, ev and evNeg
-     * FIXME: With many users, this is a lot of data to keep in memory.
-     * Consider changing the algorithm and using RDDs.
-     */
-    var distsWithUuid = new TreeMap[String, RDD[(Int, Double)]]
-    var distsWithoutUuid = new TreeMap[String, RDD[(Int, Double)]]
-    /* xmax, ev, evNeg */
     var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
-    /* evDistances*/
-    var evDistanceByUuid = new TreeMap[String, Double]
 
-    var appsByUuid = new TreeMap[String, Set[String]]
+    val sem = new Semaphore(CONCURRENT_PLOTS)
 
     println("Calculating aPriori.")
-    val aPrioriDistribution = DynamoAnalysisUtil.getApriori(rates)
+    val aPrioriDistribution = DynamoAnalysisUtil.getApriori(allRates)
     println("Calculated aPriori.")
     if (aPrioriDistribution.size == 0)
       println("WARN: a priori dist is empty!")
     else
       println("a priori dist:\n" + aPrioriDistribution.mkString("\n"))
 
-    var allApps = rates.flatMap(_.allApps).collect().toSet
+    var allApps = allRates.flatMap(_.allApps).collect().toSet
     println("AllApps (with daemons): " + allApps)
     val DAEMONS_LIST_GLOBBED = DynamoAnalysisUtil.daemons_globbed(allApps)
     allApps --= DAEMONS_LIST_GLOBBED
@@ -247,48 +203,103 @@ object BugAndHogStdDevOverUsers {
     val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
-    // do all apps for an increasing number of users:
-    for (users <- 1 until uuidArray.size + 1) {
-      val uuids = uuidArray.slice(0, users)
-      val uuidRates = rates.filter(x => { uuids.contains(x.uuid) })
-      hogsAndBugs(sc, allApps, aPrioriDistribution, uuidRates, oses, models, uuids)
+
+    /* uuid stuff */
+    val uuidSem = new Semaphore(CONCURRENT_PLOTS)
+    val bottleNeck = new Semaphore(1)
+
+    for (i <- 0 until uuidArray.length) {
+      // these are independent until JScores.
+      scheduler.execute({
+        uuidSem.acquireUninterruptibly()
+        val uuid = uuidArray(i)
+        val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
+
+        var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+        uuidApps --= DAEMONS_LIST_GLOBBED
+
+        val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
+        // no distance check, not bug or hog
+        val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+        bottleNeck.acquireUninterruptibly()
+        if (bucketed != null && bucketedNeg != null) {
+          parametersByUuid += ((uuid, (xmax, ev, evNeg)))
+        }
+        bottleNeck.release()
+        uuidSem.release()
+      })
     }
 
+    // need to collect uuid stuff here:
+    uuidSem.acquireUninterruptibly(CONCURRENT_PLOTS)
+    uuidSem.release(CONCURRENT_PLOTS)
+    plotJScores(sc, sem, allRates, aPrioriDistribution, parametersByUuid, uuidToOsAndModel)
+
+    // not allowed to return before everything is done
+    sem.acquireUninterruptibly(CONCURRENT_PLOTS)
+    sem.release(CONCURRENT_PLOTS)
     // return plot directory for caller
     dateString + "/" + PLOTS
   }
 
-  def hogsAndBugs(sc: SparkContext, allApps: Set[String],
-    aPrioriDistribution: Array[(Double, Double)], allRates: RDD[CaratRate],
-    oses: Set[String], models: Set[String], uuidArray: Array[String]) = {
-    println("Distances for all apps and %d users".format(uuidArray.size))
-    /* Hogs: Consider all apps except daemons. */
-    for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app)).cache()
+  /**
+   * The J-Score is the % of people with worse = higher energy use.
+   * therefore, it is the size of the set of evDistances that are higher than mine,
+   * compared to the size of the user base.
+   * Note that the server side multiplies the JScore by 100, and we store it here
+   * as a fraction.
+   */
+  def plotJScores(sc: SparkContext, sem: Semaphore, allRates: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
+    parametersByUuid: TreeMap[String, (Double, Double, Double)],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)]) {
 
-      val enoughWith = filtered.take(DynamoAnalysisUtil.DIST_THRESHOLD).length == DynamoAnalysisUtil.DIST_THRESHOLD
-      
-      getDistance("Hog " + app + " running", filtered, aPrioriDistribution, enoughWith)
-      /**
-       * FIXME: We still need the WITHOUT dist to get evDistance and whether this was a bug.
-       */
-      if (enoughWith) {
-        // not a hog. is it a bug for anyone?
-        for (i <- 0 until uuidArray.length) {
-          val uuid = uuidArray(i)
-          /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-          val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
-          getDistance("Bug " + app + " running on client " + i, appFromUuid, aPrioriDistribution, enoughWith)
-        }
-      }
+    val oses = uuidToOsAndModel.map(_._2._1).toSet
+    val models = uuidToOsAndModel.map(_._2._2).toSet
+
+    val allEvs = parametersByUuid.map(x => { (x._1, x._2._2) })
+    for (os <- oses) {
+      // can be done in parallel, independent of anything else
+      val fromOs = allRates.filter(_.os == os)
+      val notFromOs = allRates.filter(_.os != os)
+      // no distance check, not bug or hog
+      plotDistsStdDevAndSampleCount(sem, sc, os, fromOs, notFromOs, aPrioriDistribution, false, allEvs, uuidToOsAndModel)
     }
 
-    def getDistance(title: String,
-      one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], enoughWith:Boolean) = {
-      val (probDist, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution, enoughWith)
-      if (probDist != null) {
-        printf("%s (%s users) evWith=%s\n", title, usersWith, ev)
-      }
+    for (model <- models) {
+      // can be done in parallel, independent of anything else
+      val fromModel = allRates.filter(_.model == model)
+      val notFromModel = allRates.filter(_.model != model)
+      // no distance check, not bug or hog
+      plotDistsStdDevAndSampleCount(sem, sc, model, fromModel, notFromModel, aPrioriDistribution, false, allEvs, uuidToOsAndModel)
     }
+  }
+
+  def plotDistsStdDevAndSampleCount(sem: Semaphore, sc: SparkContext, title: String,
+    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean,
+    allEvs: scala.collection.immutable.TreeMap[String,Double], uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
+    // the ev is over all the points in the distribution
+    val (probOne, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution, enoughWith)
+    // convert to prob dist
+    val evOne = probOne.map(x => { (x._1 * x._2) })
+    val mean = ProbUtil.mean(evOne)
+    val variance = ProbUtil.variance(evOne, mean)
+    val sampleCount = one.count()
+    
+    val userEvs = allEvs.filter(x => {
+      val p = uuidToOsAndModel.get(x._1).getOrElse("", "")
+      p._1 == title || p._2 == title
+    }).map(_._2).toSeq
+    val meanU = ProbUtil.mean(userEvs)
+    val varianceU = ProbUtil.variance(userEvs, meanU)
+    
+    var imprMin = (100.0 / (ev) - 100.0 / (ev + variance)) / 60.0
+    var imprHr = (imprMin / 60.0).toInt
+    imprMin -= imprHr * 60.0
+    var imprD = (imprHr / 24.0).toInt
+    imprHr -= imprD * 24
+
+    
+    println("%s ev=%s mean=%s variance=%s (%s d %s h %s min), samplecount=%s".format(title, ev, mean, variance, imprD, imprHr, imprMin, sampleCount))
+    println("%s ev=%s meanU=%s varianceU=%s (%s d %s h %s min), samplecount=%s".format(title, ev, meanU, varianceU, imprD, imprHr, imprMin, sampleCount))
   }
 }

@@ -755,7 +755,7 @@ object CaratDynamoDataToPlots {
     // convert to prob dist
     val evOne = probOne.map(x => { (x._1 * x._2) })
     val mean = ProbUtil.mean(evOne)
-    val variance = ProbUtil.stddev(evOne, mean)
+    val variance = ProbUtil.variance(evOne, mean)
     val sampleCount = one.count()
 
     var imprMin = (100.0 / (ev) - 100.0 / (ev + variance)) / 60.0

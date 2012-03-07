@@ -130,6 +130,16 @@ object ProbUtil extends Logging {
     powDiffs.reduce(_ + _)
   }
   
+  /**
+   * Variance for a random variable stored in an RDD.
+   */
+  def variance(items: Seq[Double], mean:Double) = {
+    // get diffs from mean squared
+    var powDiffs = items.map(x => {math.pow(x - mean, 2)})
+    // sum them up
+    powDiffs.reduce(_ + _)
+  }
+  
    /**
    * Standard deviation for a random variable stored in an Array.
    */
