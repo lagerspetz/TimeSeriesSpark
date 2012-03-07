@@ -150,7 +150,6 @@ object CaratDynamoDataToPlots {
 
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
-    val plotDirectory = "/mnt/www/plots"
     val allSamples = new scala.collection.mutable.HashMap[String, Long]
     DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
       DynamoDbDecoder.getAllItems(samplesTable, _),
@@ -162,18 +161,18 @@ object CaratDynamoDataToPlots {
 
     val modelSampleCounts = new scala.collection.mutable.HashMap[String, Long]
     val osSampleCounts = new scala.collection.mutable.HashMap[String, Long]
-    
+
     DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
       DynamoDbDecoder.getAllItems(registrationTable, _),
       handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
 
-      for (k <- allSamples){
-        val (os, model) = uuidToOsAndModel.get(k._1).getOrElse("", "")
-        val c = osSampleCounts.getOrElse(os, 0L) + k._2
-        osSampleCounts += ((os, c))
-        val m = modelSampleCounts.getOrElse(model, 0L) + k._2
-        modelSampleCounts += ((model, m))
-      }
+    for (k <- allSamples) {
+      val (os, model) = uuidToOsAndModel.get(k._1).getOrElse("", "")
+      val c = osSampleCounts.getOrElse(os, 0L) + k._2
+      osSampleCounts += ((os, c))
+      val m = modelSampleCounts.getOrElse(model, 0L) + k._2
+      modelSampleCounts += ((model, m))
+    }
     for (k <- osSampleCounts)
       println(k._1 + " " + k._2)
     for (k <- modelSampleCounts)
@@ -187,15 +186,15 @@ object CaratDynamoDataToPlots {
       val uuid = x.get(sampleKey).getS()
       (uuid, 1)
     })
-    
+
     for (k <- mapped) {
       var oldVal = allSamples.get(k._1).getOrElse(0L)
       oldVal += k._2
       allSamples.put(k._1, oldVal)
     }
   }
-  
-    def addToSet(key: Key, samples: java.util.List[java.util.Map[String, AttributeValue]],
+
+  def addToSet(key: Key, samples: java.util.List[java.util.Map[String, AttributeValue]],
     allSamples: scala.collection.mutable.HashMap[String, TreeSet[Double]]) {
     val mapped = samples.map(x => {
       /* See properties in package.scala for data keys. */
@@ -469,8 +468,8 @@ object CaratDynamoDataToPlots {
      * FIXME: With many users, this is a lot of data to keep in memory.
      * Consider changing the algorithm and using RDDs.
      */
-    var distsWithUuid = new TreeMap[String, RDD[(Int, Double)]]
-    var distsWithoutUuid = new TreeMap[String, RDD[(Int, Double)]]
+    var distsWithUuid = new TreeMap[String, RDD[(Double, Double)]]
+    var distsWithoutUuid = new TreeMap[String, RDD[(Double, Double)]]
     /* xmax, ev, evNeg */
     var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
     /* evDistances*/
@@ -519,53 +518,52 @@ object CaratDynamoDataToPlots {
       s < t
     })
 
-    
     //scheduler.execute({
     var allHogs = new HashSet[String]
     var allBugs = new HashSet[String]
 
-      /* Hogs: Consider all apps except daemons. */
-      for (app <- allApps) {
-        val filtered = allRates.filter(_.allApps.contains(app)).cache()
-        val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
+    /* Hogs: Consider all apps except daemons. */
+    for (app <- allApps) {
+      val filtered = allRates.filter(_.allApps.contains(app)).cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
 
-        // skip if counts are too low:
-        val fCountStart = DynamoAnalysisUtil.start
-        val usersWith = filtered.map(_.uuid).collect().toSet.size
+      // skip if counts are too low:
+      val fCountStart = DynamoAnalysisUtil.start
+      val usersWith = filtered.map(_.uuid).collect().toSet.size
 
-        if (usersWith >= ENOUGH_USERS) {
-          val usersWithout = filteredNeg.map(_.uuid).collect().toSet.size
-          DynamoAnalysisUtil.finish(fCountStart, "clientCount")
-          if (usersWithout >= ENOUGH_USERS) {
-            if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, usersWith, usersWithout, null)) {
-              // this is a hog
+      if (usersWith >= ENOUGH_USERS) {
+        val usersWithout = filteredNeg.map(_.uuid).collect().toSet.size
+        DynamoAnalysisUtil.finish(fCountStart, "clientCount")
+        if (usersWithout >= ENOUGH_USERS) {
+          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, usersWith, usersWithout, null)) {
+            // this is a hog
 
-              allHogs += app
-            } else {
-              // not a hog. is it a bug for anyone?
-              for (i <- 0 until uuidArray.length) {
-                val uuid = uuidArray(i)
-                /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-                val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
-                val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-                if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-                  filtered, oses, models, 0, 0, uuid)) {
-                  allBugs += app
-                }
+            allHogs += app
+          } else {
+            // not a hog. is it a bug for anyone?
+            for (i <- 0 until uuidArray.length) {
+              val uuid = uuidArray(i)
+              /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+              val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+              val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+              if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
+                filtered, oses, models, 0, 0, uuid)) {
+                allBugs += app
               }
             }
-          } else {
-            println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
           }
         } else {
-          println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
+          println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
         }
+      } else {
+        println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
       }
+    }
 
-      val globalNonHogs = allApps -- allHogs
-      println("Non-daemon non-hogs: " + globalNonHogs)
-      println("All hogs: " + allHogs)
-      println("All bugs: " + allBugs)
+    val globalNonHogs = allApps -- allHogs
+    println("Non-daemon non-hogs: " + globalNonHogs)
+    println("All hogs: " + allHogs)
+    println("All bugs: " + allBugs)
     //})
 
     /* uuid stuff */
@@ -587,11 +585,11 @@ object CaratDynamoDataToPlots {
         /* cache these because they will be used numberOfApps times */
         val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
         // no distance check, not bug or hog
-        val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+        val (xmax, probDist, probDistNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(sc, fromUuid, notFromUuid, aPrioriDistribution)
         bottleNeck.acquireUninterruptibly()
-        if (bucketed != null && bucketedNeg != null) {
-          distsWithUuid += ((uuid, bucketed))
-          distsWithoutUuid += ((uuid, bucketedNeg))
+        if (probDist != null && probDistNeg != null) {
+          distsWithUuid += ((uuid, probDist))
+          distsWithoutUuid += ((uuid, probDistNeg))
           parametersByUuid += ((uuid, (xmax, ev, evNeg)))
           evDistanceByUuid += ((uuid, evDistance))
         }
@@ -688,9 +686,9 @@ object CaratDynamoDataToPlots {
 
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
-    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], usersWith: Int, usersWithout: Int, uuid:String) = {
-    var hasSamples = true 
-    if (usersWith == 0 && usersWithout == 0){
+    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], usersWith: Int, usersWithout: Int, uuid: String) = {
+    var hasSamples = true
+    if (usersWith == 0 && usersWithout == 0) {
       hasSamples = one.take(1) match {
         case Array(t) => true
         case _ => false
@@ -701,8 +699,8 @@ object CaratDynamoDataToPlots {
       }
     }
     if (hasSamples) {
-      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ ) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
-      if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
+      val (xmax, probDist, probDistNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ ) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(sc, one, two, aPrioriDistribution)
+      if (probDist != null && probDistNeg != null && (!isBugOrHog || evDistance > 0)) {
         if (evDistance > 0) {
           var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
           val imprD = (imprHr / 24.0).toInt
@@ -714,20 +712,20 @@ object CaratDynamoDataToPlots {
         scheduler.execute(
           if (isBugOrHog && filtered != null) {
             val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
-            plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout,uuid)
+            plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
           } else
-            plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout, uuid))
+            plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout, uuid))
       }
       isBugOrHog && evDistance > 0
-    }else
+    } else
       false
   }
 
-  def plot(sem: Semaphore, title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
-    distWithout: RDD[(Int, Double)],
+  def plot(sem: Semaphore, title: String, titleNeg: String, xmax: Double, distWith: RDD[(Double, Double)],
+    distWithout: RDD[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid:String,
+    usersWith: Int, usersWithout: Int, uuid: String,
     apps: Seq[String] = null) {
     sem.acquireUninterruptibly()
     plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations,
@@ -742,8 +740,8 @@ object CaratDynamoDataToPlots {
    * Note that the server side multiplies the JScore by 100, and we store it here
    * as a fraction.
    */
-  def plotJScores(sem: Semaphore, distsWithUuid: TreeMap[String, RDD[(Int, Double)]],
-    distsWithoutUuid: TreeMap[String, RDD[(Int, Double)]],
+  def plotJScores(sem: Semaphore, distsWithUuid: TreeMap[String, RDD[(Double, Double)]],
+    distsWithoutUuid: TreeMap[String, RDD[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
     appsByUuid: TreeMap[String, Set[String]], plotDirectory: String) {
@@ -775,11 +773,11 @@ object CaratDynamoDataToPlots {
     }
   }
 
-  def plotSerial(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
-    distWithout: RDD[(Int, Double)],
+  def plotSerial(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Double, Double)],
+    distWithout: RDD[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid:String = null,
+    usersWith: Int, usersWithout: Int, uuid: String = null,
     apps: Seq[String] = null) {
 
     var fixedTitle = title
@@ -792,8 +790,8 @@ object CaratDynamoDataToPlots {
     val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, DECIMALS + 1) + ")"
     printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
-    writeData(dateString, evTitle, distWith, xmax)
-    writeData(dateString, evTitleNeg, distWithout, xmax)
+    writeData(dateString, evTitle, distWith)
+    writeData(dateString, evTitleNeg, distWithout)
     if (osCorrelations != null)
       writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
     plotData(dateString, title)
@@ -819,7 +817,7 @@ object CaratDynamoDataToPlots {
           plotfile.write("set term postscript eps enhanced color 'Helvetica' 32\nset xtics out\n" +
             "set size 1.93,1.1\n" +
             "set logscale x\n" +
-            "set xrange [0.0005:" + (xmax + 0.5) + "]\n" +
+            "set xrange [0.0005:" + (xmax + 0.05) + "]\n" +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)
@@ -862,6 +860,21 @@ object CaratDynamoDataToPlots {
 
   def writeData(dir: String, name: String, dist: RDD[(Int, Double)], xmax: Double) {
     val logbase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
+    val dataPairs = dist.map(x => {
+      val bucketStart = {
+        if (x._1 == 0)
+          0.0
+        else
+          xmax / (math.pow(logbase, buckets - x._1))
+      }
+      val bucketEnd = xmax / (math.pow(logbase, buckets - x._1 - 1))
+
+      ((bucketStart + bucketEnd) / 2, x._2)
+    })
+    writeData(dir, name, dataPairs)
+  }
+
+  def writeData(dir: String, name: String, dist: RDD[(Double, Double)]) {
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(ddir)
     if (!f.isDirectory() && !f.mkdirs())
@@ -869,21 +882,11 @@ object CaratDynamoDataToPlots {
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
 
-      val dataPairs = dist.map(x => {
-        val bucketStart = {
-          if (x._1 == 0)
-            0.0
-          else
-            xmax / (math.pow(logbase, buckets - x._1))
-        }
-        val bucketEnd = xmax / (math.pow(logbase, buckets - x._1 - 1))
+      val dataPairs = dist.collect().sortWith((x, y) => {
+        x._1 < y._1
+      })
 
-        ((bucketStart + bucketEnd) / 2, x._2)
-      }).collect()
-      var dataMap = new TreeMap[Double, Double]
-      dataMap ++= dataPairs
-
-      for (k <- dataMap)
+      for (k <- dataPairs)
         datafile.write(k._1 + " " + k._2 + "\n")
       datafile.close
     }
@@ -892,7 +895,7 @@ object CaratDynamoDataToPlots {
   def writeCorrelationFile(plotDirectory: String, name: String,
     osCorrelations: Map[String, Double],
     modelCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid:String = null) {
+    usersWith: Int, usersWithout: Int, uuid: String = null) {
     val path = plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + "-correlation.txt"
 
     var datafile: java.io.FileWriter = null

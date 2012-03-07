@@ -494,10 +494,8 @@ object DynamoAnalysisUtil {
       (0.0, null, null, 0.0, 0.0, 0.0/*, usersWith, usersWithout*/)
   }
 
-  def getDistanceAndDistributionsUnBucketed(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
-    buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
+  def getDistanceAndDistributionsUnBucketed(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
     val startTime = start
-
     val (probWith, ev /*, usersWith*/ ) = getEvAndDistribution(one, aPrioriDistribution)
     val (probWithout, evNeg /*, usersWithout*/ ) = getEvAndDistribution(two, aPrioriDistribution)
     finish(startTime, "GetDists")
@@ -505,15 +503,16 @@ object DynamoAnalysisUtil {
 
     if (probWith != null && probWithout != null) {
       var fStart = start
-      // Log bucketing:
       val xmax = ProbUtil.getxmax(probWith, probWithout)
-      finish(fStart, "LogBucketing")
+      finish(fStart, "getxmax")
 
       evDistance = evDiff(ev, evNeg)
       finish(startTime)
       (xmax, probWith, probWithout, ev, evNeg, evDistance)
-    } else
+    } else {
+      finish(startTime)
       (0.0, null, null, 0.0, 0.0, 0.0)
+    }
   }
 
   /**

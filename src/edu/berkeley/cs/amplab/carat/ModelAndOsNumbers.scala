@@ -252,7 +252,7 @@ object ModelAndOsNumbers {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      plotDistsStdDevAndSampleCount(sem, sc, os, fromOs, notFromOs, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
+      printVarianceAndSampleCount(sem, sc, os, fromOs, notFromOs, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
     }
 
     for (model <- models) {
@@ -260,12 +260,12 @@ object ModelAndOsNumbers {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      plotDistsStdDevAndSampleCount(sem, sc, model, fromModel, notFromModel, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
+      printVarianceAndSampleCount(sem, sc, model, fromModel, notFromModel, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
     }
   }
 
-  def plotDistsStdDevAndSampleCount(sem: Semaphore, sc: SparkContext, title: String,
-    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean,
+  def printVarianceAndSampleCount(sem: Semaphore, sc: SparkContext, title: String, 
+    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, 
     allEvs: scala.collection.immutable.TreeMap[String,Double], uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
     val usersWith = one.map(_.uuid).collect().toSet.size
     // the ev is over all the points in the distribution
