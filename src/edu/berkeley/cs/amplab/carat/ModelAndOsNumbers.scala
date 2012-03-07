@@ -182,7 +182,7 @@ object ModelAndOsNumbers {
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
     uuidToOsAndModel ++= allRates.map(x => { (x.uuid, (x.os, x.model)) }).collect()
 
-    var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
+    var evByUuid = new TreeMap[String, Double]
 
     val sem = new Semaphore(CONCURRENT_PLOTS)
 
@@ -206,34 +206,27 @@ object ModelAndOsNumbers {
 
     /* uuid stuff */
     val uuidSem = new Semaphore(CONCURRENT_PLOTS)
-    val bottleNeck = new Semaphore(1)
 
     for (i <- 0 until uuidArray.length) {
       // these are independent until JScores.
-      scheduler.execute({
-        uuidSem.acquireUninterruptibly()
-        val uuid = uuidArray(i)
-        val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
+      val uuid = uuidArray(i)
+      val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
 
-        var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
-        uuidApps --= DAEMONS_LIST_GLOBBED
+      var uuidApps = fromUuid.flatMap(_.allApps).collect().toSet
+      uuidApps --= DAEMONS_LIST_GLOBBED
 
-        val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
-        // no distance check, not bug or hog
-        val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
-        bottleNeck.acquireUninterruptibly()
-        if (bucketed != null && bucketedNeg != null) {
-          parametersByUuid += ((uuid, (xmax, ev, evNeg)))
-        }
-        bottleNeck.release()
-        uuidSem.release()
-      })
+      val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
+      // no distance check, not bug or hog
+      val (dist, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(fromUuid, aPrioriDistribution, false)
+      if (dist != null) {
+        evByUuid += ((uuid, ev))
+      }
     }
 
     // need to collect uuid stuff here:
     uuidSem.acquireUninterruptibly(CONCURRENT_PLOTS)
     uuidSem.release(CONCURRENT_PLOTS)
-    plotJScores(sc, sem, allRates, aPrioriDistribution, parametersByUuid, uuidToOsAndModel)
+    plotJScores(sc, sem, allRates, aPrioriDistribution, evByUuid, uuidToOsAndModel)
 
     // not allowed to return before everything is done
     sem.acquireUninterruptibly(CONCURRENT_PLOTS)
@@ -250,19 +243,18 @@ object ModelAndOsNumbers {
    * as a fraction.
    */
   def plotJScores(sc: SparkContext, sem: Semaphore, allRates: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
-    parametersByUuid: TreeMap[String, (Double, Double, Double)],
+    evByUuid: TreeMap[String, Double],
     uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)]) {
 
     val oses = uuidToOsAndModel.map(_._2._1).toSet
     val models = uuidToOsAndModel.map(_._2._2).toSet
 
-    val allEvs = parametersByUuid.map(x => { (x._1, x._2._2) })
     for (os <- oses) {
       // can be done in parallel, independent of anything else
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      plotDistsStdDevAndSampleCount(sem, sc, os, fromOs, notFromOs, aPrioriDistribution, false, allEvs, uuidToOsAndModel)
+      plotDistsStdDevAndSampleCount(sem, sc, os, fromOs, notFromOs, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
     }
 
     for (model <- models) {
@@ -270,7 +262,7 @@ object ModelAndOsNumbers {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      plotDistsStdDevAndSampleCount(sem, sc, model, fromModel, notFromModel, aPrioriDistribution, false, allEvs, uuidToOsAndModel)
+      plotDistsStdDevAndSampleCount(sem, sc, model, fromModel, notFromModel, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
     }
   }
 
