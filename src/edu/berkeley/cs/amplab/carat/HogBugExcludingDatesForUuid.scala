@@ -233,7 +233,7 @@ object HogBugExcludingDatesForUuid {
     val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
-    
+
     val i1 = uuidArray.indexOf(givenUuid1)
     val i2 = uuidArray.indexOf(givenUuid2)
 
@@ -243,8 +243,11 @@ object HogBugExcludingDatesForUuid {
     /* Check if the given app is a hog, when excluding data from the given time ranges of the given uuid: */
     val excluded = allRates.filter(x => {
       var bad = false
+      // Remove all of uuid2's samples (test device)
+      if (x.uuid == givenUuid2)
+        bad = true
       for (k <- excludedTimeRanges)
-        if ((x.uuid == givenUuid1 || x.uuid == givenUuid2) && ((k._1 < x.time1 && x.time1 < k._2) ||
+        if (x.uuid == givenUuid1 && ((k._1 < x.time1 && x.time1 < k._2) ||
           (k._1 < x.time2 && x.time2 < k._2)))
           bad = true
       !bad
@@ -254,12 +257,15 @@ object HogBugExcludingDatesForUuid {
     for (k <- excludedTimeRanges)
       buggyArr += allRates.filter(x => {
         var bad = false
-        if ((x.uuid == givenUuid1 || x.uuid == givenUuid2) && ((k._1 < x.time1 && x.time1 < k._2) ||
+        // Remove all of uuid2's samples (test device)
+        if (x.uuid == givenUuid2)
+          bad = true
+        if ((x.uuid == givenUuid1) && ((k._1 < x.time1 && x.time1 < k._2) ||
           (k._1 < x.time2 && x.time2 < k._2)))
           bad = true
         bad
       })
-    
+
     val filtered = excluded.filter(_.allApps.contains(appName)).cache()
     val filteredNeg = excluded.filter(!_.allApps.contains(appName)).cache()
 
