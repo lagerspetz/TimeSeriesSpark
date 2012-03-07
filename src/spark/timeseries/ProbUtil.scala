@@ -339,7 +339,7 @@ object ProbUtil extends Logging {
   def getLogBase(buckets: Int, smallestBucket: Double, xmax: Double) = math.pow(math.E, math.log(xmax / smallestBucket) / buckets)
 
   /**
-   * Bucket given distributions into `buckets` buckets, that have log sizes
+   * Bucket given frequencies into `buckets` buckets, that have log sizes
    * (smaller at the low end) and return the maximum x value and the bucketed distributions.
    *
    * Suggested parameters: buckets = 100, smallestBucket = 0.0001, decimals = 3 or 4
@@ -385,8 +385,8 @@ object ProbUtil extends Logging {
     val logbase = getLogBase(buckets, smallestBucket, xmax)
 
     /* Bucket and normalize dists: */
-    var bucketed = logBucketDist(sc, withDist, xmax, logbase, buckets)
-    var bucketedNeg = logBucketDist(sc, withoutDist, xmax, logbase, buckets)
+    var bucketed = logBucketFreq(sc, withDist, xmax, logbase, buckets)
+    var bucketedNeg = logBucketFreq(sc, withoutDist, xmax, logbase, buckets)
 
     val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
     val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
@@ -418,12 +418,70 @@ object ProbUtil extends Logging {
         "\"without\" distribution should sum up to 1 when normalized: " + bigtotal)
     }
 
-    // Return EVs with 3 decimal accuracy
     (xmax, bucketed.map(x => { (x._1, nDecimal(x._2, decimals)) }),
       bucketedNeg.map(x => { (x._1, nDecimal(x._2, decimals)) }),
       ev1, ev2)
     }else
       (0.0, null, null, 0.0, 0.0)
+  }
+  
+    /**
+   * Bucket given distributions into `buckets` buckets, that have log sizes
+   * (smaller at the low end) and return the maximum x value and the bucketed distributions.
+   *
+   * Suggested parameters: buckets = 100, smallestBucket = 0.0001, decimals = 3 or 4
+   *
+   * For a smallest bucket upper boundary of 0.0001,
+   * the maximum battery consumption that falls into
+   * it would use the iPhone battery in 11.5 days.
+   * This is unrealistic. A 0.0005 % /s
+   * usage falls into the 87th bucket,
+   * and drains the battery in 2.5 days. This is more realistic.
+   * As the buckets go to the right, higher and higher usage is
+   * bucketed, with a larger bucket size, making heavy usage with even a
+   * high variance fall into the same bucket.
+   *
+   */
+  def logBucketDists(sc: SparkContext, withDist: RDD[(Double, Double)], withoutDist: RDD[(Double, Double)], buckets: Int, smallestBucket: Double, decimals: Int) = {
+    val emptyWith = withDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+    
+    val emptyWithout = withoutDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+    
+    if (!emptyWith && !emptyWithout){
+    /* Find max x*/
+    val xmax = withDist.union(withoutDist).map(_._1).reduce((x, y) => {
+      if (x > y)
+        x
+      else
+        y
+    })
+
+    /* xmax / (logBase^buckets) > smallestBucket
+     * <=> logBase^buckets * smallestBucket < xmax
+     * <=> logBase^buckets < xmax / smallestBucket
+     * log (logbase) * buckets < log (xmax/smallestBucket)
+     * logbase < e^(log(xmax/smallestBucket) / buckets)
+     */
+
+    val logbase = getLogBase(buckets, smallestBucket, xmax)
+
+    /* Bucket and normalize dists: */
+    var bucketed = logBucketDist(sc, withDist, xmax, logbase, buckets)
+    var bucketedNeg = logBucketDist(sc, withoutDist, xmax, logbase, buckets)
+
+    //val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
+    //val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
+
+    (xmax, bucketed.map(x => { (x._1, nDecimal(x._2, decimals)) }),
+      bucketedNeg.map(x => { (x._1, nDecimal(x._2, decimals)) }))
+    }else
+      (0.0, null, null)
   }
 
   def getEv(sc: SparkContext, bucketedDist: RDD[(Int, Double)], xmax: Double, logbase: Double, buckets: Int) = {
@@ -443,7 +501,7 @@ object ProbUtil extends Logging {
     ev.value
   }
 
-  def logBucketDist(sc: SparkContext, withDist: RDD[(Double, Double)], xmax: Double, logbase: Double, buckets: Int) = {
+  def logBucketFreq(sc: SparkContext, withDist: RDD[(Double, Double)], xmax: Double, logbase: Double, buckets: Int) = {
     val bucketed = withDist.map(k => {
       val bucketDouble = 100 - math.log(xmax / k._1) / math.log(logbase)
       val bucket = {
@@ -465,6 +523,22 @@ object ProbUtil extends Logging {
     val v = sumAll.value
     // Normalize
     bucketed.map(x => { (x._1, x._2 / v) })
+  }
+  
+  
+  def logBucketDist(sc: SparkContext, withDist: RDD[(Double, Double)], xmax: Double, logbase: Double, buckets: Int) = {
+    withDist.map(k => {
+      val bucketDouble = 100 - math.log(xmax / k._1) / math.log(logbase)
+      val bucket = {
+        if (bucketDouble >= buckets)
+          buckets - 1
+        else if (bucketDouble < 0)
+          0
+        else
+          bucketDouble.toInt
+      }
+      (bucket, k._2)
+    })
   }
 
   def groupByInt(x: Int, y: Double) = x
