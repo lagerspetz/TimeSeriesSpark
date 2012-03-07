@@ -629,24 +629,38 @@ object CaratDynamoDataToPlots {
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
     filtered: RDD[CaratRate], oses: Set[String], models: Set[String], usersWith: Int, usersWithout: Int) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ ) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
-    if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
-      if (evDistance > 0) {
-        var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
-        val imprD = (imprHr / 24.0).toInt
-        imprHr -= imprD * 24.0
-        printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
-      } else {
-        printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout)
+    var hasSamples = true 
+    if (usersWith == 0 && usersWithout == 0){
+      hasSamples = one.take(1) match {
+        case Array(t) => true
+        case _ => false
       }
-      scheduler.execute(
-        if (isBugOrHog && filtered != null) {
-          val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
-          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout)
-        } else
-          plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout))
+      hasSamples = two.take(1) match {
+        case Array(t) => hasSamples && true
+        case _ => false
+      }
     }
-    isBugOrHog && evDistance > 0
+    if (hasSamples) {
+      val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ ) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+      if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
+        if (evDistance > 0) {
+          var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
+          val imprD = (imprHr / 24.0).toInt
+          imprHr -= imprD * 24.0
+          printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
+        } else {
+          printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout)
+        }
+        scheduler.execute(
+          if (isBugOrHog && filtered != null) {
+            val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
+            plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout)
+          } else
+            plot(sem, title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout))
+      }
+      isBugOrHog && evDistance > 0
+    }else
+      false
   }
 
   def plot(sem: Semaphore, title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
