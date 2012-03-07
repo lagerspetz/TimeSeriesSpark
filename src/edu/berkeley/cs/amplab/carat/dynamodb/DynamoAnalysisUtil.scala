@@ -494,8 +494,8 @@ object DynamoAnalysisUtil {
     }
     finish(startTime)
     (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance/*, usersWith, usersWithout*/)
-    }
-    (0.0, null, null, 0.0, 0.0, 0.0/*, usersWith, usersWithout*/)
+    } else
+      (0.0, null, null, 0.0, 0.0, 0.0/*, usersWith, usersWithout*/)
   }
 
   /**
