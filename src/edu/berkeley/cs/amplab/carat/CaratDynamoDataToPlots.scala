@@ -55,7 +55,7 @@ object CaratDynamoDataToPlots {
   val ENOUGH_USERS = 5
 
   lazy val scheduler = {
-    scala.util.Properties.setProp("actors.corePoolSize", 32 + "")
+    scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS+ "")
     val s = new ResizableThreadPoolScheduler(false)
     s.start()
     s
@@ -438,7 +438,7 @@ object CaratDynamoDataToPlots {
         val fromOs = allRates.filter(_.os == os)
         val notFromOs = allRates.filter(_.os != os)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null)
+        val ret = plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null,0,0)
       })
     }
 
@@ -448,7 +448,7 @@ object CaratDynamoDataToPlots {
         val fromModel = allRates.filter(_.model == model)
         val notFromModel = allRates.filter(_.model != model)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null)
+        val ret = plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null,0,0)
       })
     }
 
@@ -480,8 +480,9 @@ object CaratDynamoDataToPlots {
           val usersWithout = filteredNeg.map(_.uuid).collect().toSet.size
           DynamoAnalysisUtil.finish(fCountStart, "clientCount")
           if (usersWithout >= ENOUGH_USERS){
-          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models)) {
-            // this is a hog
+          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models,usersWith,usersWithout)) {
+              // this is a hog
+            
             appsBottleneck.acquireUninterruptibly()
             allHogs += app
             appsBottleneck.release()
@@ -493,7 +494,7 @@ object CaratDynamoDataToPlots {
               val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
               val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
               if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-                filtered, oses, models)) {
+                filtered, oses, models,1,uuidArray.length-1)) {
                 appsBottleneck.acquireUninterruptibly()
                 allBugs += app
                 appsBottleneck.release()
@@ -529,7 +530,7 @@ object CaratDynamoDataToPlots {
         /* cache these because they will be used numberOfApps times */
         val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
         // no distance check, not bug or hog
-        val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+        val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, fromUuid, notFromUuid, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
         bottleNeck.acquireUninterruptibly()
         if (bucketed != null && bucketedNeg != null) {
           distsWithUuid += ((uuid, bucketed))
@@ -626,7 +627,7 @@ object CaratDynamoDataToPlots {
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    plotDists(sem, sc, "Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, plotDirectory, null, null, null)
+    plotDists(sem, sc, "Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0)
   }
 
   /* Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -637,9 +638,17 @@ object CaratDynamoDataToPlots {
 
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
-    filtered: RDD[CaratRate], oses: Set[String], models: Set[String]) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], usersWith:Int, usersWithout:Int) = {
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance/*, usersWith, usersWithout*/) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
+      if (evDistance > 0) {
+        var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
+        val imprD = (imprHr / 24.0).toInt
+        imprHr -= imprD * 24.0
+        printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
+      } else {
+        printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout )
+      }
       scheduler.execute(
         if (isBugOrHog && filtered != null) {
           val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
@@ -656,10 +665,10 @@ object CaratDynamoDataToPlots {
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int,
     apps: Seq[String] = null) {
-    //sem.acquireUninterruptibly()
+    sem.acquireUninterruptibly()
     plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations,
       usersWith, usersWithout, apps)
-    //sem.release()
+    sem.release()
   }
 
   /**

@@ -476,8 +476,8 @@ object DynamoAnalysisUtil {
     buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
     val startTime = start
 
-    val (probWith, ev, usersWith) = getEvAndDistribution(one, aPrioriDistribution)
-    val (probWithout, evNeg, usersWithout) = getEvAndDistribution(two, aPrioriDistribution)
+    val (probWith, ev/*, usersWith*/) = getEvAndDistribution(one, aPrioriDistribution)
+    val (probWithout, evNeg/*, usersWithout*/) = getEvAndDistribution(two, aPrioriDistribution)
     finish(startTime, "GetDists")
     var evDistance = 0.0
 
@@ -487,20 +487,12 @@ object DynamoAnalysisUtil {
     finish(fStart, "LogBucketing")
 
     evDistance = evDiff(ev, evNeg)
-    if (evDistance > 0) {
-      var imprHr = (100.0 / evNeg - 100.0 / ev) / 3600.0
-      val imprD = (imprHr / 24.0).toInt
-      imprHr -= imprD * 24.0
-      printf("evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
-    } else {
-      printf("evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", ev, evNeg, evDistance, usersWith, usersWithout)
-    }
 
     if (DEBUG) {
       ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
     }
     finish(startTime)
-    (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout)
+    (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance/*, usersWith, usersWithout*/)
   }
 
   /**
@@ -538,17 +530,17 @@ object DynamoAnalysisUtil {
    */
   def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
     val startTime = start
-      var fStart = start
+      //var fStart = start
       val probWith = getProbDist(aPrioriDistribution, one)
-      finish(fStart, "GetFreq")
+      //finish(fStart, "GetFreq")
       val ev = ProbUtil.getEv(probWith)
-
+/*
       fStart = start
       val usersWith = one.map(_.uuid).collect().toSet.size
       finish(fStart, "userCount")
-
+*/
       finish(startTime)
-      (probWith, ev, usersWith)
+      (probWith, ev/*, usersWith*/)
   }
 
   def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
