@@ -138,7 +138,64 @@ object CaratDynamoDataToPlots {
     plotSamples("Samples in time", plotDirectory, tm)
   }
 
-  def addToSet(key: Key, samples: java.util.List[java.util.Map[String, AttributeValue]],
+  def sampleCountsPerOsAndModel() {
+    // turn off INFO logging for spark:
+    System.setProperty("hadoop.root.logger", "WARN,console")
+    // This is misspelled in the spark jar log4j.properties:
+    System.setProperty("log4j.threshhold", "WARN")
+    // Include correct spelling to make sure
+    System.setProperty("log4j.threshold", "WARN")
+    // turn on ProbUtil debug logging
+    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+
+    // Fix Spark running out of space on AWS.
+    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
+    val plotDirectory = "/mnt/www/plots"
+    val allSamples = new scala.collection.mutable.HashMap[String, Long]
+    DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+      DynamoDbDecoder.getAllItems(samplesTable, _),
+      addToStats(_, _, allSamples))
+
+    val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
+    val allModels = new scala.collection.mutable.HashSet[String]
+    val allOses = new scala.collection.mutable.HashSet[String]
+
+    val modelSampleCounts = new scala.collection.mutable.HashMap[String, Long]
+    val osSampleCounts = new scala.collection.mutable.HashMap[String, Long]
+    
+    DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+      DynamoDbDecoder.getAllItems(registrationTable, _),
+      handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+
+      for (k <- allSamples){
+        val (os, model) = uuidToOsAndModel.get(k._1).getOrElse("", "")
+        val c = osSampleCounts.getOrElse(os, 0L) + k._2
+        osSampleCounts += ((os, c))
+        val m = modelSampleCounts.getOrElse(model, 0L) + k._2
+        modelSampleCounts += ((model, m))
+      }
+    for (k <- osSampleCounts)
+      println(k._1 + " " + k._2)
+    for (k <- modelSampleCounts)
+      println(k._1 + " " + k._2)
+  }
+
+  def addToStats(key: Key, samples: java.util.List[java.util.Map[String, AttributeValue]],
+    allSamples: scala.collection.mutable.HashMap[String, Long]) {
+    val mapped = samples.map(x => {
+      /* See properties in package.scala for data keys. */
+      val uuid = x.get(sampleKey).getS()
+      (uuid, 1)
+    })
+    
+    for (k <- mapped) {
+      var oldVal = allSamples.get(k._1).getOrElse(0L)
+      oldVal += k._2
+      allSamples.put(k._1, oldVal)
+    }
+  }
+  
+    def addToSet(key: Key, samples: java.util.List[java.util.Map[String, AttributeValue]],
     allSamples: scala.collection.mutable.HashMap[String, TreeSet[Double]]) {
     val mapped = samples.map(x => {
       /* See properties in package.scala for data keys. */
