@@ -528,7 +528,7 @@ object DynamoAnalysisUtil {
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
-  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], enoughWith: Boolean = false) = {
+  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], enoughWith: Boolean) = {
     val startTime = start
 
     var checkedWith = enoughWith
@@ -553,6 +553,24 @@ object DynamoAnalysisUtil {
       finish(startTime)
       (null, 0.0, 0)
     }
+  }
+  
+   /**
+   * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
+   */
+  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
+    val startTime = start
+      var fStart = start
+      val probWith = getProbDist(aPrioriDistribution, one)
+      finish(fStart, "GetFreq")
+      val ev = ProbUtil.getEv(probWith)
+
+      fStart = start
+      val usersWith = one.map(_.uuid).collect().toSet.size
+      finish(fStart, "userCount")
+
+      finish(startTime)
+      (probWith, ev, usersWith)
   }
 
   def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],

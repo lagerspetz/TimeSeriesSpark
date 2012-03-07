@@ -217,10 +217,8 @@ object ModelAndOsNumbers {
 
       val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
       // no distance check, not bug or hog
-      val (dist, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(fromUuid, aPrioriDistribution, false)
-      if (dist != null) {
-        evByUuid += ((uuid, ev))
-      }
+      val (dist, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(fromUuid, aPrioriDistribution)
+      evByUuid += ((uuid, ev))
     }
 
     // need to collect uuid stuff here:
@@ -270,7 +268,7 @@ object ModelAndOsNumbers {
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean,
     allEvs: scala.collection.immutable.TreeMap[String,Double], uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
     // the ev is over all the points in the distribution
-    val (probOne, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution, enoughWith)
+    val (probOne, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution)
     // convert to prob dist
     val evOne = probOne.map(x => { (x._1 * x._2) })
     val mean = ProbUtil.mean(evOne)
@@ -291,7 +289,7 @@ object ModelAndOsNumbers {
     imprHr -= imprD * 24
 
     
-    println("%s ev=%s mean=%s variance=%s (%s d %s h %s min), samplecount=%s".format(title, ev, mean, variance, imprD, imprHr, imprMin, sampleCount))
-    println("%s ev=%s meanU=%s varianceU=%s (%s d %s h %s min), samplecount=%s".format(title, ev, meanU, varianceU, imprD, imprHr, imprMin, sampleCount))
+    println("%s ev=%s mean=%s variance=%s (%s d %s h %s min), clients=%s samples=%s".format(title, ev, mean, variance, imprD, imprHr, imprMin, usersWith, sampleCount))
+    println("%s ev=%s meanU=%s varianceU=%s (%s d %s h %s min), clients=%s samples=%s".format(title, ev, meanU, varianceU, imprD, imprHr, imprMin, usersWith, sampleCount))
   }
 }
