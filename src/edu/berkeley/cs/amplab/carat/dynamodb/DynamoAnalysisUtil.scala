@@ -481,6 +481,7 @@ object DynamoAnalysisUtil {
     finish(startTime, "GetDists")
     var evDistance = 0.0
 
+    if (probWith != null && probWithout != null){
     var fStart = start
     // Log bucketing:
     val (xmax, bucketed, bucketedNeg) = ProbUtil.logBucketDists(sc, probWith, probWithout, buckets, smallestBucket, decimals)
@@ -493,6 +494,8 @@ object DynamoAnalysisUtil {
     }
     finish(startTime)
     (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance/*, usersWith, usersWithout*/)
+    }
+    (0.0, null, null, 0.0, 0.0, 0.0/*, usersWith, usersWithout*/)
   }
 
   /**
@@ -532,6 +535,7 @@ object DynamoAnalysisUtil {
     val startTime = start
       //var fStart = start
       val probWith = getProbDist(aPrioriDistribution, one)
+      if (probWith != null){
       //finish(fStart, "GetFreq")
       val ev = ProbUtil.getEv(probWith)
 /*
@@ -541,6 +545,9 @@ object DynamoAnalysisUtil {
 */
       finish(startTime)
       (probWith, ev/*, usersWith*/)
+      }
+      finish(startTime)
+      (null, 0.0)
   }
 
   def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
@@ -638,8 +645,16 @@ object DynamoAnalysisUtil {
   
   def getProbDist(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
     val freq = getFrequencies(aPrioriDistribution, samples)
-    val sum = freq.map(_._2).reduce(_ + _)
-    freq.map(x => {(x._1, x._2/sum)})
+    val hasPoints = freq.take(1) match {
+      case Array(t) => true
+      case _ => false
+    }
+    
+    if (hasPoints){
+      val sum = freq.map(_._2).reduce(_ + _)
+      freq.map(x => {(x._1, x._2/sum)})
+    } else
+      null
   }
   
   def mapToRateEv(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
