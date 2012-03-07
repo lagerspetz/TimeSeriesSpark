@@ -28,6 +28,7 @@ object DynamoAnalysisUtil {
   val ABNORMAL_RATE = 9
   
   val DIST_THRESHOLD = 10
+  val A_PRIORI_IS_BROKEN_THRESHOLD = 0.04
   
   // Daemons list, read from S3
   val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
@@ -453,8 +454,10 @@ object DynamoAnalysisUtil {
     val startTime = start
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
-    val ap = allRates.filter(!_.isRateRange())
-    assert(ap.count > 0, "AllRates should contain some rates that are not rateRanges when calculating aPriori.")
+    val ap = allRates.filter(x =>{
+      !x.isRateRange() && x.rate < A_PRIORI_IS_BROKEN_THRESHOLD
+    })
+    assert(ap.count > 0, "AllRates should contain some rates that are not rateRanges and less than %s when calculating aPriori.".format(A_PRIORI_IS_BROKEN_THRESHOLD))
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val grouped = ap.map(x => {
       ((x.rate, 1.0))

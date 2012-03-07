@@ -230,6 +230,12 @@ object HogBugExcludingDatesForUuid {
           bad = true
         bad
       })
+      
+    // sanity check buggy samples
+      println("Buggy samples:")
+    for (k <- buggyArr){
+      println(k.map(_.rate).collect())
+    }
 
     val filtered = excluded.filter(_.allApps.contains(appName)).cache()
     val filteredNeg = excluded.filter(!_.allApps.contains(appName)).cache()
