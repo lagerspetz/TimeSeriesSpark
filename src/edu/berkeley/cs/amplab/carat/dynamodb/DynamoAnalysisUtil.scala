@@ -464,6 +464,28 @@ object DynamoAnalysisUtil {
     finish(startTime)
     ret
   }
+  
+  def getApriori(allRates: Array[CaratRate]) = {
+    val startTime = start
+    // get BLCs
+    assert(allRates != null, "AllRates should not be null when calculating aPriori.")
+    val ap = allRates.filter(x =>{
+      !x.isRateRange()
+    })
+    assert(ap.length > 0, "AllRates should contain some rates that are not rateRanges and less than %s when calculating aPriori.".format(ABNORMAL_RATE))
+    // Get their rates and frequencies (1.0 for all) and group by rate 
+    val rates = ap.map(_.rate)
+    var rateMap = new HashMap[Double, Double]
+    for (k <- rates){
+      val old = rateMap.getOrElse(k, 0.0) + 1.0
+      rateMap += ((k, old))
+    }
+    
+    val sum = rateMap.map(_._2).sum
+    val ret = rateMap.map(x => { (x._1, x._2 / sum) })
+    finish(startTime)
+    ret
+  }
 
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
@@ -495,6 +517,30 @@ object DynamoAnalysisUtil {
   }
 
   def getDistanceAndDistributionsUnBucketed(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
+    val startTime = start
+    val (probWith, ev /*, usersWith*/ ) = getEvAndDistribution(one, aPrioriDistribution)
+    val (probWithout, evNeg /*, usersWithout*/ ) = getEvAndDistribution(two, aPrioriDistribution)
+    finish(startTime, "GetDists")
+    var evDistance = 0.0
+
+    if (probWith != null && probWithout != null) {
+      var fStart = start
+      val xmax = ProbUtil.getxmax(probWith, probWithout)
+      finish(fStart, "getxmax")
+
+      evDistance = evDiff(ev, evNeg)
+      finish(startTime)
+      (xmax, probWith, probWithout, ev, evNeg, evDistance)
+    } else {
+      finish(startTime)
+      (0.0, null, null, 0.0, 0.0, 0.0)
+    }
+  }
+  
+  /**
+   * Non-RDD version to debug if my problems are rdd-based.
+   */
+  def getDistanceAndDistributionsUnBucketed(one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: HashMap[Double, Double]) = {
     val startTime = start
     val (probWith, ev /*, usersWith*/ ) = getEvAndDistribution(one, aPrioriDistribution)
     val (probWithout, evNeg /*, usersWithout*/ ) = getEvAndDistribution(two, aPrioriDistribution)
@@ -549,6 +595,30 @@ object DynamoAnalysisUtil {
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
   def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
+    val startTime = start
+      //var fStart = start
+      val probWith = getProbDist(aPrioriDistribution, one)
+      if (probWith != null){
+      //finish(fStart, "GetFreq")
+      val ev = ProbUtil.getEv(probWith)
+/*
+      fStart = start
+      val usersWith = one.map(_.uuid).collect().toSet.size
+      finish(fStart, "userCount")
+*/
+      finish(startTime)
+      (probWith, ev/*, usersWith*/)
+      }else{
+      finish(startTime)
+      (null, 0.0)
+      }
+  }
+  
+  /**
+   * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
+   * Non-RDD version to debug performance issues.
+   */
+  def getEvAndDistribution(one: Array[CaratRate], aPrioriDistribution: HashMap[Double, Double]) = {
     val startTime = start
       //var fStart = start
       val probWith = getProbDist(aPrioriDistribution, one)
@@ -661,6 +731,41 @@ object DynamoAnalysisUtil {
     ret
   }
   
+  /**
+   * Convert a set of rates into their frequencies, interpreting rate ranges as slices
+   * of `aPrioriDistribution`.
+   * Non-RDD version to debug performance problems.
+   */
+  def getFrequencies(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
+    val startTime = start
+    val flatSamples = samples.flatMap(x => {
+      if (x.isRateRange()) {
+        val freqRange = aPrioriDistribution.filter(y => { x.rateRange.contains(y._1) })
+        val arr = freqRange.map { x =>
+          {
+            (x._1, x._2)
+          }
+        }.toArray
+
+        var sum = 0.0
+        for (k <- arr) {
+          sum += k._2
+        }
+        arr.map(x => { (x._1, x._2 / sum) })
+      } else
+        Array((x.rate, 1.0))
+    })
+    
+    var hmap = new HashMap[Double, Double]
+    
+    for (k <- flatSamples)
+      hmap += ((k._1, hmap.getOrElse(k._1, 0.0) + k._2))
+    
+    val ret = hmap.toArray
+    finish(startTime)
+    ret
+  }
+  
   def getProbDist(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
     val freq = getFrequencies(aPrioriDistribution, samples)
     val hasPoints = freq.take(1) match {
@@ -675,7 +780,54 @@ object DynamoAnalysisUtil {
       null
   }
   
+  /**
+   * Non-RDD version to debug performance problems.
+   */
+  def getProbDist(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
+    val freq = getFrequencies(aPrioriDistribution, samples)
+    val hasPoints = freq.take(1) match {
+      case Array(t) => true
+      case _ => false
+    }
+    
+    if (hasPoints){
+      val sum = freq.map(_._2).reduce(_ + _)
+      freq.map(x => {(x._1, x._2/sum)})
+    } else
+      null
+  }
+  
   def mapToRateEv(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+    val startTime = start
+    val evSamples = samples.map(x => {
+      if (x.isRateRange()) {
+        val freqRange = aPrioriDistribution.filter(y => { x.rateRange.contains(y._1) })
+        val arr = freqRange.map { x =>
+          {
+            (x._1, x._2)
+          }
+        }.toArray
+
+        var sum = 0.0
+        for (k <- arr) {
+          sum += k._2
+        }
+        val norm = arr.map(x => { (x._1, x._2 / sum) })
+        var ret = 0.0
+        for (k <- norm)
+          ret += k._1 * k._2
+        (x, ret)
+      } else
+        (x, x.rate)
+    })
+    finish(start)
+    evSamples
+  }
+  
+  /**
+   * Non-RDD version to debug performance problems.
+   */
+    def mapToRateEv(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
     val startTime = start
     val evSamples = samples.map(x => {
       if (x.isRateRange()) {

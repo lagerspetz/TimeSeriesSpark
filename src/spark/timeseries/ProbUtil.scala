@@ -31,6 +31,17 @@ object ProbUtil extends Logging {
       x._1 * x._2
     }).reduce(_ + _)
   }
+  
+   /**
+   * Get the expected value of a probability distribution.
+   * The EV is x*y / sum(y), where sum(y) is 1 for a probability distribution.
+   * Non-RDD version to debug performance problems.
+   */
+  def getEv(values: Array[(Double, Double)]) = {
+    values.map(x => {
+      x._1 * x._2
+    }).sum
+  }
 
   /**
    * Get the expected value of a probability distribution.
@@ -80,6 +91,21 @@ object ProbUtil extends Logging {
   }
 
   def normalize(items: scala.collection.mutable.Map[CaratRate, Double]) = {
+    val start = DynamoAnalysisUtil.start()
+    val meanX = mean(items.map(_._2).toSeq)
+    val devX = stddev(items.map(_._2).toSeq, meanX)
+    println("Norm mean=%f dev=%f".format(meanX, devX))
+    if (devX == 0) {
+      DynamoAnalysisUtil.finish(start)
+      null
+    } else {
+      val ret = items.map(x => { (x._1, (x._2 - meanX) / devX) })
+      DynamoAnalysisUtil.finish(start)
+      ret
+    }
+  }
+  
+  def normalize(items: scala.collection.immutable.Map[CaratRate, Double]) = {
     val start = DynamoAnalysisUtil.start()
     val meanX = mean(items.map(_._2).toSeq)
     val devX = stddev(items.map(_._2).toSeq, meanX)
@@ -513,6 +539,34 @@ object ProbUtil extends Logging {
         else
           y
       })
+      xmax
+    } else
+      0.0
+  }
+  
+  /**
+   * Non-RDD version to debug performance problems.
+   */
+  def getxmax(withDist: Array[(Double, Double)], withoutDist: Array[(Double, Double)]) = {
+    val emptyWith = withDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+
+    val emptyWithout = withoutDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+
+    if (!emptyWith && !emptyWithout) {
+      /* Find max x*/
+      var xmax = 0.0
+      for (k <- withDist)
+        if (k._1 > xmax)
+          xmax = k._1
+      for (k <- withoutDist)
+        if (k._1 > xmax)
+          xmax = k._1
       xmax
     } else
       0.0
