@@ -302,7 +302,8 @@ object HogBugExcludingDatesForUuid {
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], plotDirectory:String, isBugOrHog: Boolean) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(sc, one, two, aPrioriDistribution)
     
-    println("Bug distribution:")
+    if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
+       println("Bug distribution:")
     val bug = bucketed.collect()
     for (k <- bug){
       println(k._1 + " " + k._2)
@@ -313,7 +314,7 @@ object HogBugExcludingDatesForUuid {
     for (k <- ref){
       println(k._1 + " " + k._2)
     }
-    if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
+    
       plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
     }else
       printf("Not plotting %s vs %s, ev=%s evNeg=%s distance=%s\n", title, titleNeg, ev, evNeg, evDistance)
