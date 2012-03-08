@@ -100,7 +100,7 @@ object CaratDynamoAnalysisOnly {
     // cache first
     
     
-
+    var allRates = inputRates
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
     uuidToOsAndModel ++= allRates.map(x => { (x.uuid, (x.os, x.model)) }).collect()
@@ -109,7 +109,6 @@ object CaratDynamoAnalysisOnly {
       s < t
     })
     
-    var allRates:RDD[CaratRate] = null
     if (userLimit < uuidArray.length){
       println("Running analysis for %s users.".format(userLimit))
       // limit data to these users:
