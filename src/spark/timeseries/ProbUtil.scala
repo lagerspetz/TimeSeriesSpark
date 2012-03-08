@@ -493,29 +493,29 @@ object ProbUtil extends Logging {
     }else
       (0.0, null, null)
   }
-  
+
   def getxmax(withDist: RDD[(Double, Double)], withoutDist: RDD[(Double, Double)]) = {
     val emptyWith = withDist.take(1) match {
       case Array(t) => false
       case _ => true
     }
-    
+
     val emptyWithout = withoutDist.take(1) match {
       case Array(t) => false
       case _ => true
     }
-    
-    if (!emptyWith && !emptyWithout){
-    /* Find max x*/
-    val xmax = withDist.union(withoutDist).map(_._1).reduce((x, y) => {
-      if (x > y)
-        x
-      else
-        y
-    })
-    xmax
-  }
-    0.0
+
+    if (!emptyWith && !emptyWithout) {
+      /* Find max x*/
+      val xmax = withDist.union(withoutDist).map(_._1).reduce((x, y) => {
+        if (x > y)
+          x
+        else
+          y
+      })
+      xmax
+    } else
+      0.0
   }
 
   def getEv(sc: SparkContext, bucketedDist: RDD[(Int, Double)], xmax: Double, logbase: Double, buckets: Int) = {

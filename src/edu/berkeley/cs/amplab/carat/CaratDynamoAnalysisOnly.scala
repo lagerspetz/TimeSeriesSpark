@@ -97,9 +97,6 @@ object CaratDynamoAnalysisOnly {
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
   def analyzeRateData(sc: SparkContext, inputRates: RDD[CaratRate], plotDirectory: String) = {
-    // cache first
-    
-    
     var allRates = inputRates
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
