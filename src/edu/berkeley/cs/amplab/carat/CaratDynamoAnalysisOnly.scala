@@ -52,6 +52,8 @@ object CaratDynamoAnalysisOnly {
   // Isolate from the plotting.
   val tmpdir = "/mnt/TimeSeriesSpark-osmodel/spark-temp-plots/"
 
+  var userLimit = Int.MaxValue
+
   /**
    * Main program entry point.
    */
@@ -60,36 +62,32 @@ object CaratDynamoAnalysisOnly {
     if (args != null && args.length >= 1) {
       master = args(0)
     }
-    plotEverything(master, args != null && args.length > 1 && args(1) == "DEBUG", null)
-    //sys.exit(0)
-  }
-
-  def plotEverything(master: String, debug: Boolean, plotDirectory: String) = {
+    if (args != null && args.length > 1)
+      userLimit = args(1).toInt
+    
     val start = DynamoAnalysisUtil.start()
-    if (debug) {
-      DEBUG = true
-    } else {
-      // turn off INFO logging for spark:
-      System.setProperty("hadoop.root.logger", "WARN,console")
-      // This is misspelled in the spark jar log4j.properties:
-      System.setProperty("log4j.threshhold", "WARN")
-      // Include correct spelling to make sure
-      System.setProperty("log4j.threshold", "WARN")
-    }
+
+    // turn off INFO logging for spark:
+    System.setProperty("hadoop.root.logger", "WARN,console")
+    // This is misspelled in the spark jar log4j.properties:
+    System.setProperty("log4j.threshhold", "WARN")
+    // Include correct spelling to make sure
+    System.setProperty("log4j.threshold", "WARN")
+
     // turn on ProbUtil debug logging
-    System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
-    System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    //System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    //System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
 
     // Fix Spark running out of space on AWS.
-    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
+    System.setProperty("spark.local.dir", tmpdir)
 
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
-    val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataToPlots")
+    val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataSpeedTest")
     // getRates
     val allRates = CaratDynamoDataToPlots.getRates(sc)
     if (allRates != null) {
       // analyze data
-      analyzeRateData(sc, allRates, plotDirectory)
+      analyzeRateData(sc, allRates, null)
       // do not save rates in this version.
     }
     DynamoAnalysisUtil.finish(start)
@@ -100,11 +98,29 @@ object CaratDynamoAnalysisOnly {
    */
   def analyzeRateData(sc: SparkContext, inputRates: RDD[CaratRate], plotDirectory: String) = {
     // cache first
-    val allRates = inputRates.cache()
+    
+    
 
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
     uuidToOsAndModel ++= allRates.map(x => { (x.uuid, (x.os, x.model)) }).collect()
+    
+    var uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
+      s < t
+    })
+    
+    var allRates:RDD[CaratRate] = null
+    if (userLimit < uuidArray.length){
+      println("Running analysis for %s users.".format(userLimit))
+      // limit data to these users:
+      uuidArray = uuidArray.slice(0, userLimit)
+      allRates = inputRates.filter(x=>{
+        uuidArray.contains(x.uuid)
+      }).cache()
+    }else{
+      println("Running analysis for all users.")
+      allRates = inputRates.cache()
+    }
 
     val oses = uuidToOsAndModel.map(_._2._1).toSet
     val models = uuidToOsAndModel.map(_._2._2).toSet
@@ -164,10 +180,6 @@ object CaratDynamoAnalysisOnly {
 
     /** Calculate correlation for each model and os version with all rates */
     val (osCorrelations, modelCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses)
-
-    val uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
-      s < t
-    })
 
     //scheduler.execute({
     var allHogs = new HashSet[String]
@@ -358,12 +370,11 @@ object CaratDynamoAnalysisOnly {
         } else {
           printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout)
         }
-        scheduler.execute(
-          if (isBugOrHog && filtered != null) {
-            val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
-            plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
-          } else
-            plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout, uuid))
+        if (isBugOrHog && filtered != null) {
+          val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
+          plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
+        } else
+          plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout, uuid)
       }
       isBugOrHog && evDistance > 0
     } else
