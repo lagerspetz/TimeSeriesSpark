@@ -261,8 +261,6 @@ object NoRDDPlots {
               if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
                 filtered, oses, models, 0, 0, stuff)) {
                 //allBugs += app
-              }else{
-                println("NotBug " + app + " running on client " + i+ " " + stuff)
               }
             }
           }
@@ -359,7 +357,7 @@ object NoRDDPlots {
           imprHr -= imprD * 24.0
           printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
         } else {
-          printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout)
+          printf("Not %s evWith=%s evWithout=%s evDistance=%s (%s vs %s users) %s\n", title, ev, evNeg, evDistance, usersWith, usersWithout, uuid)
         }
         if (isBugOrHog && filtered != null) {
           val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
