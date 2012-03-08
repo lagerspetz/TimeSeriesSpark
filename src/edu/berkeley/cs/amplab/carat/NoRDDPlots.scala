@@ -439,8 +439,10 @@ object NoRDDPlots {
     plotFile(dateString, title, evTitle, evTitleNeg, xmax)
     writeData(dateString, evTitle, distWith)
     writeData(dateString, evTitleNeg, distWithout)
-    if (osCorrelations != null)
-      writeCorrelationFile(title, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
+    if (osCorrelations != null){
+      var stuff = uuid +"\nevWith=%s\nevWithout=%s".format(ev,evNeg) 
+      writeCorrelationFile(title, osCorrelations, modelCorrelations, usersWith, usersWithout, stuff)
+    }
     plotData(dateString, title)
   }
 
