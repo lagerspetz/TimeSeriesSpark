@@ -222,8 +222,8 @@ object NoRDDPlots {
 
     // need to collect uuid stuff here:
     plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
-
-    println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
+    writeCorrelationFile("All", osCorrelations, modelCorrelations, 0, 0)
+    //println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
   }
   
   def oneApp(uuidArray:Array[String], allRates: Array[edu.berkeley.cs.amplab.carat.CaratRate], app: String,
@@ -438,7 +438,8 @@ object NoRDDPlots {
     // bump up accuracy here so that not everything gets blurred
     val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, DECIMALS + 1) + ")"
     val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, DECIMALS + 1) + ")"
-    printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
+    println("Plotting %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
+        title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
     plotFile(dateString, title, evTitle, evTitleNeg, xmax)
     writeData(dateString, evTitle, distWith)
     writeData(dateString, evTitleNeg, distWithout)

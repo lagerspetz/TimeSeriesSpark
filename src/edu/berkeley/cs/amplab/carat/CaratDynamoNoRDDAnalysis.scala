@@ -115,6 +115,7 @@ object CaratDynamoNoRDDAnalysis {
       allRates = inputRates.filter(x=>{
         uuidArray.contains(x.uuid)
       }).collect()
+      
     }else{
       println("Running analysis for all users.")
     }
@@ -154,6 +155,8 @@ object CaratDynamoNoRDDAnalysis {
     allApps --= DAEMONS_LIST_GLOBBED
     println("AllApps (no daemons): " + allApps)
 
+    println("Number of samples: %s users: %s apps: %s".format(allRates.size,uuidArray.size,allApps.size))
+    
     for (os <- oses) {
       // can be done in parallel, independent of anything else
         val fromOs = allRates.filter(_.os == os)
