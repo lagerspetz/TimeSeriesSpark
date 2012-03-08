@@ -49,14 +49,14 @@ object CaratDynamoAnalysisOnly {
 
   var DEBUG = false
   val DECIMALS = 3
-
-  val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
+  // Isolate from the plotting.
+  val tmpdir = "/mnt/TimeSeriesSpark-osmodel/spark-temp-plots/"
 
   /**
    * Main program entry point.
    */
   def main(args: Array[String]) {
-    var master = "local[1]"
+    var master = "local[16]"
     if (args != null && args.length >= 1) {
       master = args(0)
     }
