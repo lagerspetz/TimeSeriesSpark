@@ -40,12 +40,12 @@ object CaratDynamoNoRDDAnalysis {
   // How many clients do we need to consider data reliable?
   val ENOUGH_USERS = 5
 
-  lazy val scheduler = {
+  /*lazy val scheduler = {
     scala.util.Properties.setProp("actors.corePoolSize", CONCURRENT_PLOTS + "")
     val s = new ResizableThreadPoolScheduler(false)
     s.start()
     s
-  }
+  }*/
 
   var DEBUG = false
   val DECIMALS = 3
@@ -156,22 +156,18 @@ object CaratDynamoNoRDDAnalysis {
 
     for (os <- oses) {
       // can be done in parallel, independent of anything else
-      scheduler.execute({
         val fromOs = allRates.filter(_.os == os)
         val notFromOs = allRates.filter(_.os != os)
         // no distance check, not bug or hog
         val ret = plotDists("iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, null, null, null, 0, 0, null)
-      })
     }
 
     for (model <- models) {
       // can be done in parallel, independent of anything else
-      scheduler.execute({
         val fromModel = allRates.filter(_.model == model)
         val notFromModel = allRates.filter(_.model != model)
         // no distance check, not bug or hog
         val ret = plotDists(model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, null, null, null, 0, 0, null)
-      })
     }
 
     /** Calculate correlation for each model and os version with all rates */
@@ -183,7 +179,7 @@ object CaratDynamoNoRDDAnalysis {
 
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      scheduler.execute(oneApp(uuidArray, allRates, app, aPrioriDistribution, oses, models))
+      oneApp(uuidArray, allRates, app, aPrioriDistribution, oses, models)
     }
 
     /*val globalNonHogs = allApps -- allHogs
