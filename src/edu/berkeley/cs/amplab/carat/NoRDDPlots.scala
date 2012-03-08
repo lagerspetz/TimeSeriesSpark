@@ -69,9 +69,9 @@ object NoRDDPlots {
   val HOGS = "hogs"
   val SIM = "similarApps"
   val UUIDS = "uuIds"
-    
-  var plotDirectory:String = null
-    
+
+  var plotDirectory: String = null
+
   /**
    * Main program entry point.
    */
@@ -82,7 +82,7 @@ object NoRDDPlots {
     }
     if (args != null && args.length > 1)
       plotDirectory = args(1)
-    
+
     val start = DynamoAnalysisUtil.start()
 
     // turn off INFO logging for spark:
@@ -115,13 +115,13 @@ object NoRDDPlots {
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
   def analyzeRateData(inputRates: RDD[CaratRate]) = {
-    
+
     // make everything non-rdd from now on
     var allRates = inputRates.collect()
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
     uuidToOsAndModel ++= allRates.map(x => { (x.uuid, (x.os, x.model)) })
-    
+
     var uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
@@ -132,7 +132,7 @@ object NoRDDPlots {
     println("uuIds with data: " + uuidToOsAndModel.keySet.mkString(", "))
     println("oses with data: " + oses.mkString(", "))
     println("models with data: " + models.mkString(", "))
-    
+
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -142,6 +142,8 @@ object NoRDDPlots {
     var distsWithoutUuid = new TreeMap[String, Array[(Double, Double)]]
     /* xmax, ev, evNeg */
     var parametersByUuid = new TreeMap[String, (Double, Double, Double)]
+    /* avg samples and apps */
+    var totalsByUuid = new TreeMap[String, (Double, Double)]
     /* evDistances*/
     var evDistanceByUuid = new TreeMap[String, Double]
 
@@ -161,24 +163,59 @@ object NoRDDPlots {
     allApps --= DAEMONS_LIST_GLOBBED
     println("AllApps (no daemons): " + allApps)
 
-    for (os <- oses) {
+    /* uuid stuff */
+
+    for (i <- 0 until uuidArray.length) {
+      // these are independent until JScores.
+      val uuid = uuidArray(i)
+      val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
+      
+      var uuidApps = fromUuid.flatMap(_.allApps).toSet
+      uuidApps --= DAEMONS_LIST_GLOBBED
+      if (uuidApps.size > 0)
+        similarApps(allRates, aPrioriDistribution, i, uuidApps)
+      /* cache these because they will be used numberOfApps times */
+      val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
+      // no distance check, not bug or hog
+      val (xmax, probDist, probDistNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(fromUuid, notFromUuid, aPrioriDistribution)
+      if (probDist != null && probDistNeg != null) {
+        distsWithUuid += ((uuid, probDist))
+        distsWithoutUuid += ((uuid, probDistNeg))
+        parametersByUuid += ((uuid, (xmax, ev, evNeg)))
+        evDistanceByUuid += ((uuid, evDistance))
+      }
+      
+      /* avg apps: */
+      //val uApps = fromUuid.map(_.allApps.size)
+      //val avgApps = uApps.sum * 1.0 / uApps.length
+      val totalSamples = fromUuid.length * 1.0
+      totalsByUuid += ((uuid, (totalSamples, uuidApps.size)))
+      appsByUuid += ((uuid, uuidApps))
+    }
+    
+     for (os <- oses) {
       // can be done in parallel, independent of anything else
-        val fromOs = allRates.filter(_.os == os)
-        val notFromOs = allRates.filter(_.os != os)
-        // no distance check, not bug or hog
-        val ret = plotDists("iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, null, null, null, 0, 0, null)
+      val fromOs = allRates.filter(_.os == os)
+      val notFromOs = allRates.filter(_.os != os)
+      // no distance check, not bug or hog
+      val ret = plotDists("iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
     }
 
     for (model <- models) {
       // can be done in parallel, independent of anything else
-        val fromModel = allRates.filter(_.model == model)
-        val notFromModel = allRates.filter(_.model != model)
-        // no distance check, not bug or hog
-        val ret = plotDists(model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, null, null, null, 0, 0, null)
+      val fromModel = allRates.filter(_.model == model)
+      val notFromModel = allRates.filter(_.model != model)
+      // no distance check, not bug or hog
+      val ret = plotDists(model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
     }
 
     /** Calculate correlation for each model and os version with all rates */
-    val (osCorrelations, modelCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses)
+    val (osCorrelations, modelCorrelations, userCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
+    
+
+    // need to collect uuid stuff here:
+    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
+    writeCorrelationFile("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0)
 
     //scheduler.execute({
     //var allHogs = new HashSet[String]
@@ -186,50 +223,6 @@ object NoRDDPlots {
 
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      oneApp(uuidArray, allRates, app, aPrioriDistribution, oses, models)
-    }
-
-    /*val globalNonHogs = allApps -- allHogs
-    println("Non-daemon non-hogs: " + globalNonHogs)
-    println("All hogs: " + allHogs)
-    println("All bugs: " + allBugs)*/
-    //})
-
-    /* uuid stuff */
-
-    for (i <- 0 until uuidArray.length) {
-      // these are independent until JScores.
-        val uuid = uuidArray(i)
-        val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
-
-        var uuidApps = fromUuid.flatMap(_.allApps).toSet
-        uuidApps --= DAEMONS_LIST_GLOBBED
-
-        if (uuidApps.size > 0)
-          similarApps(allRates, aPrioriDistribution, i, uuidApps)
-        /* cache these because they will be used numberOfApps times */
-        val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
-        // no distance check, not bug or hog
-        val (xmax, probDist, probDistNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(fromUuid, notFromUuid, aPrioriDistribution)
-        if (probDist != null && probDistNeg != null) {
-          distsWithUuid += ((uuid, probDist))
-          distsWithoutUuid += ((uuid, probDistNeg))
-          parametersByUuid += ((uuid, (xmax, ev, evNeg)))
-          evDistanceByUuid += ((uuid, evDistance))
-        }
-        appsByUuid += ((uuid, uuidApps))
-    }
-
-    // need to collect uuid stuff here:
-    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
-    writeCorrelationFile("All", osCorrelations, modelCorrelations, 0, 0)
-    //println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
-  }
-  
-  def oneApp(uuidArray:Array[String], allRates: Array[edu.berkeley.cs.amplab.carat.CaratRate], app: String,
-      aPrioriDistribution: scala.collection.immutable.HashMap[Double,Double],
-      oses: scala.collection.immutable.Set[String], models: scala.collection.immutable.Set[String]){
-    
       val filtered = allRates.filter(_.allApps.contains(app))
       val filteredNeg = allRates.filter(!_.allApps.contains(app))
 
@@ -241,7 +234,7 @@ object NoRDDPlots {
         val usersWithout = filteredNeg.map(_.uuid).toSet.size
         DynamoAnalysisUtil.finish(fCountStart, "clientCount")
         if (usersWithout >= ENOUGH_USERS) {
-          if (plotDists("Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, usersWith, usersWithout, null)) {
+          if (plotDists("Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
             // this is a hog
 
             //allHogs += app
@@ -252,14 +245,17 @@ object NoRDDPlots {
               /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
               val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
               val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-              
+
               var stuff = uuid
-              if (appFromUuid.length > 0){
-                val r = appFromUuid.first
-                stuff += "\n%s running %s".format(r.model,r.os)  
+              if (appFromUuid.length > 0) {
+                val r = appFromUuid.head
+                val (cxmax, cev, cevNeg) = parametersByUuid.getOrElse(uuid, (0.0, 0.0, 0.0))
+                val (totalSamples, totalApps) = totalsByUuid.getOrElse(uuid, (0.0, 0.0))
+                stuff += "\n%s running %s\nClient ev=%s total samples=%s apps=%s".format(
+                  r.model, r.os, cev, totalSamples, totalApps)
               }
               if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
-                filtered, oses, models, 0, 0, stuff)) {
+                filtered, oses, models, totalsByUuid, 0, 0, stuff)) {
                 //allBugs += app
               }
             }
@@ -270,11 +266,23 @@ object NoRDDPlots {
       } else {
         println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
       }
+    }
+
+    /*val globalNonHogs = allApps -- allHogs
+    println("Non-daemon non-hogs: " + globalNonHogs)
+    println("All hogs: " + allHogs)
+    println("All bugs: " + allBugs)*/
+    //})
+    //println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
   }
 
-  def correlation(name: String, rates: Array[CaratRate], aPriori: scala.collection.immutable.HashMap[Double,Double], models: Set[String], oses: Set[String]) = {
+  def correlation(name: String, rates: Array[CaratRate],
+      aPriori: scala.collection.immutable.HashMap[Double, Double],
+      models: Set[String], oses: Set[String],
+      totalsByUuid: TreeMap[String, (Double, Double)]) = {
     var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
     var osCorrelations = new scala.collection.immutable.HashMap[String, Double]
+    var userCorrelations = new scala.collection.immutable.HashMap[String, Double]
 
     val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).toMap)
     if (rateEvs != null) {
@@ -313,29 +321,59 @@ object NoRDDPlots {
         } else
           println("ERROR: zero stddev for %s: %s".format(os, rateOses.map(x => { (x._1.os, x._2) })))
       }
+      
+      {
+        val rateTotals = rates.map(x => {
+          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
+        }).toMap
+        val normSamples = ProbUtil.normalize(rateTotals.map(x => {(x._1, x._2._1)}))
+        if (normSamples != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * normSamples.getOrElse(x._1, 0.0)
+          }).sum
+          userCorrelations += (("Samples", corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format("Samples", rateTotals.map(x => { (x._1.uuid, x._2) })))
+      }
+      
+        {
+        val rateTotals = rates.map(x => {
+          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
+        }).toMap
+        val normApps = ProbUtil.normalize(rateTotals.map(x => {(x._1, x._2._2)}))
+        if (normApps != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * normApps.getOrElse(x._1, 0.0)
+          }).sum
+          userCorrelations += (("Apps", corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format("Apps", rateTotals.map(x => { (x._1.uuid, x._2) })))
+      }
 
       for (k <- modelCorrelations)
         println("%s and %s correlated with %s".format(name, k._1, k._2))
       for (k <- osCorrelations)
         println("%s and %s correlated with %s".format(name, k._1, k._2))
+        for (k <- userCorrelations)
+          println("%s and %s correlated with %s".format(name, k._1, k._2))
     } else
       println("ERROR: Rates had a zero stddev, something is wrong!")
 
-    (osCorrelations, modelCorrelations)
+    (osCorrelations, modelCorrelations, userCorrelations)
   }
 
   /**
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: Array[CaratRate], aPrioriDistribution: scala.collection.immutable.HashMap[Double,Double], i: Int, uuidApps: Set[String]) {
+  def similarApps(all: Array[CaratRate], aPrioriDistribution: scala.collection.immutable.HashMap[Double, Double], i: Int, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    plotDists("Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, null, null, null, 0, 0, null)
+    plotDists("Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
   }
 
   /* Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -345,8 +383,8 @@ object NoRDDPlots {
    */
 
   def plotDists(title: String, titleNeg: String,
-    one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: scala.collection.immutable.HashMap[Double,Double], isBugOrHog: Boolean,
-    filtered: Array[CaratRate], oses: Set[String], models: Set[String], usersWith: Int, usersWithout: Int, uuid: String) = {
+    one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: scala.collection.immutable.HashMap[Double, Double], isBugOrHog: Boolean,
+    filtered: Array[CaratRate], oses: Set[String], models: Set[String], totalsByUuid: TreeMap[String, (Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
     var hasSamples = one.length > 0 && two.length > 0
     if (hasSamples) {
       val (xmax, probDist, probDistNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ ) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(one, two, aPrioriDistribution)
@@ -358,10 +396,10 @@ object NoRDDPlots {
           printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
         }
         if (isBugOrHog && filtered != null) {
-          val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
-          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
+          val (osCorrelations, modelCorrelations, userCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
+          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid)
         } else
-          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, usersWith, usersWithout, uuid)
+          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid)
       } else {
         printf("Not %s evWith=%s evWithout=%s evDistance=%s (%s vs %s users) %s\n", title, ev, evNeg, evDistance, usersWith, usersWithout, uuid)
       }
@@ -369,14 +407,16 @@ object NoRDDPlots {
     } else
       false
   }
-  
-    def plot(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+
+  def plot(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
+    userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String,
     apps: Seq[String] = null) {
     plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
+        userCorrelations,
       usersWith, usersWithout, uuid, apps)
   }
 
@@ -413,7 +453,7 @@ object NoRDDPlots {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-          plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, null, null, 0, 0, k, apps.toSeq)
+        plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, null, null, null, 0, 0, k, apps.toSeq)
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
@@ -423,6 +463,7 @@ object NoRDDPlots {
     distWithout: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
+    userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String,
     apps: Seq[String] = null) {
 
@@ -435,13 +476,13 @@ object NoRDDPlots {
     val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, DECIMALS + 1) + ")"
     val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, DECIMALS + 1) + ")"
     println("Plotting %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
-        title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
+      title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
     plotFile(dateString, title, evTitle, evTitleNeg, xmax)
     writeData(dateString, evTitle, distWith)
     writeData(dateString, evTitleNeg, distWithout)
-    if (osCorrelations != null){
-      var stuff = uuid +"\nevWith=%s\nevWithout=%s".format(ev,evNeg) 
-      writeCorrelationFile(title, osCorrelations, modelCorrelations, usersWith, usersWithout, stuff)
+    if (osCorrelations != null) {
+      var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
+      writeCorrelationFile(title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
     }
     plotData(dateString, title)
   }
@@ -528,6 +569,7 @@ object NoRDDPlots {
   def writeCorrelationFile(name: String,
     osCorrelations: Map[String, Double],
     modelCorrelations: Map[String, Double],
+    userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String = null) {
     val path = plotDirectory + "/" + assignSubDir(name) + name + "-correlation.txt"
 
@@ -542,7 +584,7 @@ object NoRDDPlots {
       datafile.write("UUID: %s\n".format(uuid))
     }
 
-    if (modelCorrelations.size > 0 || osCorrelations.size > 0) {
+    if (modelCorrelations.size > 0 || osCorrelations.size > 0 || userCorrelations.size > 0) {
       if (datafile == null) datafile = new java.io.FileWriter(path)
       if (osCorrelations.size > 0) {
         val arr = osCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
@@ -556,6 +598,14 @@ object NoRDDPlots {
         val mArr = modelCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
         datafile.write("Correlation with device models:\n")
         for (k <- mArr) {
+          datafile.write(k._2 + " " + k._1 + "\n")
+        }
+      }
+      
+      if (userCorrelations.size > 0) {
+        val uArr = userCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
+        datafile.write("Correlation with:\n")
+        for (k <- uArr) {
           datafile.write(k._2 + " " + k._1 + "\n")
         }
       }
