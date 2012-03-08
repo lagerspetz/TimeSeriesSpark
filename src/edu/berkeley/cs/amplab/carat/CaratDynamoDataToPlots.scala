@@ -581,7 +581,7 @@ object CaratDynamoDataToPlots {
         uuidApps --= DAEMONS_LIST_GLOBBED
 
         if (uuidApps.size > 0)
-          similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
+          similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, uuid, plotDirectory)
         /* cache these because they will be used numberOfApps times */
         val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
         // no distance check, not bug or hog
@@ -668,14 +668,14 @@ object CaratDynamoDataToPlots {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(sem: Semaphore, sc: SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], i: Int, uuidApps: Set[String], plotDirectory: String) {
+  def similarApps(sem: Semaphore, sc: SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], i: Int, uuidApps: Set[String], uuid:String, plotDirectory: String) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    plotDists(sem, sc, "Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0, null)
+    plotDists(sem, sc, "Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0, uuid)
   }
 
   /* Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -777,7 +777,7 @@ object CaratDynamoDataToPlots {
     distWithout: RDD[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String = null,
+    usersWith: Int, usersWithout: Int, uuid: String,
     apps: Seq[String] = null) {
 
     var fixedTitle = title

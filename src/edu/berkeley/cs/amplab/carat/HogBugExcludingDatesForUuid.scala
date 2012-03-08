@@ -221,8 +221,9 @@ object HogBugExcludingDatesForUuid {
         // Add all of uuid2's samples (test device)
         //if (x.uuid == givenUuid2)
         //  bad = true
-        if (x.uuid == givenUuid1 && ((k._1 < x.time1 && x.time1 < k._2) ||
-          (k._1 < x.time2 && x.time2 < k._2)))
+        if (x.uuid == givenUuid1 &&
+            (k._1 < x.time1 && x.time1 < k._2) &&
+          (k._1 < x.time2 && x.time2 < k._2))
           bad = true
         bad && x.allApps.contains(appName)
       })
@@ -252,24 +253,6 @@ object HogBugExcludingDatesForUuid {
             plotDists(sc, "Bug " + appName + " running on client " + i1 + "(%s to %s)".format(timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
           }
         }
-        {
-          val appNotFromUuid = filtered.filter(_.uuid != givenUuid2).cache()
-          // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
-          for (k <- 0 until buggyArr.length) {
-            val appFromUuid = buggyArr(k)
-            val timePeriod = excludedTimeRanges(k)
-            plotDists(sc, "Bug " + appName + " running on client " + i2 + "(%s to %s)".format(timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
-          }
-        }
-         {
-          val appNotFromUuid = filtered.filter(x => {x.uuid != givenUuid2 && x.uuid != givenUuid1}).cache()
-          // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
-          for (k <- 0 until buggyArr.length) {
-            val appFromUuid = buggyArr(k)
-            val timePeriod = excludedTimeRanges(k)
-            plotDists(sc, "Bug " + appName + " running on clients %s and %s (%s to %s)".format(i1,i2,timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
-          }
-        }
         }
       } else {
         {
@@ -279,24 +262,6 @@ object HogBugExcludingDatesForUuid {
             val appFromUuid = buggyArr(k)
             val timePeriod = excludedTimeRanges(k)
             plotDists(sc, "Bug " + appName + " running on client " + i1 + "(%s to %s)".format(timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
-          }
-        }
-        {
-          val appNotFromUuid = filtered.filter(_.uuid != givenUuid2).cache()
-          // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
-          for (k <- 0 until buggyArr.length) {
-            val appFromUuid = buggyArr(k)
-            val timePeriod = excludedTimeRanges(k)
-            plotDists(sc, "Bug " + appName + " running on client " + i2 + "(%s to %s)".format(timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
-          }
-        }
-        {
-          val appNotFromUuid = filtered.filter(x => {x.uuid != givenUuid2 && x.uuid != givenUuid1}).cache()
-          // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
-          for (k <- 0 until buggyArr.length) {
-            val appFromUuid = buggyArr(k)
-            val timePeriod = excludedTimeRanges(k)
-            plotDists(sc, "Bug " + appName + " running on clients %s and %s (%s to %s)".format(i1,i2,timePeriod._1, timePeriod._2), appName + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, plotDirectory, true)
           }
         }
       }
