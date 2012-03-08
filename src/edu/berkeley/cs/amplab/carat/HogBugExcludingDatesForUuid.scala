@@ -230,8 +230,17 @@ object HogBugExcludingDatesForUuid {
       
     // sanity check buggy samples
       println("Buggy samples:")
+      var idx = 0
     for (k <- buggyArr){
-      println(k.map(_.rate).collect())
+      idx+=1
+      println("Day "+idx)
+      val rates = k.map(x => {
+        if (x.isRateRange())
+        (x.rateRange.toString())
+        else
+          x.rate.toString()
+      }).collect()
+      println(rates.mkString("\n"))
     }
 
     val filtered = excluded.filter(_.allApps.contains(appName)).cache()
@@ -246,6 +255,14 @@ object HogBugExcludingDatesForUuid {
         if (anyway){
           {
           val appNotFromUuid = filtered.filter(_.uuid != givenUuid1).cache()
+          println("Reference samples:")
+          val refrates = appNotFromUuid.map(x => {
+            if (x.isRateRange())
+              (x.rateRange.toString())
+            else
+              x.rate.toString()
+          }).collect()
+          println(refrates.mkString("\n"))
           // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
           for (k <- 0 until buggyArr.length) {
             val appFromUuid = buggyArr(k)
@@ -257,6 +274,14 @@ object HogBugExcludingDatesForUuid {
       } else {
         {
           val appNotFromUuid = filtered.filter(_.uuid != givenUuid1).cache()
+          println("Reference samples:")
+          val refrates = appNotFromUuid.map(x => {
+            if (x.isRateRange())
+              (x.rateRange.toString())
+            else
+              x.rate.toString()
+          }).collect()
+          println(refrates.mkString("\n"))
           // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
           for (k <- 0 until buggyArr.length) {
             val appFromUuid = buggyArr(k)
@@ -275,7 +300,19 @@ object HogBugExcludingDatesForUuid {
 
   def plotDists(sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], plotDirectory:String, isBugOrHog: Boolean) = {
-    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributions(sc, one, two, aPrioriDistribution, buckets, smallestBucket, DECIMALS, DEBUG)
+    val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(sc, one, two, aPrioriDistribution)
+    
+    println("Bug distribution:")
+    val bug = bucketed.collect()
+    for (k <- bug){
+      println(k._1 + " " + k._2)
+    }
+    
+    println("Reference distribution:")
+    val ref = bucketedNeg.collect()
+    for (k <- ref){
+      println(k._1 + " " + k._2)
+    }
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {
       plot(title, titleNeg, xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, plotDirectory)
     }else
@@ -284,8 +321,8 @@ object HogBugExcludingDatesForUuid {
   }
 
 
-  def plot(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
-    distWithout: RDD[(Int, Double)],
+  def plot(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Double, Double)],
+    distWithout: RDD[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     plotDirectory:String,
     apps: Seq[String] = null) {
@@ -293,8 +330,8 @@ object HogBugExcludingDatesForUuid {
       plotDirectory, apps)
   }
 
-  def plotSerial(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Int, Double)],
-    distWithout: RDD[(Int, Double)],
+  def plotSerial(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Double, Double)],
+    distWithout: RDD[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, plotDirectory:String,
     apps: Seq[String] = null) {
     var fixedTitle = title
@@ -307,8 +344,8 @@ object HogBugExcludingDatesForUuid {
     val evTitleNeg = titleNeg + " (EV=" + evNeg + ")"
     printf("Plotting %s vs %s, distance=%s\n", evTitle, evTitleNeg, evDistance)
     plotFile(dateString, title, evTitle, evTitleNeg, xmax, plotDirectory)
-    writeData(dateString, evTitle, distWith, xmax)
-    writeData(dateString, evTitleNeg, distWithout, xmax)
+    writeData(dateString, evTitle, distWith)
+    writeData(dateString, evTitleNeg, distWithout)
     plotData(dateString, title)
   }
 
@@ -373,8 +410,7 @@ object HogBugExcludingDatesForUuid {
     }
   }
 
-  def writeData(dir: String, name: String, dist: RDD[(Int, Double)], xmax: Double) {
-    val logbase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
+  def writeData(dir: String, name: String, dist: RDD[(Double, Double)]) {
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(ddir)
     if (!f.isDirectory() && !f.mkdirs())
@@ -382,21 +418,11 @@ object HogBugExcludingDatesForUuid {
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
 
-      val dataPairs = dist.map(x => {
-        val bucketStart = {
-          if (x._1 == 0)
-            0.0
-          else
-            xmax / (math.pow(logbase, buckets - x._1))
-        }
-        val bucketEnd = xmax / (math.pow(logbase, buckets - x._1 - 1))
+      val dataPairs = dist.collect().sortWith((x, y) => {
+        x._1 < y._1
+      })
 
-        ((bucketStart + bucketEnd) / 2, x._2)
-      }).collect()
-      var dataMap = new TreeMap[Double, Double]
-      dataMap ++= dataPairs
-
-      for (k <- dataMap)
+      for (k <- dataPairs)
         datafile.write(k._1 + " " + k._2 + "\n")
       datafile.close
     }
