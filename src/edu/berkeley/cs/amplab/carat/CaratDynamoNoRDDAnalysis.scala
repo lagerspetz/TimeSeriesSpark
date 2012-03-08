@@ -193,13 +193,9 @@ object CaratDynamoNoRDDAnalysis {
     //})
 
     /* uuid stuff */
-    val uuidSem = new Semaphore(CONCURRENT_PLOTS)
-    val bottleNeck = new Semaphore(1)
 
     for (i <- 0 until uuidArray.length) {
       // these are independent until JScores.
-      scheduler.execute({
-        uuidSem.acquireUninterruptibly()
         val uuid = uuidArray(i)
         val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
 
@@ -212,7 +208,6 @@ object CaratDynamoNoRDDAnalysis {
         val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
         // no distance check, not bug or hog
         val (xmax, probDist, probDistNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(fromUuid, notFromUuid, aPrioriDistribution)
-        bottleNeck.acquireUninterruptibly()
         if (probDist != null && probDistNeg != null) {
           distsWithUuid += ((uuid, probDist))
           distsWithoutUuid += ((uuid, probDistNeg))
@@ -220,14 +215,9 @@ object CaratDynamoNoRDDAnalysis {
           evDistanceByUuid += ((uuid, evDistance))
         }
         appsByUuid += ((uuid, uuidApps))
-        bottleNeck.release()
-        uuidSem.release()
-      })
     }
 
     // need to collect uuid stuff here:
-    uuidSem.acquireUninterruptibly(CONCURRENT_PLOTS)
-    uuidSem.release(CONCURRENT_PLOTS)
     plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
 
     println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
