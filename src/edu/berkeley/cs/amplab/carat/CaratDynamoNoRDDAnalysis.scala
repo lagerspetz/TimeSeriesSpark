@@ -217,7 +217,7 @@ object CaratDynamoNoRDDAnalysis {
     }
 
     // need to collect uuid stuff here:
-    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
+    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel)
 
     println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
   }
@@ -248,8 +248,13 @@ object CaratDynamoNoRDDAnalysis {
               /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
               val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
               val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+               var stuff = uuid
+              if (appFromUuid.length > 0){
+                val r = appFromUuid.first
+                stuff += " %s running %s".format(r.model,r.os)  
+              }
               if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
-                filtered, oses, models, 0, 0, uuid)) {
+                filtered, oses, models, 0, 0, stuff)) {
                 //allBugs += app
               }
             }
@@ -390,7 +395,8 @@ object CaratDynamoNoRDDAnalysis {
     distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, Set[String]]) {
+    appsByUuid: TreeMap[String, Set[String]],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)]) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
@@ -411,9 +417,10 @@ object CaratDynamoNoRDDAnalysis {
       val distWith = distsWithUuid.get(k).getOrElse(null)
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
-      if (distWith != null && distWithout != null && apps != null)
-        println("Calculated Profile for %s xmax=%s ev=%s evWithout=%s jscore=%s apps=%s".format(k, xmax, ev, evNeg, jscore, apps.size))
-      else
+      if (distWith != null && distWithout != null && apps != null){
+        val (os, model) = uuidToOsAndModel.getOrElse(k, ("", ""))
+        println("Calculated Profile for %s %s running %s xmax=%s ev=%s evWithout=%s jscore=%s apps=%s".format(k, model, os, xmax, ev, evNeg, jscore, apps.size))
+      }else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
   }

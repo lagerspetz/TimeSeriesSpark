@@ -252,8 +252,14 @@ object NoRDDPlots {
               /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
               val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
               val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+              
+              var stuff = uuid
+              if (appFromUuid.length > 0){
+                val r = appFromUuid.first
+                stuff += " %s running %s".format(r.model,r.os)  
+              }
               if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
-                filtered, oses, models, 0, 0, uuid)) {
+                filtered, oses, models, 0, 0, stuff)) {
                 //allBugs += app
               }
             }
@@ -341,17 +347,7 @@ object NoRDDPlots {
   def plotDists(title: String, titleNeg: String,
     one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: scala.collection.immutable.HashMap[Double,Double], isBugOrHog: Boolean,
     filtered: Array[CaratRate], oses: Set[String], models: Set[String], usersWith: Int, usersWithout: Int, uuid: String) = {
-    var hasSamples = true
-    if (usersWith == 0 && usersWithout == 0) {
-      hasSamples = one.take(1) match {
-        case Array(t) => true
-        case _ => false
-      }
-      hasSamples = two.take(1) match {
-        case Array(t) => hasSamples && true
-        case _ => false
-      }
-    }
+    var hasSamples = one.length > 0 && two.length > 0
     if (hasSamples) {
       val (xmax, probDist, probDistNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ ) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(one, two, aPrioriDistribution)
       if (probDist != null && probDistNeg != null && (!isBugOrHog || evDistance > 0)) {
