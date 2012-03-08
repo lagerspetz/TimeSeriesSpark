@@ -261,6 +261,8 @@ object NoRDDPlots {
               if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
                 filtered, oses, models, 0, 0, stuff)) {
                 //allBugs += app
+              }else{
+                println("NotBug " + app + " running on client " + i+ " " + stuff)
               }
             }
           }
