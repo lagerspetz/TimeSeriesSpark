@@ -24,7 +24,7 @@ object PlotAndMakeAvailable extends App {
     master = args(0)
   }
   
-  val plotDir = CaratDynamoDataToPlots.plotEverything(master, true, plotwww)
+  val plotDir = NoRDDPlots.main(Array(master, plotwww))
   // /mnt/www/treethumbnailer.sh /mnt/www/plots
 
   val temp = Runtime.getRuntime().exec(Array("/bin/bash", "/mnt/www/treethumbnailer.sh", plotwww))
