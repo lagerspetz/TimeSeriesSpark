@@ -87,7 +87,7 @@ object CaratDynamoAnalysisOnly {
     val allRates = CaratDynamoDataToPlots.getRates(sc)
     if (allRates != null) {
       // analyze data
-      analyzeRateData(sc, allRates, null)
+      analyzeRateData(sc, allRates)
       // do not save rates in this version.
     }
     DynamoAnalysisUtil.finish(start)
@@ -96,7 +96,7 @@ object CaratDynamoAnalysisOnly {
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
-  def analyzeRateData(sc: SparkContext, inputRates: RDD[CaratRate], plotDirectory: String) = {
+  def analyzeRateData(sc: SparkContext, inputRates: RDD[CaratRate]) = {
     var allRates = inputRates
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
@@ -124,8 +124,7 @@ object CaratDynamoAnalysisOnly {
     println("uuIds with data: " + uuidToOsAndModel.keySet.mkString(", "))
     println("oses with data: " + oses.mkString(", "))
     println("models with data: " + models.mkString(", "))
-
-    val sem = new Semaphore(CONCURRENT_PLOTS)
+    
     /**
      * uuid distributions, xmax, ev and evNeg
      * FIXME: With many users, this is a lot of data to keep in memory.
@@ -160,7 +159,7 @@ object CaratDynamoAnalysisOnly {
         val fromOs = allRates.filter(_.os == os)
         val notFromOs = allRates.filter(_.os != os)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0, null)
+        val ret = plotDists(sc, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, null, null, null, 0, 0, null)
       })
     }
 
@@ -170,7 +169,7 @@ object CaratDynamoAnalysisOnly {
         val fromModel = allRates.filter(_.model == model)
         val notFromModel = allRates.filter(_.model != model)
         // no distance check, not bug or hog
-        val ret = plotDists(sem, sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0, null)
+        val ret = plotDists(sc, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, null, null, null, 0, 0, null)
       })
     }
 
@@ -178,51 +177,18 @@ object CaratDynamoAnalysisOnly {
     val (osCorrelations, modelCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses)
 
     //scheduler.execute({
-    var allHogs = new HashSet[String]
-    var allBugs = new HashSet[String]
+    //var allHogs = new HashSet[String]
+    //var allBugs = new HashSet[String]
 
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app)).cache()
-      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
-
-      // skip if counts are too low:
-      val fCountStart = DynamoAnalysisUtil.start
-      val usersWith = filtered.map(_.uuid).collect().toSet.size
-
-      if (usersWith >= ENOUGH_USERS) {
-        val usersWithout = filteredNeg.map(_.uuid).collect().toSet.size
-        DynamoAnalysisUtil.finish(fCountStart, "clientCount")
-        if (usersWithout >= ENOUGH_USERS) {
-          if (plotDists(sem, sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, plotDirectory, filtered, oses, models, usersWith, usersWithout, null)) {
-            // this is a hog
-
-            allHogs += app
-          } else {
-            // not a hog. is it a bug for anyone?
-            for (i <- 0 until uuidArray.length) {
-              val uuid = uuidArray(i)
-              /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-              val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
-              val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-              if (plotDists(sem, sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true, plotDirectory,
-                filtered, oses, models, 0, 0, uuid)) {
-                allBugs += app
-              }
-            }
-          }
-        } else {
-          println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
-        }
-      } else {
-        println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
-      }
+      scheduler.execute(oneApp(sc, uuidArray, allRates, app, aPrioriDistribution, oses, models))
     }
 
-    val globalNonHogs = allApps -- allHogs
+    /*val globalNonHogs = allApps -- allHogs
     println("Non-daemon non-hogs: " + globalNonHogs)
     println("All hogs: " + allHogs)
-    println("All bugs: " + allBugs)
+    println("All bugs: " + allBugs)*/
     //})
 
     /* uuid stuff */
@@ -240,7 +206,7 @@ object CaratDynamoAnalysisOnly {
         uuidApps --= DAEMONS_LIST_GLOBBED
 
         if (uuidApps.size > 0)
-          similarApps(sem, sc, allRates, aPrioriDistribution, i, uuidApps, plotDirectory)
+          similarApps(sc, allRates, aPrioriDistribution, i, uuidApps)
         /* cache these because they will be used numberOfApps times */
         val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
         // no distance check, not bug or hog
@@ -261,12 +227,48 @@ object CaratDynamoAnalysisOnly {
     // need to collect uuid stuff here:
     uuidSem.acquireUninterruptibly(CONCURRENT_PLOTS)
     uuidSem.release(CONCURRENT_PLOTS)
-    plotJScores(sem, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, plotDirectory)
+    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
 
     println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
-    // not allowed to return before everything is done
-    sem.acquireUninterruptibly(CONCURRENT_PLOTS)
-    sem.release(CONCURRENT_PLOTS)
+  }
+  
+  def oneApp(sc:SparkContext, uuidArray:Array[String], allRates: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate], app: String, aPrioriDistribution: Array[(Double, Double)],
+      oses: scala.collection.immutable.Set[String], models: scala.collection.immutable.Set[String]){
+    
+      val filtered = allRates.filter(_.allApps.contains(app)).cache()
+      val filteredNeg = allRates.filter(!_.allApps.contains(app)).cache()
+
+      // skip if counts are too low:
+      val fCountStart = DynamoAnalysisUtil.start
+      val usersWith = filtered.map(_.uuid).collect().toSet.size
+
+      if (usersWith >= ENOUGH_USERS) {
+        val usersWithout = filteredNeg.map(_.uuid).collect().toSet.size
+        DynamoAnalysisUtil.finish(fCountStart, "clientCount")
+        if (usersWithout >= ENOUGH_USERS) {
+          if (plotDists(sc, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, usersWith, usersWithout, null)) {
+            // this is a hog
+
+            //allHogs += app
+          } else {
+            // not a hog. is it a bug for anyone?
+            for (i <- 0 until uuidArray.length) {
+              val uuid = uuidArray(i)
+              /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+              val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+              val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+              if (plotDists(sc, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
+                filtered, oses, models, 0, 0, uuid)) {
+                //allBugs += app
+              }
+            }
+          }
+        } else {
+          println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
+        }
+      } else {
+        println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
+      }
   }
 
   def correlation(name: String, rates: RDD[CaratRate], aPriori: Array[(Double, Double)], models: Set[String], oses: Set[String]) = {
@@ -325,14 +327,14 @@ object CaratDynamoAnalysisOnly {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(sem: Semaphore, sc: SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], i: Int, uuidApps: Set[String], plotDirectory: String) {
+  def similarApps(sc: SparkContext, all: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], i: Int, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    plotDists(sem, sc, "Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, plotDirectory, null, null, null, 0, 0, null)
+    plotDists(sc, "Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, null, null, null, 0, 0, null)
   }
 
   /* Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -341,8 +343,8 @@ object CaratDynamoAnalysisOnly {
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
 
-  def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
-    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, plotDirectory: String,
+  def plotDists(sc: SparkContext, title: String, titleNeg: String,
+    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean,
     filtered: RDD[CaratRate], oses: Set[String], models: Set[String], usersWith: Int, usersWithout: Int, uuid: String) = {
     var hasSamples = true
     if (usersWith == 0 && usersWithout == 0) {
@@ -368,18 +370,18 @@ object CaratDynamoAnalysisOnly {
         }
         if (isBugOrHog && filtered != null) {
           val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
-          plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
+          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
         } else
-          plot(sem, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, plotDirectory, null, null, usersWith, usersWithout, uuid)
+          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, usersWith, usersWithout, uuid)
       }
       isBugOrHog && evDistance > 0
     } else
       false
   }
 
-  def plot(sem: Semaphore, title: String, titleNeg: String, xmax: Double, distWith: RDD[(Double, Double)],
+  def plot(title: String, titleNeg: String, xmax: Double, distWith: RDD[(Double, Double)],
     distWithout: RDD[(Double, Double)],
-    ev: Double, evNeg: Double, evDistance: Double, plotDirectory: String,
+    ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String) {
     println("Calculated %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
@@ -393,11 +395,11 @@ object CaratDynamoAnalysisOnly {
    * Note that the server side multiplies the JScore by 100, and we store it here
    * as a fraction.
    */
-  def plotJScores(sem: Semaphore, distsWithUuid: TreeMap[String, RDD[(Double, Double)]],
+  def plotJScores(distsWithUuid: TreeMap[String, RDD[(Double, Double)]],
     distsWithoutUuid: TreeMap[String, RDD[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, Set[String]], plotDirectory: String) {
+    appsByUuid: TreeMap[String, Set[String]]) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {

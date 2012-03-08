@@ -1,4 +1,4 @@
-#![$2] += $NF }
+##!/usr/bin/awk -f
 $0 ~ "^Time edu.berkeley.cs.amplab.carat." {
   k = $2
   if ($0 ~ "^Time edu.berkeley.cs.amplab.carat.* from ")
