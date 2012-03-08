@@ -356,14 +356,14 @@ object NoRDDPlots {
           val imprD = (imprHr / 24.0).toInt
           imprHr -= imprD * 24.0
           printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
-        } else {
-          printf("Not %s evWith=%s evWithout=%s evDistance=%s (%s vs %s users) %s\n", title, ev, evNeg, evDistance, usersWith, usersWithout, uuid)
         }
         if (isBugOrHog && filtered != null) {
           val (osCorrelations, modelCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses)
           plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, usersWith, usersWithout, uuid)
         } else
           plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, usersWith, usersWithout, uuid)
+      } else {
+        printf("Not %s evWith=%s evWithout=%s evDistance=%s (%s vs %s users) %s\n", title, ev, evNeg, evDistance, usersWith, usersWithout, uuid)
       }
       isBugOrHog && evDistance > 0
     } else
