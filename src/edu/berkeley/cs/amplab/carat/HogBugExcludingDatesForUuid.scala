@@ -235,10 +235,10 @@ object HogBugExcludingDatesForUuid {
       idx+=1
       println("Day "+idx)
       val rates = k.map(x => {
-        if (x.isRateRange())
-        (x.rateRange.toString())
-        else
-          x.rate.toString()
+       if (x.isRateRange()){
+              "t1=%s t2=%s b1=%s b2=%s raterange=%s".format(x.time1, x.time2, x.batt1, x.batt2, x.rateRange.toString())
+            }else
+              "t1=%s t2=%s b1=%s b2=%s rate=%s".format(x.time1, x.time2, x.batt1, x.batt2, x.rate.toString())
       }).collect()
       println(rates.mkString("\n"))
     }
@@ -257,10 +257,10 @@ object HogBugExcludingDatesForUuid {
           val appNotFromUuid = filtered.filter(_.uuid != givenUuid1).cache()
           println("Reference samples:")
           val refrates = appNotFromUuid.map(x => {
-            if (x.isRateRange())
-              (x.rateRange.toString())
-            else
-              x.rate.toString()
+           if (x.isRateRange()){
+              "t1=%s t2=%s b1=%s b2=%s raterange=%s".format(x.time1, x.time2, x.batt1, x.batt2, x.rateRange.toString())
+            }else
+              "t1=%s t2=%s b1=%s b2=%s rate=%s".format(x.time1, x.time2, x.batt1, x.batt2, x.rate.toString())
           }).collect()
           println(refrates.mkString("\n"))
           // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
@@ -276,10 +276,10 @@ object HogBugExcludingDatesForUuid {
           val appNotFromUuid = filtered.filter(_.uuid != givenUuid1).cache()
           println("Reference samples:")
           val refrates = appNotFromUuid.map(x => {
-            if (x.isRateRange())
-              (x.rateRange.toString())
-            else
-              x.rate.toString()
+            if (x.isRateRange()){
+              "t1=%s t2=%s b1=%s b2=%s raterange=%s".format(x.time1, x.time2, x.batt1, x.batt2, x.rateRange.toString())
+            }else
+              "t1=%s t2=%s b1=%s b2=%s rate=%s".format(x.time1, x.time2, x.batt1, x.batt2, x.rate.toString())
           }).collect()
           println(refrates.mkString("\n"))
           // If it is not a hog, then generate a bug plot instead, but taking only the buggy data:
