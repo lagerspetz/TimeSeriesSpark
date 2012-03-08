@@ -256,7 +256,7 @@ object NoRDDPlots {
               var stuff = uuid
               if (appFromUuid.length > 0){
                 val r = appFromUuid.first
-                stuff += " %s running %s".format(r.model,r.os)  
+                stuff += "\n%s running %s".format(r.model,r.os)  
               }
               if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
                 filtered, oses, models, 0, 0, stuff)) {
