@@ -226,7 +226,10 @@ object NoRDDPlots {
       val filtered = allRates.filter(_.allApps.contains(app))
       val filteredNeg = allRates.filter(!_.allApps.contains(app))
 
-      // skip if counts are too low:
+      /* Consider only apps that have rates from ENOUGH_USERS client devices.
+       * Require that the reference distribution also have rates from ENOUGH_USERS client devices.
+       *  
+       */
       val fCountStart = DynamoAnalysisUtil.start
       val usersWith = filtered.map(_.uuid).toSet.size
 
@@ -245,6 +248,9 @@ object NoRDDPlots {
               /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
               val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
               val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+              /**
+               * TODO: Require BUG_REFERENCE client devices in the reference distribution.  
+               */
 
               var stuff = uuid
               if (appFromUuid.length > 0) {
@@ -507,7 +513,8 @@ object NoRDDPlots {
           plotfile.write("set term postscript eps enhanced color 'Helvetica' 32\nset xtics out\n" +
             "set size 1.93,1.1\n" +
             "set logscale x\n" +
-            "set xrange [0.0005:" + (xmax + 0.05) + "]\n" +
+            "set xrange [0.0005:" + (xmax + 0.001) + "]\n" +
+            "set xtics 0.0005,2," + (xmax + 0.001) + "\n" +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)

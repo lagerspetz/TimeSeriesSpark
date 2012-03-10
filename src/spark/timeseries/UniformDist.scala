@@ -85,10 +85,11 @@ class UniformDist(val from:Double, val to:Double) extends Ordered[UniformDist] w
    * @param timeEnd the end time, in seconds
    * 
    * @return a new UniformDist, that represents a range of battery drain from (x% to y%) / s.
-   * The range is from (batt1 - batt2) to (batt1 - batt2)+5% in (timeEnd - timeStart). 
+   * The range is from (batt1 - batt2)-5% (nonnegative) to (batt1 - batt2)+5% in (timeEnd - timeStart). 
    */
   def this(batt1:Double, batt2:Double, timeStart:Double, timeEnd:Double) = {
-    this((batt1 - batt2)*100.0/(timeEnd-timeStart), (batt1+0.05 - batt2)*100.0/(timeEnd-timeStart))
+    this(
+        math.max(((batt1 - 0.05) - batt2)*100.0/(timeEnd-timeStart), 0), (batt1 - (batt2 - 0.05))*100.0/(timeEnd-timeStart))
   }
   
   /**

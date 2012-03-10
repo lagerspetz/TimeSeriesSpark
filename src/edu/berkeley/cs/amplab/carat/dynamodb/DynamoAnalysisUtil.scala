@@ -415,21 +415,6 @@ object DynamoAnalysisUtil {
       ""
   }
 
-  /**
-   * Check rate for abnormally high drain in a short time. Return true if the rate is not abnormally high.
-   */
-  def considerRate(r: CaratRate, oldObs: ArrayBuffer[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
-    if (r.rate() > ABNORMAL_RATE) {
-      printf("Abandoning abnormally high rate " + r)
-      println("All observations included for the abnormally high rate: " + "(" + oldObs.size + ")")
-      for (j <- oldObs) {
-        printf("uuid=%s time=%s batt=%s event=%s trigger=%s\n", j._1, j._2, j._3, j._4, j._5)
-      }
-      false
-    } else
-      true
-  }
-
   def considerRate(r: CaratRate) = {
     if (r.isRateRange()) {
       true
