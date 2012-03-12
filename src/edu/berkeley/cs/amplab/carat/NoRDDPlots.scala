@@ -136,7 +136,7 @@ object NoRDDPlots {
       // these are independent until JScores.
       val uuid = uuidArray(i)
       val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
-      
+
       var uuidApps = fromUuid.flatMap(_.allApps).toSet
       uuidApps --= DAEMONS_LIST_GLOBBED
       if (uuidApps.size > 0)
@@ -151,7 +151,7 @@ object NoRDDPlots {
         parametersByUuid += ((uuid, (xmax, ev, evNeg)))
         evDistanceByUuid += ((uuid, evDistance))
       }
-      
+
       /* avg apps: */
       //val uApps = fromUuid.map(_.allApps.size)
       //val avgApps = uApps.sum * 1.0 / uApps.length
@@ -159,8 +159,8 @@ object NoRDDPlots {
       totalsByUuid += ((uuid, (totalSamples, uuidApps.size)))
       appsByUuid += ((uuid, uuidApps))
     }
-    
-     for (os <- oses) {
+
+    for (os <- oses) {
       // can be done in parallel, independent of anything else
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
@@ -177,8 +177,7 @@ object NoRDDPlots {
     }
 
     /** Calculate correlation for each model and os version with all rates */
-    val (osCorrelations, modelCorrelations, userCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
-    
+    val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
 
     // need to collect uuid stuff here:
     PlotUtil.plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, DECIMALS)
@@ -190,7 +189,7 @@ object NoRDDPlots {
 
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      oneApp(uuidArray, allRates, app,aPrioriDistribution, oses, models, parametersByUuid, totalsByUuid)
+      oneApp(uuidArray, allRates, app, aPrioriDistribution, oses, models, parametersByUuid, totalsByUuid)
     }
 
     /*val globalNonHogs = allApps -- allHogs
@@ -199,92 +198,6 @@ object NoRDDPlots {
     println("All bugs: " + allBugs)*/
     //})
     //println("Calculated global correlations: osCorrelations=%s modelCorrelations=%s".format(osCorrelations, modelCorrelations))
-  }
-
-  def correlation(name: String, rates: Array[CaratRate],
-      aPriori: scala.collection.immutable.HashMap[Double, Double],
-      models: Set[String], oses: Set[String],
-      totalsByUuid: TreeMap[String, (Double, Double)]) = {
-    var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
-    var osCorrelations = new scala.collection.immutable.HashMap[String, Double]
-    var userCorrelations = new scala.collection.immutable.HashMap[String, Double]
-
-    val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).toMap)
-    if (rateEvs != null) {
-      for (model <- models) {
-        /* correlation with this model */
-        val rateModels = rates.map(x => {
-          if (x.model == model)
-            (x, 1.0)
-          else
-            (x, 0.0)
-        }).toMap
-        val norm = ProbUtil.normalize(rateModels)
-        if (norm != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * norm.getOrElse(x._1, 0.0)
-          }).sum
-          modelCorrelations += ((model, corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format(model, rateModels.map(x => { (x._1.model, x._2) })))
-      }
-
-      for (os <- oses) {
-        /* correlation with this OS */
-        val rateOses = rates.map(x => {
-          if (x.os == os)
-            (x, 1.0)
-          else
-            (x, 0.0)
-        }).toMap
-        val norm = ProbUtil.normalize(rateOses)
-        if (norm != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * norm.getOrElse(x._1, 0.0)
-          }).sum
-          osCorrelations += ((os, corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format(os, rateOses.map(x => { (x._1.os, x._2) })))
-      }
-      
-      {
-        val rateTotals = rates.map(x => {
-          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
-        }).toMap
-        val normSamples = ProbUtil.normalize(rateTotals.map(x => {(x._1, x._2._1)}))
-        if (normSamples != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * normSamples.getOrElse(x._1, 0.0)
-          }).sum
-          userCorrelations += (("Samples", corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format("Samples", rateTotals.map(x => { (x._1.uuid, x._2) })))
-      }
-      
-        {
-        val rateTotals = rates.map(x => {
-          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
-        }).toMap
-        val normApps = ProbUtil.normalize(rateTotals.map(x => {(x._1, x._2._2)}))
-        if (normApps != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * normApps.getOrElse(x._1, 0.0)
-          }).sum
-          userCorrelations += (("Apps", corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format("Apps", rateTotals.map(x => { (x._1.uuid, x._2) })))
-      }
-
-      for (k <- modelCorrelations)
-        println("%s and %s correlated with %s".format(name, k._1, k._2))
-      for (k <- osCorrelations)
-        println("%s and %s correlated with %s".format(name, k._1, k._2))
-        for (k <- userCorrelations)
-          println("%s and %s correlated with %s".format(name, k._1, k._2))
-    } else
-      println("ERROR: Rates had a zero stddev, something is wrong!")
-
-    (osCorrelations, modelCorrelations, userCorrelations)
   }
 
   /**
@@ -321,7 +234,7 @@ object NoRDDPlots {
           printf("%s evWith=%s evWithout=%s evDistance=%s improvement=%s days %s hours (%s vs %s users)\n", title, ev, evNeg, evDistance, imprD, imprHr, usersWith, usersWithout)
         }
         if (isBugOrHog && filtered != null) {
-          val (osCorrelations, modelCorrelations, userCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
+          val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
           PlotUtil.plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid, DECIMALS)
         } else
           PlotUtil.plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid, DECIMALS)
@@ -332,60 +245,60 @@ object NoRDDPlots {
     } else
       false
   }
-  
-    def oneApp(uuidArray:Array[String], allRates: Array[edu.berkeley.cs.amplab.carat.CaratRate], app: String,
-      aPrioriDistribution: scala.collection.immutable.HashMap[Double,Double],
-      oses: scala.collection.immutable.Set[String], models: scala.collection.immutable.Set[String],
-      parametersByUuid: scala.collection.immutable.TreeMap[String,(Double, Double, Double)],
-      totalsByUuid: scala.collection.immutable.TreeMap[String,(Double, Double)]){
-      val filtered = allRates.filter(_.allApps.contains(app))
-      val filteredNeg = allRates.filter(!_.allApps.contains(app))
 
-      /* Consider only apps that have rates from ENOUGH_USERS client devices.
+  def oneApp(uuidArray: Array[String], allRates: Array[edu.berkeley.cs.amplab.carat.CaratRate], app: String,
+    aPrioriDistribution: scala.collection.immutable.HashMap[Double, Double],
+    oses: scala.collection.immutable.Set[String], models: scala.collection.immutable.Set[String],
+    parametersByUuid: scala.collection.immutable.TreeMap[String, (Double, Double, Double)],
+    totalsByUuid: scala.collection.immutable.TreeMap[String, (Double, Double)]) {
+    val filtered = allRates.filter(_.allApps.contains(app))
+    val filteredNeg = allRates.filter(!_.allApps.contains(app))
+
+    /* Consider only apps that have rates from ENOUGH_USERS client devices.
        * Require that the reference distribution also have rates from ENOUGH_USERS client devices.
        *  
        */
-      val fCountStart = DynamoAnalysisUtil.start
-      val usersWith = filtered.map(_.uuid).toSet.size
+    val fCountStart = DynamoAnalysisUtil.start
+    val usersWith = filtered.map(_.uuid).toSet.size
 
-      if (usersWith >= ENOUGH_USERS) {
-        val usersWithout = filteredNeg.map(_.uuid).toSet.size
-        DynamoAnalysisUtil.finish(fCountStart, "clientCount")
-        if (usersWithout >= ENOUGH_USERS) {
-          if (plotDists("Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
-            // this is a hog
+    if (usersWith >= ENOUGH_USERS) {
+      val usersWithout = filteredNeg.map(_.uuid).toSet.size
+      DynamoAnalysisUtil.finish(fCountStart, "clientCount")
+      if (usersWithout >= ENOUGH_USERS) {
+        if (plotDists("Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
+          // this is a hog
 
-            //allHogs += app
-          } else {
-            // not a hog. is it a bug for anyone?
-            for (i <- 0 until uuidArray.length) {
-              val uuid = uuidArray(i)
-              /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-              val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
-              val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-              /**
-               * TODO: Require BUG_REFERENCE client devices in the reference distribution.  
-               */
+          //allHogs += app
+        } else {
+          // not a hog. is it a bug for anyone?
+          for (i <- 0 until uuidArray.length) {
+            val uuid = uuidArray(i)
+            /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+            val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+            val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+            /**
+             * TODO: Require BUG_REFERENCE client devices in the reference distribution.
+             */
 
-              var stuff = uuid
-              if (appFromUuid.length > 0) {
-                val r = appFromUuid.head
-                val (cxmax, cev, cevNeg) = parametersByUuid.getOrElse(uuid, (0.0, 0.0, 0.0))
-                val (totalSamples, totalApps) = totalsByUuid.getOrElse(uuid, (0.0, 0.0))
-                stuff += "\n%s running %s\nClient ev=%s total samples=%s apps=%s".format(
-                  r.model, r.os, cev, totalSamples, totalApps)
-              }
-              if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
-                filtered, oses, models, totalsByUuid, 0, 0, stuff)) {
-                //allBugs += app
-              }
+            var stuff = uuid
+            if (appFromUuid.length > 0) {
+              val r = appFromUuid.head
+              val (cxmax, cev, cevNeg) = parametersByUuid.getOrElse(uuid, (0.0, 0.0, 0.0))
+              val (totalSamples, totalApps) = totalsByUuid.getOrElse(uuid, (0.0, 0.0))
+              stuff += "\n%s running %s\nClient ev=%s total samples=%s apps=%s".format(
+                r.model, r.os, cev, totalSamples, totalApps)
+            }
+            if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
+              filtered, oses, models, totalsByUuid, 0, 0, stuff)) {
+              //allBugs += app
             }
           }
-        } else {
-          println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
         }
       } else {
-        println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
+        println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
       }
+    } else {
+      println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
     }
+  }
 }

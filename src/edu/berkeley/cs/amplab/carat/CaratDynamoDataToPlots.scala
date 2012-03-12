@@ -604,9 +604,9 @@ object CaratDynamoDataToPlots {
     // need to collect uuid stuff here:
     uuidSem.acquireUninterruptibly(CONCURRENT_PLOTS)
     uuidSem.release(CONCURRENT_PLOTS)
-    
+
     /** Calculate correlation for each model and os version with all rates */
-    val (osCorrelations, modelCorrelations, userCorrelations) = correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
+    val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
     PlotUtil.plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, DECIMALS)
 
     PlotUtil.writeCorrelationFile("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0, null)
@@ -617,97 +617,11 @@ object CaratDynamoDataToPlots {
     dateString + "/" + PLOTS
   }
 
-    def correlation(name: String, rates: RDD[CaratRate],
-      aPriori: Map[Double, Double],
-      models: Set[String], oses: Set[String],
-      totalsByUuid: TreeMap[String, (Double, Double)]) = {
-    var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
-    var osCorrelations = new scala.collection.immutable.HashMap[String, Double]
-    var userCorrelations = new scala.collection.immutable.HashMap[String, Double]
-
-    val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).collectAsMap())
-    if (rateEvs != null) {
-      for (model <- models) {
-        /* correlation with this model */
-        val rateModels = rates.map(x => {
-          if (x.model == model)
-            (x, 1.0)
-          else
-            (x, 0.0)
-        }).collectAsMap()
-        val norm = ProbUtil.normalize(rateModels)
-        if (norm != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * norm.getOrElse(x._1, 0.0)
-          }).sum
-          modelCorrelations += ((model, corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format(model, rateModels.map(x => { (x._1.model, x._2) })))
-      }
-
-      for (os <- oses) {
-        /* correlation with this OS */
-        val rateOses = rates.map(x => {
-          if (x.os == os)
-            (x, 1.0)
-          else
-            (x, 0.0)
-        }).collectAsMap()
-        val norm = ProbUtil.normalize(rateOses)
-        if (norm != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * norm.getOrElse(x._1, 0.0)
-          }).sum
-          osCorrelations += ((os, corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format(os, rateOses.map(x => { (x._1.os, x._2) })))
-      }
-      
-      {
-        val rateTotals = rates.map(x => {
-          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
-        }).collectAsMap()
-        val normSamples = ProbUtil.normalize(rateTotals.map(x => {(x._1, x._2._1)}))
-        if (normSamples != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * normSamples.getOrElse(x._1, 0.0)
-          }).sum
-          userCorrelations += (("Samples", corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format("Samples", rateTotals.map(x => { (x._1.uuid, x._2) })))
-      }
-      
-        {
-        val rateTotals = rates.map(x => {
-          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
-        }).collectAsMap()
-        val normApps = ProbUtil.normalize(rateTotals.map(x => {(x._1, x._2._2)}))
-        if (normApps != null) {
-          val corr = rateEvs.map(x => {
-            x._2 * normApps.getOrElse(x._1, 0.0)
-          }).sum
-          userCorrelations += (("Apps", corr))
-        } else
-          println("ERROR: zero stddev for %s: %s".format("Apps", rateTotals.map(x => { (x._1.uuid, x._2) })))
-      }
-
-      for (k <- modelCorrelations)
-        println("%s and %s correlated with %s".format(name, k._1, k._2))
-      for (k <- osCorrelations)
-        println("%s and %s correlated with %s".format(name, k._1, k._2))
-        for (k <- userCorrelations)
-          println("%s and %s correlated with %s".format(name, k._1, k._2))
-    } else
-      println("ERROR: Rates had a zero stddev, something is wrong!")
-
-    (osCorrelations, modelCorrelations, userCorrelations)
-  }
-
   /**
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(sem: Semaphore, sc: SparkContext, all: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], i: Int, uuidApps: Set[String], uuid:String, plotDirectory: String) {
+  def similarApps(sem: Semaphore, sc: SparkContext, all: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], i: Int, uuidApps: Set[String], uuid: String, plotDirectory: String) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -725,7 +639,7 @@ object CaratDynamoDataToPlots {
 
   def plotDists(sem: Semaphore, sc: SparkContext, title: String, titleNeg: String,
     one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], isBugOrHog: Boolean, plotDirectory: String,
-        filtered: RDD[CaratRate], oses: Set[String], models: Set[String], totalsByUuid: TreeMap[String, (Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
+    filtered: RDD[CaratRate], oses: Set[String], models: Set[String], totalsByUuid: TreeMap[String, (Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
     var hasSamples = true
     if (usersWith == 0 && usersWithout == 0) {
       hasSamples = one.take(1) match {
@@ -750,7 +664,7 @@ object CaratDynamoDataToPlots {
         }
         scheduler.execute(
           if (isBugOrHog && filtered != null) {
-            val (osCorrelations, modelCorrelations, userCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
+            val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
             PlotUtil.plot(title, titleNeg, xmax, probDist.collect(), probDistNeg.collect(), ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid, DECIMALS)
           } else
             PlotUtil.plot(title, titleNeg, xmax, probDist.collect(), probDistNeg.collect(), ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid, DECIMALS))

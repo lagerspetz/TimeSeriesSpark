@@ -23,6 +23,7 @@ import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
 import scala.actors.scheduler.ResizableThreadPoolScheduler
 import scala.collection.mutable.HashMap
 import com.esotericsoftware.kryo.Kryo
+import edu.berkeley.cs.amplab.carat.CaratRate
 
 /**
  * Do the exact same thing as in CaratDynamoDataToPlots, but do not collect() and write plot files and run plotting in the end.
@@ -57,10 +58,10 @@ object PlotUtil {
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
     userCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String, decimals:Int,
+    usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
     apps: Seq[String] = null) {
     plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
-        userCorrelations,
+      userCorrelations,
       usersWith, usersWithout, uuid, decimals, apps)
   }
 
@@ -75,7 +76,7 @@ object PlotUtil {
     distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, Set[String]], decimals:Int) {
+    appsByUuid: TreeMap[String, Set[String]], decimals: Int) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
@@ -108,7 +109,7 @@ object PlotUtil {
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
     userCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String, decimals:Int,
+    usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
     apps: Seq[String] = null) {
 
     var fixedTitle = title
@@ -117,7 +118,7 @@ object PlotUtil {
     else if (title.startsWith("Bug "))
       fixedTitle = title.substring(4)
     // bump up accuracy here so that not everything gets blurred
-    val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, decimals+ 1) + ")"
+    val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
     println("Plotting %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
       title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
@@ -246,7 +247,7 @@ object PlotUtil {
           datafile.write(k._2 + " " + k._1 + "\n")
         }
       }
-      
+
       if (userCorrelations.size > 0) {
         val uArr = userCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
         datafile.write("Correlation with:\n")

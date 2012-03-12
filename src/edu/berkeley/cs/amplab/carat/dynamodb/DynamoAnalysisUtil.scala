@@ -18,6 +18,7 @@ import scala.collection.immutable.HashMap
 import scala.collection.mutable.Map
 import edu.berkeley.cs.amplab.carat.CaratRate
 import spark.timeseries.ProbUtil
+import scala.collection.immutable.TreeMap
 
 object DynamoAnalysisUtil {
 
@@ -27,15 +28,15 @@ object DynamoAnalysisUtil {
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 0.04
-  
+
   val DIST_THRESHOLD = 10
-  
+
   // Daemons list, read from S3
   val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
-  
+
   def start() = System.currentTimeMillis()
-  
-  def finish(startTime: Long, message:String = null) {
+
+  def finish(startTime: Long, message: String = null) {
     var fmt = ""
     if (message != null)
       fmt = "-%s".format(message)
@@ -43,17 +44,17 @@ object DynamoAnalysisUtil {
     val f = {
       if (functionStack != null && functionStack.length > 0) {
         if (functionStack.length > 3)
-          functionStack(2) + fmt+" from " + functionStack(3)
+          functionStack(2) + fmt + " from " + functionStack(3)
         else if (functionStack.length > 2)
           functionStack(2) + fmt
         else if (functionStack.length > 1)
-          functionStack(1)+ fmt
+          functionStack(1) + fmt
       } else
-        "edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil.finish"+fmt
+        "edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil.finish" + fmt
     }
     println("Time %s: %d".format(f, (System.currentTimeMillis() - startTime)))
   }
-  
+
   def readDoubleFromFile(file: String) = {
     val startTime = start
     val f = new File(file)
@@ -387,7 +388,7 @@ object DynamoAnalysisUtil {
           // do not use charging samples as even starting points.
           prevD = 0
         }
-      } else{
+      } else {
         // simulator samples also reset prevD
         prevD = 0
       }
@@ -428,6 +429,181 @@ object DynamoAnalysisUtil {
     }
   }
 
+  def correlation(name: String, rates: Array[CaratRate],
+    aPriori: scala.collection.immutable.HashMap[Double, Double],
+    models: Set[String], oses: Set[String],
+    totalsByUuid: TreeMap[String, (Double, Double)]) = {
+    var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
+    var osCorrelations = new scala.collection.immutable.HashMap[String, Double]
+    var userCorrelations = new scala.collection.immutable.HashMap[String, Double]
+
+    val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).toMap)
+    if (rateEvs != null) {
+      for (model <- models) {
+        /* correlation with this model */
+        val rateModels = rates.map(x => {
+          if (x.model == model)
+            (x, 1.0)
+          else
+            (x, 0.0)
+        }).toMap
+        val norm = ProbUtil.normalize(rateModels)
+        if (norm != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * norm.getOrElse(x._1, 0.0)
+          }).sum
+          modelCorrelations += ((model, corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format(model, rateModels.map(x => { (x._1.model, x._2) })))
+      }
+
+      for (os <- oses) {
+        /* correlation with this OS */
+        val rateOses = rates.map(x => {
+          if (x.os == os)
+            (x, 1.0)
+          else
+            (x, 0.0)
+        }).toMap
+        val norm = ProbUtil.normalize(rateOses)
+        if (norm != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * norm.getOrElse(x._1, 0.0)
+          }).sum
+          osCorrelations += ((os, corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format(os, rateOses.map(x => { (x._1.os, x._2) })))
+      }
+
+      {
+        val rateTotals = rates.map(x => {
+          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
+        }).toMap
+        val normSamples = ProbUtil.normalize(rateTotals.map(x => { (x._1, x._2._1) }))
+        if (normSamples != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * normSamples.getOrElse(x._1, 0.0)
+          }).sum
+          userCorrelations += (("Samples", corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format("Samples", rateTotals.map(x => { (x._1.uuid, x._2) })))
+      }
+
+      {
+        val rateTotals = rates.map(x => {
+          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
+        }).toMap
+        val normApps = ProbUtil.normalize(rateTotals.map(x => { (x._1, x._2._2) }))
+        if (normApps != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * normApps.getOrElse(x._1, 0.0)
+          }).sum
+          userCorrelations += (("Apps", corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format("Apps", rateTotals.map(x => { (x._1.uuid, x._2) })))
+      }
+
+      for (k <- modelCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+      for (k <- osCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+      for (k <- userCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+    } else
+      println("ERROR: Rates had a zero stddev, something is wrong!")
+
+    (osCorrelations, modelCorrelations, userCorrelations)
+  }
+  /**
+   * RDD Version of Correlation.
+   *
+   */
+  def correlation(name: String, rates: RDD[CaratRate],
+    aPriori: Map[Double, Double],
+    models: Set[String], oses: Set[String],
+    totalsByUuid: TreeMap[String, (Double, Double)]) = {
+    var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
+    var osCorrelations = new scala.collection.immutable.HashMap[String, Double]
+    var userCorrelations = new scala.collection.immutable.HashMap[String, Double]
+
+    val rateEvs = ProbUtil.normalize(DynamoAnalysisUtil.mapToRateEv(aPriori, rates).collectAsMap())
+    if (rateEvs != null) {
+      for (model <- models) {
+        /* correlation with this model */
+        val rateModels = rates.map(x => {
+          if (x.model == model)
+            (x, 1.0)
+          else
+            (x, 0.0)
+        }).collectAsMap()
+        val norm = ProbUtil.normalize(rateModels)
+        if (norm != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * norm.getOrElse(x._1, 0.0)
+          }).sum
+          modelCorrelations += ((model, corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format(model, rateModels.map(x => { (x._1.model, x._2) })))
+      }
+
+      for (os <- oses) {
+        /* correlation with this OS */
+        val rateOses = rates.map(x => {
+          if (x.os == os)
+            (x, 1.0)
+          else
+            (x, 0.0)
+        }).collectAsMap()
+        val norm = ProbUtil.normalize(rateOses)
+        if (norm != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * norm.getOrElse(x._1, 0.0)
+          }).sum
+          osCorrelations += ((os, corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format(os, rateOses.map(x => { (x._1.os, x._2) })))
+      }
+
+      {
+        val rateTotals = rates.map(x => {
+          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
+        }).collectAsMap()
+        val normSamples = ProbUtil.normalize(rateTotals.map(x => { (x._1, x._2._1) }))
+        if (normSamples != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * normSamples.getOrElse(x._1, 0.0)
+          }).sum
+          userCorrelations += (("Samples", corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format("Samples", rateTotals.map(x => { (x._1.uuid, x._2) })))
+      }
+
+      {
+        val rateTotals = rates.map(x => {
+          (x, totalsByUuid.getOrElse(x.uuid, (0.0, 0.0)))
+        }).collectAsMap()
+        val normApps = ProbUtil.normalize(rateTotals.map(x => { (x._1, x._2._2) }))
+        if (normApps != null) {
+          val corr = rateEvs.map(x => {
+            x._2 * normApps.getOrElse(x._1, 0.0)
+          }).sum
+          userCorrelations += (("Apps", corr))
+        } else
+          println("ERROR: zero stddev for %s: %s".format("Apps", rateTotals.map(x => { (x._1.uuid, x._2) })))
+      }
+
+      for (k <- modelCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+      for (k <- osCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+      for (k <- userCorrelations)
+        println("%s and %s correlated with %s".format(name, k._1, k._2))
+    } else
+      println("ERROR: Rates had a zero stddev, something is wrong!")
+
+    (osCorrelations, modelCorrelations, userCorrelations)
+  }
+
   /**
    * FIXME: Filters inside a map of another RDD are not allowed, so we call collect on the returned a priori distribution here.
    * If this becomes a memory problem, averaging in the a priori dist should be done.
@@ -436,7 +612,7 @@ object DynamoAnalysisUtil {
     val startTime = start
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
-    val ap = allRates.filter(x =>{
+    val ap = allRates.filter(x => {
       !x.isRateRange()
     })
     assert(ap.count > 0, "AllRates should contain some rates that are not rateRanges and less than %s when calculating aPriori.".format(ABNORMAL_RATE))
@@ -450,23 +626,23 @@ object DynamoAnalysisUtil {
     finish(startTime)
     ret
   }
-  
+
   def getApriori(allRates: Array[CaratRate]) = {
     val startTime = start
     // get BLCs
     assert(allRates != null, "AllRates should not be null when calculating aPriori.")
-    val ap = allRates.filter(x =>{
+    val ap = allRates.filter(x => {
       !x.isRateRange()
     })
     assert(ap.length > 0, "AllRates should contain some rates that are not rateRanges and less than %s when calculating aPriori.".format(ABNORMAL_RATE))
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val rates = ap.map(_.rate)
     var rateMap = new HashMap[Double, Double]
-    for (k <- rates){
+    for (k <- rates) {
       val old = rateMap.getOrElse(k, 0.0) + 1.0
       rateMap += ((k, old))
     }
-    
+
     val sum = rateMap.map(_._2).sum
     val ret = rateMap.map(x => { (x._1, x._2 / sum) })
     finish(startTime)
@@ -480,26 +656,26 @@ object DynamoAnalysisUtil {
     buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
     val startTime = start
 
-    val (probWith, ev/*, usersWith*/) = getEvAndDistribution(one, aPrioriDistribution)
-    val (probWithout, evNeg/*, usersWithout*/) = getEvAndDistribution(two, aPrioriDistribution)
+    val (probWith, ev /*, usersWith*/ ) = getEvAndDistribution(one, aPrioriDistribution)
+    val (probWithout, evNeg /*, usersWithout*/ ) = getEvAndDistribution(two, aPrioriDistribution)
     finish(startTime, "GetDists")
     var evDistance = 0.0
 
-    if (probWith != null && probWithout != null){
-    var fStart = start
-    // Log bucketing:
-    val (xmax, bucketed, bucketedNeg) = ProbUtil.logBucketDists(sc, probWith, probWithout, buckets, smallestBucket, decimals)
-    finish(fStart, "LogBucketing")
+    if (probWith != null && probWithout != null) {
+      var fStart = start
+      // Log bucketing:
+      val (xmax, bucketed, bucketedNeg) = ProbUtil.logBucketDists(sc, probWith, probWithout, buckets, smallestBucket, decimals)
+      finish(fStart, "LogBucketing")
 
-    evDistance = evDiff(ev, evNeg)
+      evDistance = evDiff(ev, evNeg)
 
-    if (DEBUG) {
-      ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
-    }
-    finish(startTime)
-    (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance/*, usersWith, usersWithout*/)
+      if (DEBUG) {
+        ProbUtil.debugNonZero(bucketed.map(_._2), bucketedNeg.map(_._2), "bucket")
+      }
+      finish(startTime)
+      (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance /*, usersWith, usersWithout*/ )
     } else
-      (0.0, null, null, 0.0, 0.0, 0.0/*, usersWith, usersWithout*/)
+      (0.0, null, null, 0.0, 0.0, 0.0 /*, usersWith, usersWithout*/ )
   }
 
   def getDistanceAndDistributionsUnBucketed(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double]) = {
@@ -522,7 +698,7 @@ object DynamoAnalysisUtil {
       (0.0, null, null, 0.0, 0.0, 0.0)
     }
   }
-  
+
   /**
    * Non-RDD version to debug if my problems are rdd-based.
    */
@@ -576,52 +752,52 @@ object DynamoAnalysisUtil {
       (null, 0.0, 0)
     }
   }
-  
-   /**
+
+  /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
   def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Map[Double, Double]) = {
     val startTime = start
-      //var fStart = start
-      val probWith = getProbDist(aPrioriDistribution, one)
-      if (probWith != null){
+    //var fStart = start
+    val probWith = getProbDist(aPrioriDistribution, one)
+    if (probWith != null) {
       //finish(fStart, "GetFreq")
       val ev = ProbUtil.getEv(probWith)
-/*
+      /*
       fStart = start
       val usersWith = one.map(_.uuid).collect().toSet.size
       finish(fStart, "userCount")
 */
       finish(startTime)
-      (probWith, ev/*, usersWith*/)
-      }else{
+      (probWith, ev /*, usersWith*/ )
+    } else {
       finish(startTime)
       (null, 0.0)
-      }
+    }
   }
-  
+
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    * Non-RDD version to debug performance issues.
    */
   def getEvAndDistribution(one: Array[CaratRate], aPrioriDistribution: HashMap[Double, Double]) = {
     val startTime = start
-      //var fStart = start
-      val probWith = getProbDist(aPrioriDistribution, one)
-      if (probWith != null){
+    //var fStart = start
+    val probWith = getProbDist(aPrioriDistribution, one)
+    if (probWith != null) {
       //finish(fStart, "GetFreq")
       val ev = ProbUtil.getEv(probWith)
-/*
+      /*
       fStart = start
       val usersWith = one.map(_.uuid).collect().toSet.size
       finish(fStart, "userCount")
 */
       finish(startTime)
-      (probWith, ev/*, usersWith*/)
-      }else{
+      (probWith, ev /*, usersWith*/ )
+    } else {
       finish(startTime)
       (null, 0.0)
-      }
+    }
   }
 
   def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double],
@@ -641,13 +817,12 @@ object DynamoAnalysisUtil {
     val freqWith = getFrequencies(aPrioriDistribution, one)
     val freqWithout = getFrequencies(aPrioriDistribution, two)
     finish(fStart, "GetFreq")
-    
-    
+
     fStart = start
     val usersWith = one.map(_.uuid).collect().toSet.size
     val usersWithout = two.map(_.uuid).collect().toSet.size
     finish(fStart, "userCount")
-    
+
     var evDistance = 0.0
 
     if (DEBUG) {
@@ -677,7 +852,7 @@ object DynamoAnalysisUtil {
     finish(startTime)
     (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance, usersWith, usersWithout)
   }
-  
+
   /*def correlations(pdf:RDD[(Double, Double)], dist: RDD[(Double, CaratRate)]) = {
     // correlation with model:
     // FIXME: If I map this to its model, it will always be the same for uuid and bugs with-distributions.
@@ -685,7 +860,7 @@ object DynamoAnalysisUtil {
     val modelDist = dist.map(x => { (x._1, x._2.model) })
     val cModel = ProbUtil.pearsonCorrelation(pdf, dist.)
   }*/
-  
+
   /**
    * Convert a set of rates into their frequencies, interpreting rate ranges as slices
    * of `aPrioriDistribution`.
@@ -709,14 +884,14 @@ object DynamoAnalysisUtil {
       } else
         Array((x.rate, 1.0))
     })
-    
+
     val ret = flatSamples.groupByKey().map(x => {
       (x._1, x._2.sum)
     })
     finish(startTime)
     ret
   }
-  
+
   /**
    * Convert a set of rates into their frequencies, interpreting rate ranges as slices
    * of `aPrioriDistribution`.
@@ -741,31 +916,31 @@ object DynamoAnalysisUtil {
       } else
         Array((x.rate, 1.0))
     })
-    
+
     var hmap = new HashMap[Double, Double]
-    
+
     for (k <- flatSamples)
       hmap += ((k._1, hmap.getOrElse(k._1, 0.0) + k._2))
-    
+
     val ret = hmap.toArray
     finish(startTime)
     ret
   }
-  
+
   def getProbDist(aPrioriDistribution: Map[Double, Double], samples: RDD[CaratRate]) = {
     val freq = getFrequencies(aPrioriDistribution, samples)
     val hasPoints = freq.take(1) match {
       case Array(t) => true
       case _ => false
     }
-    
-    if (hasPoints){
+
+    if (hasPoints) {
       val sum = freq.map(_._2).reduce(_ + _)
-      freq.map(x => {(x._1, x._2/sum)})
+      freq.map(x => { (x._1, x._2 / sum) })
     } else
       null
   }
-  
+
   /**
    * Non-RDD version to debug performance problems.
    */
@@ -775,14 +950,14 @@ object DynamoAnalysisUtil {
       case Array(t) => true
       case _ => false
     }
-    
-    if (hasPoints){
+
+    if (hasPoints) {
       val sum = freq.map(_._2).reduce(_ + _)
-      freq.map(x => {(x._1, x._2/sum)})
+      freq.map(x => { (x._1, x._2 / sum) })
     } else
       null
   }
-  
+
   def mapToRateEv(aPrioriDistribution: Map[Double, Double], samples: RDD[CaratRate]) = {
     val startTime = start
     val evSamples = samples.map(x => {
@@ -809,11 +984,11 @@ object DynamoAnalysisUtil {
     finish(start)
     evSamples
   }
-  
+
   /**
    * Non-RDD version to debug performance problems.
    */
-    def mapToRateEv(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
+  def mapToRateEv(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
     val startTime = start
     val evSamples = samples.map(x => {
       if (x.isRateRange()) {
@@ -848,17 +1023,17 @@ object DynamoAnalysisUtil {
       val globPrefix = globs.filter(x.startsWith(_))
       !globPrefix.isEmpty
     })
-    
+
     println("Matched daemons with globs: " + matched)
     val ret = DAEMONS_LIST ++ matched
     finish(startTime)
     ret
   }
-  
+
   def removeDaemons() {
     removeDaemons(DAEMONS_LIST)
   }
-    
+
   def removeDaemons(daemonSet: Set[String]) {
     val startTime = start
     // add hog table key (which is the same as bug table app key)
@@ -872,8 +1047,8 @@ object DynamoAnalysisUtil {
     DynamoDbItemLoop(DynamoDbDecoder.filterItems(bugsTable, kd: _*),
       DynamoDbDecoder.filterItemsFromKey(bugsTable, _, kd: _*),
       removeBugs(_, _))
-      
-      finish(startTime)
+
+    finish(startTime)
   }
 
   def removeBugs(key: Key, results: java.util.List[java.util.Map[String, AttributeValue]]) {
