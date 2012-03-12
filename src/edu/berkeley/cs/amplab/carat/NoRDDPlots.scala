@@ -3,29 +3,14 @@ package edu.berkeley.cs.amplab.carat
 import spark._
 import spark.SparkContext._
 import spark.timeseries._
-import java.util.concurrent.Semaphore
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.Seq
-import scala.collection.immutable.Set
-import scala.collection.immutable.HashSet
-import scala.collection.immutable.TreeMap
-import collection.JavaConversions._
-import com.amazonaws.services.dynamodb.model.AttributeValue
-import java.io.File
-import java.text.SimpleDateFormat
-import java.io.ByteArrayOutputStream
-import com.amazonaws.services.dynamodb.model.Key
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.FileInputStream
-import java.io.FileWriter
-import java.io.FileOutputStream
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
-import scala.collection.immutable.TreeSet
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
-import scala.actors.scheduler.ResizableThreadPoolScheduler
+import edu.berkeley.cs.amplab.carat.plot.PlotUtil
+import scala.collection.immutable.Set
+import scala.collection.immutable.TreeMap
 import scala.collection.mutable.HashMap
-import com.esotericsoftware.kryo.Kryo
+import collection.JavaConversions._
+import java.text.SimpleDateFormat
 
 /**
  * Do the exact same thing as in CaratDynamoDataToPlots, but do not collect() and write plot files and run plotting in the end.
@@ -51,24 +36,6 @@ object NoRDDPlots {
   val DECIMALS = 3
   // Isolate from the plotting.
   val tmpdir = "/mnt/TimeSeriesSpark-osmodel/spark-temp-plots/"
-
-  val dfs = "yyyy-MM-dd"
-  val df = new SimpleDateFormat(dfs)
-  val dateString = "plots-" + df.format(System.currentTimeMillis())
-
-  val DATA_DIR = "data"
-  val PLOTS = "plots"
-  val PLOTFILES = "plotfiles"
-
-  val Bug = "Bug"
-  val Hog = "Hog"
-  val Sim = "Sim"
-  val Pro = "Pro"
-
-  val BUGS = "bugs"
-  val HOGS = "hogs"
-  val SIM = "similarApps"
-  val UUIDS = "uuIds"
 
   var plotDirectory: String = null
 
@@ -214,8 +181,8 @@ object NoRDDPlots {
     
 
     // need to collect uuid stuff here:
-    plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid)
-    writeCorrelationFile("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0)
+    PlotUtil.plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, DECIMALS)
+    PlotUtil.writeCorrelationFile("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0)
 
     //scheduler.execute({
     //var allHogs = new HashSet[String]
@@ -223,55 +190,7 @@ object NoRDDPlots {
 
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      val filtered = allRates.filter(_.allApps.contains(app))
-      val filteredNeg = allRates.filter(!_.allApps.contains(app))
-
-      /* Consider only apps that have rates from ENOUGH_USERS client devices.
-       * Require that the reference distribution also have rates from ENOUGH_USERS client devices.
-       *  
-       */
-      val fCountStart = DynamoAnalysisUtil.start
-      val usersWith = filtered.map(_.uuid).toSet.size
-
-      if (usersWith >= ENOUGH_USERS) {
-        val usersWithout = filteredNeg.map(_.uuid).toSet.size
-        DynamoAnalysisUtil.finish(fCountStart, "clientCount")
-        if (usersWithout >= ENOUGH_USERS) {
-          if (plotDists("Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
-            // this is a hog
-
-            //allHogs += app
-          } else {
-            // not a hog. is it a bug for anyone?
-            for (i <- 0 until uuidArray.length) {
-              val uuid = uuidArray(i)
-              /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-              val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
-              val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
-              /**
-               * TODO: Require BUG_REFERENCE client devices in the reference distribution.  
-               */
-
-              var stuff = uuid
-              if (appFromUuid.length > 0) {
-                val r = appFromUuid.head
-                val (cxmax, cev, cevNeg) = parametersByUuid.getOrElse(uuid, (0.0, 0.0, 0.0))
-                val (totalSamples, totalApps) = totalsByUuid.getOrElse(uuid, (0.0, 0.0))
-                stuff += "\n%s running %s\nClient ev=%s total samples=%s apps=%s".format(
-                  r.model, r.os, cev, totalSamples, totalApps)
-              }
-              if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
-                filtered, oses, models, totalsByUuid, 0, 0, stuff)) {
-                //allBugs += app
-              }
-            }
-          }
-        } else {
-          println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
-        }
-      } else {
-        println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
-      }
+      oneApp(uuidArray, allRates, app,aPrioriDistribution, oses, models, parametersByUuid, totalsByUuid)
     }
 
     /*val globalNonHogs = allApps -- allHogs
@@ -403,9 +322,9 @@ object NoRDDPlots {
         }
         if (isBugOrHog && filtered != null) {
           val (osCorrelations, modelCorrelations, userCorrelations) = correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
-          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid)
+          PlotUtil.plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid, DECIMALS)
         } else
-          plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid)
+          PlotUtil.plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid, DECIMALS)
       } else {
         printf("Not %s evWith=%s evWithout=%s evDistance=%s (%s vs %s users) %s\n", title, ev, evNeg, evDistance, usersWith, usersWithout, uuid)
       }
@@ -413,250 +332,60 @@ object NoRDDPlots {
     } else
       false
   }
+  
+    def oneApp(uuidArray:Array[String], allRates: Array[edu.berkeley.cs.amplab.carat.CaratRate], app: String,
+      aPrioriDistribution: scala.collection.immutable.HashMap[Double,Double],
+      oses: scala.collection.immutable.Set[String], models: scala.collection.immutable.Set[String],
+      parametersByUuid: scala.collection.immutable.TreeMap[String,(Double, Double, Double)],
+      totalsByUuid: scala.collection.immutable.TreeMap[String,(Double, Double)]){
+      val filtered = allRates.filter(_.allApps.contains(app))
+      val filteredNeg = allRates.filter(!_.allApps.contains(app))
 
-  def plot(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
-    distWithout: Array[(Double, Double)],
-    ev: Double, evNeg: Double, evDistance: Double,
-    osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
-    userCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String,
-    apps: Seq[String] = null) {
-    plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
-        userCorrelations,
-      usersWith, usersWithout, uuid, apps)
-  }
-
-  /**
-   * The J-Score is the % of people with worse = higher energy use.
-   * therefore, it is the size of the set of evDistances that are higher than mine,
-   * compared to the size of the user base.
-   * Note that the server side multiplies the JScore by 100, and we store it here
-   * as a fraction.
-   */
-  def plotJScores(distsWithUuid: TreeMap[String, Array[(Double, Double)]],
-    distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
-    parametersByUuid: TreeMap[String, (Double, Double, Double)],
-    evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, Set[String]]) {
-    val dists = evDistanceByUuid.map(_._2).toSeq.sorted
-
-    for (k <- distsWithUuid.keys) {
-      val (xmax, ev, evNeg) = parametersByUuid.get(k).getOrElse((0.0, 0.0, 0.0))
-
-      /**
-       * jscore is the % of people with worse = higher energy use.
-       * therefore, it is the size of the set of evDistances that are higher than mine,
-       * compared to the size of the user base.
+      /* Consider only apps that have rates from ENOUGH_USERS client devices.
+       * Require that the reference distribution also have rates from ENOUGH_USERS client devices.
+       *  
        */
-      val jscore = {
-        val temp = evDistanceByUuid.get(k).getOrElse(0.0)
-        if (temp == 0)
-          0
-        else
-          ProbUtil.nDecimal(dists.filter(_ > temp).size * 1.0 / dists.size, DECIMALS)
-      }
-      val distWith = distsWithUuid.get(k).getOrElse(null)
-      val distWithout = distsWithoutUuid.get(k).getOrElse(null)
-      val apps = appsByUuid.get(k).getOrElse(null)
-      if (distWith != null && distWithout != null && apps != null)
-        plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, null, null, null, 0, 0, k, apps.toSeq)
-      else
-        printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
-    }
-  }
+      val fCountStart = DynamoAnalysisUtil.start
+      val usersWith = filtered.map(_.uuid).toSet.size
 
-  def plotSerial(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
-    distWithout: Array[(Double, Double)],
-    ev: Double, evNeg: Double, evDistance: Double,
-    osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
-    userCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String,
-    apps: Seq[String] = null) {
+      if (usersWith >= ENOUGH_USERS) {
+        val usersWithout = filteredNeg.map(_.uuid).toSet.size
+        DynamoAnalysisUtil.finish(fCountStart, "clientCount")
+        if (usersWithout >= ENOUGH_USERS) {
+          if (plotDists("Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
+            // this is a hog
 
-    var fixedTitle = title
-    if (title.startsWith("Hog "))
-      fixedTitle = title.substring(4)
-    else if (title.startsWith("Bug "))
-      fixedTitle = title.substring(4)
-    // bump up accuracy here so that not everything gets blurred
-    val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, DECIMALS + 1) + ")"
-    val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, DECIMALS + 1) + ")"
-    println("Plotting %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
-      title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
-    plotFile(dateString, title, evTitle, evTitleNeg, xmax)
-    writeData(dateString, evTitle, distWith)
-    writeData(dateString, evTitleNeg, distWithout)
-    if (osCorrelations != null) {
-      var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
-      writeCorrelationFile(title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
-    }
-    plotData(dateString, title)
-  }
+            //allHogs += app
+          } else {
+            // not a hog. is it a bug for anyone?
+            for (i <- 0 until uuidArray.length) {
+              val uuid = uuidArray(i)
+              /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
+              val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+              val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
+              /**
+               * TODO: Require BUG_REFERENCE client devices in the reference distribution.  
+               */
 
-  def plotFile(dir: String, name: String, t1: String, t2: String, xmax: Double) = {
-    val pdir = dir + "/" + PLOTS + "/"
-    val gdir = dir + "/" + PLOTFILES + "/"
-    val ddir = dir + "/" + DATA_DIR + "/"
-    var f = new File(pdir)
-    if (!f.isDirectory() && !f.mkdirs())
-      println("Failed to create " + f + " for plots!")
-    else {
-      f = new File(gdir)
-      if (!f.isDirectory() && !f.mkdirs())
-        println("Failed to create " + f + " for plots!")
-      else {
-        f = new File(ddir)
-        if (!f.isDirectory() && !f.mkdirs())
-          println("Failed to create " + f + " for plots!")
-        else {
-          val plotfile = new java.io.FileWriter(gdir + name + ".gnuplot")
-          plotfile.write("set term postscript eps enhanced color 'Helvetica' 32\nset xtics out\n" +
-            "set size 1.93,1.1\n" +
-            "set logscale x\n" +
-            "set xrange [0.0005:" + (xmax + 0.001) + "]\n" +
-            "set xtics 0.0005,2," + (xmax + 0.001) + "\n" +
-            "set xlabel \"Battery drain % / s\"\n" +
-            "set ylabel \"Probability\"\n")
-          if (plotDirectory != null)
-            plotfile.write("set output \"" + plotDirectory + "/" + assignSubDir(name) + name + ".eps\"\n")
-          else
-            plotfile.write("set output \"" + pdir + name + ".eps\"\n")
-          plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" ps 3 lw 5 title \"" + t1.replace("~", "\\\\~").replace("_", "\\\\_") +
-            "\", " +
-            "\"" + ddir + t2 + ".txt\" using 1:2 with linespoints lt rgb \"#007777\" ps 3 lw 5 title \"" + t2.replace("~", "\\\\~").replace("_", "\\\\_")
-            + "\"\n")
-          plotfile.close
-          true
+              var stuff = uuid
+              if (appFromUuid.length > 0) {
+                val r = appFromUuid.head
+                val (cxmax, cev, cevNeg) = parametersByUuid.getOrElse(uuid, (0.0, 0.0, 0.0))
+                val (totalSamples, totalApps) = totalsByUuid.getOrElse(uuid, (0.0, 0.0))
+                stuff += "\n%s running %s\nClient ev=%s total samples=%s apps=%s".format(
+                  r.model, r.os, cev, totalSamples, totalApps)
+              }
+              if (plotDists("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
+                filtered, oses, models, totalsByUuid, 0, 0, stuff)) {
+                //allBugs += app
+              }
+            }
+          }
+        } else {
+          println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
         }
+      } else {
+        println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
       }
     }
-  }
-
-  def assignSubDir(name: String) = {
-    val p = new File(plotDirectory)
-    if (!p.isDirectory() && !p.mkdirs()) {
-      ""
-    } else {
-      val dir = name.substring(0, 3) match {
-        case Bug => { BUGS }
-        case Hog => { HOGS }
-        case Pro => { UUIDS }
-        case Sim => { SIM }
-        case _ => ""
-      }
-      if (dir.length() > 0) {
-        val d = new File(p, dir)
-        if (!d.isDirectory() && !d.mkdirs())
-          ""
-        else
-          dir + "/"
-      } else
-        ""
-    }
-  }
-
-  def writeData(dir: String, name: String, dist: Array[(Double, Double)]) {
-    val ddir = dir + "/" + DATA_DIR + "/"
-    var f = new File(ddir)
-    if (!f.isDirectory() && !f.mkdirs())
-      println("Failed to create " + f + " for plots!")
-    else {
-      val datafile = new java.io.FileWriter(ddir + name + ".txt")
-
-      val dataPairs = dist.sortWith((x, y) => {
-        x._1 < y._1
-      })
-
-      for (k <- dataPairs)
-        datafile.write(k._1 + " " + k._2 + "\n")
-      datafile.close
-    }
-  }
-
-  def writeCorrelationFile(name: String,
-    osCorrelations: Map[String, Double],
-    modelCorrelations: Map[String, Double],
-    userCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String = null) {
-    val path = plotDirectory + "/" + assignSubDir(name) + name + "-correlation.txt"
-
-    var datafile: java.io.FileWriter = null
-
-    if (usersWith != 0 || usersWithout != 0) {
-      if (datafile == null) datafile = new java.io.FileWriter(path)
-      datafile.write("%s users with\n%s users without\n".format(usersWith, usersWithout))
-    }
-    if (uuid != null) {
-      if (datafile == null) datafile = new java.io.FileWriter(path)
-      datafile.write("UUID: %s\n".format(uuid))
-    }
-
-    if (modelCorrelations.size > 0 || osCorrelations.size > 0 || userCorrelations.size > 0) {
-      if (datafile == null) datafile = new java.io.FileWriter(path)
-      if (osCorrelations.size > 0) {
-        val arr = osCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
-        datafile.write("Correlation with OS versions:\n")
-        for (k <- arr) {
-          datafile.write(k._2 + " " + k._1 + "\n")
-        }
-      }
-
-      if (modelCorrelations.size > 0) {
-        val mArr = modelCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
-        datafile.write("Correlation with device models:\n")
-        for (k <- mArr) {
-          datafile.write(k._2 + " " + k._1 + "\n")
-        }
-      }
-      
-      if (userCorrelations.size > 0) {
-        val uArr = userCorrelations.toArray.sortWith((x, y) => { math.abs(x._2) < math.abs(y._2) })
-        datafile.write("Correlation with:\n")
-        for (k <- uArr) {
-          datafile.write(k._2 + " " + k._1 + "\n")
-        }
-      }
-      datafile.close
-    }
-  }
-
-  def plotData(dir: String, title: String) {
-    val gdir = dir + "/" + PLOTFILES + "/"
-    val f = new File(gdir)
-    if (!f.isDirectory() && !f.mkdirs())
-      println("Failed to create " + f + " for plots!")
-    else {
-      val temp = Runtime.getRuntime().exec(Array("gnuplot", gdir + title + ".gnuplot"))
-      val err_read = new java.io.BufferedReader(new java.io.InputStreamReader(temp.getErrorStream()))
-      var line = err_read.readLine()
-      while (line != null) {
-        println(line)
-        line = err_read.readLine()
-      }
-      temp.waitFor()
-    }
-  }
-
-  def plotSamples(title: String, data: TreeMap[String, TreeSet[Double]]) {
-    println("Plotting samples.")
-    writeSampleData(dateString, title, data)
-  }
-
-  def writeSampleData(dir: String, name: String, data: TreeMap[String, TreeSet[Double]]) {
-    val ddir = dir + "/" + DATA_DIR + "/"
-    var f = new File(ddir)
-    if (!f.isDirectory() && !f.mkdirs())
-      println("Failed to create " + f + " for plots!")
-    else {
-      val datafile = new java.io.FileWriter(ddir + name + ".txt")
-      val arr = data.toArray[(String, TreeSet[Double])]
-      val ret = arr.sortWith((x, y) => {
-        x._2.size > y._2.size
-      })
-      for (k <- ret)
-        for (j <- k._2)
-          datafile.write(k._1 + " " + j + "\n")
-      datafile.close
-    }
-  }
 }
