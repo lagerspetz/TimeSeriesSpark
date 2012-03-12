@@ -9,6 +9,7 @@ import scala.collection.Seq
 import scala.collection.immutable.Set
 import scala.collection.immutable.HashSet
 import scala.collection.immutable.TreeMap
+import scala.collection.mutable.Map
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import java.io.File
@@ -259,7 +260,7 @@ object BugAndHogStdDevOverUsers {
   }
 
   def hogsAndBugs(sc: SparkContext, allApps: Set[String],
-    aPrioriDistribution: Array[(Double, Double)], allRates: RDD[CaratRate],
+    aPrioriDistribution: Map[Double, Double], allRates: RDD[CaratRate],
     oses: Set[String], models: Set[String], uuidArray: Array[String]) = {
     println("Distances for all apps and %d users".format(uuidArray.size))
     /* Hogs: Consider all apps except daemons. */
@@ -284,7 +285,7 @@ object BugAndHogStdDevOverUsers {
     }
 
     def getDistance(title: String,
-      one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], enoughWith:Boolean) = {
+      one: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], enoughWith:Boolean) = {
       val (probDist, ev, usersWith) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution, enoughWith)
       if (probDist != null) {
         printf("%s (%s users) evWith=%s\n", title, usersWith, ev)

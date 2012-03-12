@@ -15,6 +15,7 @@ import spark._
 import spark.SparkContext._
 import com.amazonaws.services.dynamodb.model.Key
 import scala.collection.immutable.HashMap
+import scala.collection.mutable.Map
 import edu.berkeley.cs.amplab.carat.CaratRate
 import spark.timeseries.ProbUtil
 
@@ -445,7 +446,7 @@ object DynamoAnalysisUtil {
     }).groupByKey()
     // turn arrays of 1.0s to frequencies
     println("Collecting aPriori.")
-    val ret = grouped.map(x => { (x._1, x._2.sum) }).collect()
+    val ret = grouped.map(x => { (x._1, x._2.sum) }).collectAsMap()
     finish(startTime)
     ret
   }
@@ -475,7 +476,7 @@ object DynamoAnalysisUtil {
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
-  def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
+  def getDistanceAndDistributions(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double],
     buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
     val startTime = start
 
@@ -501,7 +502,7 @@ object DynamoAnalysisUtil {
       (0.0, null, null, 0.0, 0.0, 0.0/*, usersWith, usersWithout*/)
   }
 
-  def getDistanceAndDistributionsUnBucketed(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
+  def getDistanceAndDistributionsUnBucketed(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double]) = {
     val startTime = start
     val (probWith, ev /*, usersWith*/ ) = getEvAndDistribution(one, aPrioriDistribution)
     val (probWithout, evNeg /*, usersWithout*/ ) = getEvAndDistribution(two, aPrioriDistribution)
@@ -549,7 +550,7 @@ object DynamoAnalysisUtil {
   /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
-  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], enoughWith: Boolean) = {
+  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], enoughWith: Boolean) = {
     val startTime = start
 
     var checkedWith = enoughWith
@@ -579,7 +580,7 @@ object DynamoAnalysisUtil {
    /**
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    */
-  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)]) = {
+  def getEvAndDistribution(one: RDD[CaratRate], aPrioriDistribution: Map[Double, Double]) = {
     val startTime = start
       //var fStart = start
       val probWith = getProbDist(aPrioriDistribution, one)
@@ -623,7 +624,7 @@ object DynamoAnalysisUtil {
       }
   }
 
-  def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
+  def getDistanceAndDistributionsNoCount(sc: SparkContext, one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double],
     buckets: Int, smallestBucket: Double, decimals: Int, DEBUG: Boolean = false) = {
     val startTime = start
 
@@ -689,7 +690,7 @@ object DynamoAnalysisUtil {
    * Convert a set of rates into their frequencies, interpreting rate ranges as slices
    * of `aPrioriDistribution`.
    */
-  def getFrequencies(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+  def getFrequencies(aPrioriDistribution: Map[Double, Double], samples: RDD[CaratRate]) = {
     val startTime = start
     val flatSamples = samples.flatMap(x => {
       if (x.isRateRange()) {
@@ -751,7 +752,7 @@ object DynamoAnalysisUtil {
     ret
   }
   
-  def getProbDist(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+  def getProbDist(aPrioriDistribution: Map[Double, Double], samples: RDD[CaratRate]) = {
     val freq = getFrequencies(aPrioriDistribution, samples)
     val hasPoints = freq.take(1) match {
       case Array(t) => true
@@ -782,7 +783,7 @@ object DynamoAnalysisUtil {
       null
   }
   
-  def mapToRateEv(aPrioriDistribution: Array[(Double, Double)], samples: RDD[CaratRate]) = {
+  def mapToRateEv(aPrioriDistribution: Map[Double, Double], samples: RDD[CaratRate]) = {
     val startTime = start
     val evSamples = samples.map(x => {
       if (x.isRateRange()) {

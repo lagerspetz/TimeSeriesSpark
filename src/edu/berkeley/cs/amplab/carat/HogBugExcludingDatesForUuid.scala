@@ -8,6 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
 import scala.collection.immutable.Set
 import scala.collection.immutable.HashSet
+import scala.collection.mutable.Map
 import scala.collection.immutable.TreeMap
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
@@ -299,7 +300,7 @@ object HogBugExcludingDatesForUuid {
    */
 
   def plotDists(sc: SparkContext, title: String, titleNeg: String,
-    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], plotDirectory:String, isBugOrHog: Boolean) = {
+    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], plotDirectory:String, isBugOrHog: Boolean) = {
     val (xmax, bucketed, bucketedNeg, ev, evNeg, evDistance) = DynamoAnalysisUtil.getDistanceAndDistributionsUnBucketed(sc, one, two, aPrioriDistribution)
     
     if (bucketed != null && bucketedNeg != null && (!isBugOrHog || evDistance > 0)) {

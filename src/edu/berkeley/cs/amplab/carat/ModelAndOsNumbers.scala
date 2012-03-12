@@ -9,6 +9,7 @@ import scala.collection.Seq
 import scala.collection.immutable.Set
 import scala.collection.immutable.HashSet
 import scala.collection.immutable.TreeMap
+import scala.collection.mutable.Map
 import collection.JavaConversions._
 import com.amazonaws.services.dynamodb.model.AttributeValue
 import java.io.File
@@ -240,7 +241,7 @@ object ModelAndOsNumbers {
    * Note that the server side multiplies the JScore by 100, and we store it here
    * as a fraction.
    */
-  def plotJScores(sc: SparkContext, sem: Semaphore, allRates: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)],
+  def plotJScores(sc: SparkContext, sem: Semaphore, allRates: RDD[CaratRate], aPrioriDistribution: Map[Double, Double],
     evByUuid: TreeMap[String, Double],
     uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)]) {
 
@@ -265,7 +266,7 @@ object ModelAndOsNumbers {
   }
 
   def printVarianceAndSampleCount(sem: Semaphore, sc: SparkContext, title: String, 
-    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Array[(Double, Double)], isBugOrHog: Boolean, 
+    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], isBugOrHog: Boolean, 
     allEvs: scala.collection.immutable.TreeMap[String,Double], uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
     val usersWith = one.map(_.uuid).collect().toSet.size
     // the ev is over all the points in the distribution
