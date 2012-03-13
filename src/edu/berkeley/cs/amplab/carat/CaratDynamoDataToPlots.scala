@@ -607,9 +607,9 @@ object CaratDynamoDataToPlots {
 
     /** Calculate correlation for each model and os version with all rates */
     val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
-    PlotUtil.plotJScores(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, DECIMALS)
+    PlotUtil.plotJScores(plotDirectory,distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
 
-    PlotUtil.writeCorrelationFile("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0, null)
+    PlotUtil.writeCorrelationFile(plotDirectory, "All", osCorrelations, modelCorrelations, userCorrelations, 0, 0, null)
     // not allowed to return before everything is done
     sem.acquireUninterruptibly(CONCURRENT_PLOTS)
     sem.release(CONCURRENT_PLOTS)
@@ -665,9 +665,9 @@ object CaratDynamoDataToPlots {
         scheduler.execute(
           if (isBugOrHog && filtered != null) {
             val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
-            PlotUtil.plot(title, titleNeg, xmax, probDist.collect(), probDistNeg.collect(), ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid, DECIMALS)
+            PlotUtil.plot(plotDirectory, title, titleNeg, xmax, probDist.collect(), probDistNeg.collect(), ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid, DECIMALS)
           } else
-            PlotUtil.plot(title, titleNeg, xmax, probDist.collect(), probDistNeg.collect(), ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid, DECIMALS))
+            PlotUtil.plot(plotDirectory, title, titleNeg, xmax, probDist.collect(), probDistNeg.collect(), ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid, DECIMALS))
       }
       isBugOrHog && evDistance > 0
     } else

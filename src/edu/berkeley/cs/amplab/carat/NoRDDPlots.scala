@@ -37,10 +37,10 @@ object NoRDDPlots {
     }
     if (args != null && args.length > 1)
       plotDirectory = args(1)
-
     val start = DynamoAnalysisUtil.start()
     CaratAnalysisGeneric.genericAnalysis(master, tmpdir, Int.MaxValue,ENOUGH_USERS, DECIMALS,
-        x => {}, plotDists,PlotUtil.plotJScores,PlotUtil.writeCorrelationFile)
+        x => {}, plotDists,PlotUtil.plotJScores(plotDirectory,_,_,_,_,_,_,_),
+        PlotUtil.writeCorrelationFile(plotDirectory,_,_,_,_,_,_,_))
         
     DynamoAnalysisUtil.finish(start)
   }
@@ -66,9 +66,9 @@ object NoRDDPlots {
         }
         if (isBugOrHog && filtered != null) {
           val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation(title, filtered, aPrioriDistribution, models, oses, totalsByUuid)
-          PlotUtil.plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid, DECIMALS)
+          PlotUtil.plot(plotDirectory, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, uuid, DECIMALS)
         } else
-          PlotUtil.plot(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid, DECIMALS)
+          PlotUtil.plot(plotDirectory, title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid, DECIMALS)
       } else {
         printf("Not %s evWith=%s evWithout=%s evDistance=%s (%s vs %s users) %s\n", title, ev, evNeg, evDistance, usersWith, usersWithout, uuid)
       }

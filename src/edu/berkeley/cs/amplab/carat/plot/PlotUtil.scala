@@ -51,16 +51,14 @@ object PlotUtil {
   val SIM = "similarApps"
   val UUIDS = "uuIds"
 
-  var plotDirectory: String = null
-
-  def plot(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+  def plot(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
     userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
     apps: Seq[String] = null) {
-    plotSerial(title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
+    plotSerial(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
       userCorrelations,
       usersWith, usersWithout, uuid, decimals, apps)
   }
@@ -72,7 +70,7 @@ object PlotUtil {
    * Note that the server side multiplies the JScore by 100, and we store it here
    * as a fraction.
    */
-  def plotJScores(distsWithUuid: TreeMap[String, Array[(Double, Double)]],
+  def plotJScores(plotDirectory:String, distsWithUuid: TreeMap[String, Array[(Double, Double)]],
     distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
@@ -100,13 +98,13 @@ object PlotUtil {
       val distWithout = distsWithoutUuid.get(k).getOrElse(null)
       val apps = appsByUuid.get(k).getOrElse(null)
       if (distWith != null && distWithout != null && apps != null)
-        plot("Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, null, null, null, 0, 0, k, decimals, apps.toSeq)
+        plot(plotDirectory, "Profile for " + k, "Other users", xmax, distWith, distWithout, ev, evNeg, jscore, null, null, null, 0, 0, k, decimals, apps.toSeq)
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
   }
 
-  def plotSerial(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+  def plotSerial(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
@@ -124,17 +122,17 @@ object PlotUtil {
     val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
     println("Plotting %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
       title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
-    plotFile(dateString, title, evTitle, evTitleNeg, xmax)
+    plotFile(plotDirectory, dateString, title, evTitle, evTitleNeg, xmax)
     writeData(dateString, evTitle, distWith)
     writeData(dateString, evTitleNeg, distWithout)
     if (osCorrelations != null) {
       var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
-      writeCorrelationFile(title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
+      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
     }
     plotData(dateString, title)
   }
 
-  def plotFile(dir: String, name: String, t1: String, t2: String, xmax: Double) = {
+  def plotFile(plotDirectory:String, dir: String, name: String, t1: String, t2: String, xmax: Double) = {
     val pdir = dir + "/" + PLOTS + "/"
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
@@ -159,7 +157,7 @@ object PlotUtil {
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)
-            plotfile.write("set output \"" + plotDirectory + "/" + assignSubDir(name) + name + ".eps\"\n")
+            plotfile.write("set output \"" + plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + ".eps\"\n")
           else
             plotfile.write("set output \"" + pdir + name + ".eps\"\n")
           plotfile.write("plot \"" + ddir + t1 + ".txt\" using 1:2 with linespoints lt rgb \"#f3b14d\" ps 3 lw 5 title \"" + t1.replace("~", "\\\\~").replace("_", "\\\\_") +
@@ -173,7 +171,7 @@ object PlotUtil {
     }
   }
 
-  def assignSubDir(name: String) = {
+  def assignSubDir(plotDirectory:String, name: String) = {
     val p = new File(plotDirectory)
     if (!p.isDirectory() && !p.mkdirs()) {
       ""
@@ -214,12 +212,15 @@ object PlotUtil {
     }
   }
 
-  def writeCorrelationFile(name: String,
+  def writeCorrelationFile(plotDirectory:String, name: String,
     osCorrelations: Map[String, Double],
     modelCorrelations: Map[String, Double],
     userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String = null) {
-    val path = plotDirectory + "/" + assignSubDir(name) + name + "-correlation.txt"
+    val pdir = dateString + "/" + PLOTS + "/"
+    var path = pdir + name + "-correlation.txt"
+    if (plotDirectory != null)
+      path = plotDirectory + "/" + assignSubDir(plotDirectory, name) + name + "-correlation.txt"
 
     var datafile: java.io.FileWriter = null
 
