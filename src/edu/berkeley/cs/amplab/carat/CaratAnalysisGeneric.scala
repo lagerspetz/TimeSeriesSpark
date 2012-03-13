@@ -4,13 +4,10 @@ import spark._
 import spark.SparkContext._
 import spark.timeseries._
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
-import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
-import edu.berkeley.cs.amplab.carat.plot.PlotUtil
 import scala.collection.immutable.Set
 import scala.collection.immutable.TreeMap
 import scala.collection.mutable.HashMap
 import collection.JavaConversions._
-import java.text.SimpleDateFormat
 
 /**
  * Do the exact same thing as in CaratDynamoDataToPlots, but do not collect() and write plot files and run plotting in the end.
@@ -24,7 +21,7 @@ object CaratAnalysisGeneric {
   var jsFunction: ( /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*decimals:*/ Int) => Unit = null
   var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ Map[String, Double], /*modelCorrelations:*/ Map[String, Double], /*userCorrelations:*/ Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
 
-  var ENOUGH_USERS: Int = 5
+  var ENOUGH_USERS = 5
   var DECIMALS = 3
 
   /**
