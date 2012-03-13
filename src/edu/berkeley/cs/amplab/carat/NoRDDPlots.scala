@@ -39,7 +39,7 @@ object NoRDDPlots {
       plotDirectory = args(1)
 
     val start = DynamoAnalysisUtil.start()
-    CaratAnalysisGeneric.genericAnalysis(master, tmpdir, ENOUGH_USERS, DECIMALS,
+    CaratAnalysisGeneric.genericAnalysis(master, tmpdir, Int.MaxValue,ENOUGH_USERS, DECIMALS,
         x => {}, plotDists,PlotUtil.plotJScores,PlotUtil.writeCorrelationFile)
         
     DynamoAnalysisUtil.finish(start)

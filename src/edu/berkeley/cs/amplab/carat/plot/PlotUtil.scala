@@ -76,7 +76,9 @@ object PlotUtil {
     distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
-    appsByUuid: TreeMap[String, Set[String]], decimals: Int) {
+    appsByUuid: TreeMap[String, Set[String]],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    decimals: Int) {
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {

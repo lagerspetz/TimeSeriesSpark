@@ -18,19 +18,22 @@ import collection.JavaConversions._
 object CaratAnalysisGeneric {
   var removeD: ( /*daemonSet:*/ Set[String]) => Unit = null
   var action: (String, String, Array[CaratRate], Array[CaratRate], scala.collection.immutable.HashMap[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
-  var jsFunction: ( /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*decimals:*/ Int) => Unit = null
+  var jsFunction: ( /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
   var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ Map[String, Double], /*modelCorrelations:*/ Map[String, Double], /*userCorrelations:*/ Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
 
   var ENOUGH_USERS = 5
   var DECIMALS = 3
+  
+  var userLimit = Int.MaxValue
 
   /**
    * Main program entry point.
    */
-  def genericAnalysis(master: String, tmpDir: String, CLIENT_THRESHOLD: Int, DECIMALS: Int,
+  def genericAnalysis(master: String, tmpDir: String, clients:Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
     actionFunction: (String, String, Array[CaratRate], Array[CaratRate], scala.collection.immutable.HashMap[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
-    JScoreFunction: ( /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*decimals:*/ Int) => Unit,
+    JScoreFunction: ( /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]],
+        /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)],/*decimals:*/ Int) => Unit,
     correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ Map[String, Double], /*modelCorrelations:*/ Map[String, Double], /*userCorrelations:*/ Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
     val start = DynamoAnalysisUtil.start()
 
@@ -50,6 +53,7 @@ object CaratAnalysisGeneric {
     jsFunction = JScoreFunction
     corrFunction = correlationFunction
     ENOUGH_USERS = CLIENT_THRESHOLD
+    userLimit = clients
 
     // Fix Spark running out of space on AWS.
     System.setProperty("spark.local.dir", tmpDir)
@@ -79,6 +83,18 @@ object CaratAnalysisGeneric {
     var uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
+  
+    if (userLimit < uuidArray.length) {
+      println("Running analysis for %s users.".format(userLimit))
+      // limit data to these users:
+      uuidArray = uuidArray.slice(0, userLimit)
+      allRates = inputRates.filter(x => {
+        uuidArray.contains(x.uuid)
+      }).collect()
+
+    } else {
+      println("Running analysis for all users.")
+    }
 
     val oses = uuidToOsAndModel.map(_._2._1).toSet
     val models = uuidToOsAndModel.map(_._2._2).toSet
@@ -169,7 +185,7 @@ object CaratAnalysisGeneric {
     val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
 
     // need to collect uuid stuff here:
-    jsFunction(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, DECIMALS)
+    jsFunction(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
     corrFunction("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0, null)
 
     //scheduler.execute({
