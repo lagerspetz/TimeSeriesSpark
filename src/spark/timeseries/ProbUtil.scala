@@ -245,6 +245,15 @@ object ProbUtil extends Logging {
 
     (xmax, bucketed, bucketedNeg)
   }
+  
+  def bucketDistributionsByX(values: Array[(Double, Double)], others: Array[(Double, Double)], buckets: Int, decimals: Int):
+  (Double, TreeMap[Int, Double], TreeMap[Int,Double])= {
+    var i1 = new TreeMap[Double, Double]
+    i1 ++= values
+    var i2 = new TreeMap[Double, Double]
+    i2 ++= others
+    bucketDistributionsByX(i1,i2,buckets,decimals)
+  }
 
   /* The stddev of a continuous distribution, i.e. a single UniformDist, is
     * square root of:
@@ -544,6 +553,48 @@ object ProbUtil extends Logging {
       0.0
   }
   
+  def logBucketDists(withDist: Array[(Double, Double)], withoutDist: Array[(Double, Double)], buckets: Int, smallestBucket: Double, decimals: Int) = {
+    val emptyWith = withDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+    
+    val emptyWithout = withoutDist.take(1) match {
+      case Array(t) => false
+      case _ => true
+    }
+    
+    if (!emptyWith && !emptyWithout){
+    /* Find max x*/
+    val xmax = withDist.union(withoutDist).map(_._1).reduce((x, y) => {
+      if (x > y)
+        x
+      else
+        y
+    })
+
+    /* xmax / (logBase^buckets) > smallestBucket
+     * <=> logBase^buckets * smallestBucket < xmax
+     * <=> logBase^buckets < xmax / smallestBucket
+     * log (logbase) * buckets < log (xmax/smallestBucket)
+     * logbase < e^(log(xmax/smallestBucket) / buckets)
+     */
+
+    val logbase = getLogBase(buckets, smallestBucket, xmax)
+
+    /* Bucket and normalize dists: */
+    var bucketed = logBucketDist(withDist, xmax, logbase, buckets)
+    var bucketedNeg = logBucketDist(withoutDist, xmax, logbase, buckets)
+
+    //val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
+    //val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
+
+    (xmax, bucketed.map(x => { (x._1, nDecimal(x._2, decimals)) }),
+      bucketedNeg.map(x => { (x._1, nDecimal(x._2, decimals)) }))
+    }else
+      (0.0, null, null)
+  }
+  
   /**
    * Non-RDD version to debug performance problems.
    */
@@ -615,6 +666,21 @@ object ProbUtil extends Logging {
   
   
   def logBucketDist(sc: SparkContext, withDist: RDD[(Double, Double)], xmax: Double, logbase: Double, buckets: Int) = {
+    withDist.map(k => {
+      val bucketDouble = 100 - math.log(xmax / k._1) / math.log(logbase)
+      val bucket = {
+        if (bucketDouble >= buckets)
+          buckets - 1
+        else if (bucketDouble < 0)
+          0
+        else
+          bucketDouble.toInt
+      }
+      (bucket, k._2)
+    })
+  }
+  
+  def logBucketDist(withDist: Array[(Double, Double)], xmax: Double, logbase: Double, buckets: Int) = {
     withDist.map(k => {
       val bucketDouble = 100 - math.log(xmax / k._1) / math.log(logbase)
       val bucket = {

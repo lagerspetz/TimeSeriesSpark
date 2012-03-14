@@ -16,7 +16,7 @@ import collection.JavaConversions._
  * @author Eemil Lagerspetz
  */
 
-object CaratDynamoNoRDDAnalysis {
+object CaratAnalysisSpeedTest {
 
   // How many clients do we need to consider data reliable?
   val ENOUGH_USERS = 5

@@ -114,7 +114,26 @@ object PlotUtil {
     userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
     apps: Seq[String] = null) {
-
+    println("Plotting %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
+      title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
+    plotRegular(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
+      userCorrelations,
+      usersWith, usersWithout, uuid, decimals, apps)
+    plotBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
+      userCorrelations,
+      usersWith, usersWithout, uuid, decimals, apps)
+    plotLogBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
+      userCorrelations,
+      usersWith, usersWithout, uuid, decimals, apps)
+  }
+  
+  def plotRegular(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+    distWithout: Array[(Double, Double)],
+    ev: Double, evNeg: Double, evDistance: Double,
+    osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
+    userCorrelations: Map[String, Double],
+    usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
+    apps: Seq[String] = null) {
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -123,8 +142,6 @@ object PlotUtil {
     // bump up accuracy here so that not everything gets blurred
     val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
-    println("Plotting %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s uuid=%s".format(
-      title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, uuid))
     plotFile(plotDirectory, dateString, title, evTitle, evTitleNeg, xmax)
     writeData(dateString, evTitle, distWith)
     writeData(dateString, evTitleNeg, distWithout)
@@ -133,6 +150,67 @@ object PlotUtil {
       writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
     }
     plotData(dateString, title)
+  }
+  
+  def plotBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
+    distWithoutReg: Array[(Double, Double)],
+    ev: Double, evNeg: Double, evDistance: Double,
+    osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
+    userCorrelations: Map[String, Double],
+    usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
+    apps: Seq[String] = null) {
+    val (xmax,distWith,distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, 100, 3)
+    var fixedTitle = title
+    if (title.startsWith("Hog "))
+      fixedTitle = title.substring(4)
+    else if (title.startsWith("Bug "))
+      fixedTitle = title.substring(4)
+    // bump up accuracy here so that not everything gets blurred
+    val evTitle = fixedTitle + "B (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
+    val evTitleNeg = titleNeg + "B (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
+    plotFile(plotDirectory, dateString, title +"bucketed", evTitle, evTitleNeg, xmax)
+    writeDataBucketed(dateString, evTitle, distWith, xmax)
+    writeDataBucketed(dateString, evTitleNeg, distWithout, xmax)
+    if (osCorrelations != null) {
+      var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
+      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
+    }
+    plotData(dateString, title +"bucketed")
+  }
+  
+  def plotLogBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
+    distWithoutReg: Array[(Double, Double)],
+    ev: Double, evNeg: Double, evDistance: Double,
+    osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
+    userCorrelations: Map[String, Double],
+    usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
+    apps: Seq[String] = null) {
+    val smallestBucket = 0.0001
+    val buckets = 100
+    val (xmax,distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, buckets, smallestBucket, 3)
+    var fixedTitle = title
+    if (title.startsWith("Hog "))
+      fixedTitle = title.substring(4)
+    else if (title.startsWith("Bug "))
+      fixedTitle = title.substring(4)
+    // bump up accuracy here so that not everything gets blurred
+    val evTitle = fixedTitle + "LB (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
+    val evTitleNeg = titleNeg + "LB (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
+    plotFile(plotDirectory, dateString, title +"logbucketed", evTitle, evTitleNeg, xmax)
+    
+    var i1 = new TreeMap[Int, Double]
+    i1 ++= distWith
+    var i2 = new TreeMap[Int, Double]
+    i2 ++= distWithout
+     
+    val logBase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
+    writeDataLogBucketed(dateString, evTitle, i1, xmax, buckets, logBase)
+    writeDataLogBucketed(dateString, evTitleNeg, i2, xmax, buckets, logBase)
+    if (osCorrelations != null) {
+      var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
+      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
+    }
+    plotData(dateString, title +"logbucketed")
   }
 
   def plotFile(plotDirectory:String, dir: String, name: String, t1: String, t2: String, xmax: Double) = {
@@ -211,6 +289,45 @@ object PlotUtil {
 
       for (k <- dataPairs)
         datafile.write(k._1 + " " + k._2 + "\n")
+      datafile.close
+    }
+  }
+  
+  def writeDataBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax:Double) {
+    val ddir = dir + "/" + DATA_DIR + "/"
+    var f = new File(ddir)
+    if (!f.isDirectory() && !f.mkdirs())
+      println("Failed to create " + f + " for plots!")
+    else {
+      val datafile = new java.io.FileWriter(ddir + name + ".txt")
+      
+      for (k <- dist){
+        val x = (k._1 + 0.5)/xmax
+        datafile.write(x + " " + k._2 +"\n")
+      }
+      datafile.close
+    }
+  }
+  
+  def writeDataLogBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax:Double, buckets:Int, logBase:Double) {
+    val ddir = dir + "/" + DATA_DIR + "/"
+    var f = new File(ddir)
+    if (!f.isDirectory() && !f.mkdirs())
+      println("Failed to create " + f + " for plots!")
+    else {
+      val datafile = new java.io.FileWriter(ddir + name + ".txt")
+      
+      for (k <- dist){
+        val bucketStart = {
+        if (k._1 == 0)
+          0.0
+        else
+          xmax / (math.pow(logBase, buckets - k._1))
+      }
+      val bucketEnd = xmax / (math.pow(logBase, buckets - k._1 - 1))
+      val x = (bucketEnd - bucketStart) / 2
+        datafile.write(x + " " + k._2 +"\n")
+      }
       datafile.close
     }
   }
