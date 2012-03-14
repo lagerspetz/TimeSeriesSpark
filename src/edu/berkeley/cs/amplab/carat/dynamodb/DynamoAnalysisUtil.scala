@@ -15,10 +15,10 @@ import spark._
 import spark.SparkContext._
 import com.amazonaws.services.dynamodb.model.Key
 import scala.collection.immutable.HashMap
-import scala.collection.mutable.Map
 import edu.berkeley.cs.amplab.carat.CaratRate
 import spark.timeseries.ProbUtil
 import scala.collection.immutable.TreeMap
+import scala.collection.mutable.Map
 
 object DynamoAnalysisUtil {
 
@@ -430,7 +430,7 @@ object DynamoAnalysisUtil {
   }
 
   def correlation(name: String, rates: Array[CaratRate],
-    aPriori: scala.collection.immutable.HashMap[Double, Double],
+    aPriori: Map[Double, Double],
     models: Set[String], oses: Set[String],
     totalsByUuid: TreeMap[String, (Double, Double)]) = {
     var modelCorrelations = new scala.collection.immutable.HashMap[String, Double]
@@ -637,14 +637,14 @@ object DynamoAnalysisUtil {
     assert(ap.length > 0, "AllRates should contain some rates that are not rateRanges and less than %s when calculating aPriori.".format(ABNORMAL_RATE))
     // Get their rates and frequencies (1.0 for all) and group by rate 
     val rates = ap.map(_.rate)
-    var rateMap = new HashMap[Double, Double]
+    val rateMap = new scala.collection.mutable.HashMap[Double, Double]
     for (k <- rates) {
       val old = rateMap.getOrElse(k, 0.0) + 1.0
       rateMap += ((k, old))
     }
 
     val sum = rateMap.map(_._2).sum
-    val ret = rateMap.map(x => { (x._1, x._2 / sum) })
+    val ret:scala.collection.mutable.Map[Double,Double] = rateMap.map(x => { (x._1, x._2 / sum) })
     finish(startTime)
     ret
   }
@@ -702,7 +702,7 @@ object DynamoAnalysisUtil {
   /**
    * Non-RDD version to debug if my problems are rdd-based.
    */
-  def getDistanceAndDistributionsUnBucketed(one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: HashMap[Double, Double]) = {
+  def getDistanceAndDistributionsUnBucketed(one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: Map[Double, Double]) = {
     val startTime = start
     val (probWith, ev /*, usersWith*/ ) = getEvAndDistribution(one, aPrioriDistribution)
     val (probWithout, evNeg /*, usersWithout*/ ) = getEvAndDistribution(two, aPrioriDistribution)
@@ -780,7 +780,7 @@ object DynamoAnalysisUtil {
    * Get the distributions, xmax, ev's and ev distance of two collections of CaratRates.
    * Non-RDD version to debug performance issues.
    */
-  def getEvAndDistribution(one: Array[CaratRate], aPrioriDistribution: HashMap[Double, Double]) = {
+  def getEvAndDistribution(one: Array[CaratRate], aPrioriDistribution: Map[Double, Double]) = {
     val startTime = start
     //var fStart = start
     val probWith = getProbDist(aPrioriDistribution, one)
@@ -897,7 +897,7 @@ object DynamoAnalysisUtil {
    * of `aPrioriDistribution`.
    * Non-RDD version to debug performance problems.
    */
-  def getFrequencies(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
+  def getFrequencies(aPrioriDistribution: Map[Double, Double], samples: Array[CaratRate]) = {
     val startTime = start
     val flatSamples = samples.flatMap(x => {
       if (x.isRateRange()) {
@@ -944,7 +944,7 @@ object DynamoAnalysisUtil {
   /**
    * Non-RDD version to debug performance problems.
    */
-  def getProbDist(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
+  def getProbDist(aPrioriDistribution: Map[Double, Double], samples: Array[CaratRate]) = {
     val freq = getFrequencies(aPrioriDistribution, samples)
     val hasPoints = freq.take(1) match {
       case Array(t) => true
@@ -988,7 +988,7 @@ object DynamoAnalysisUtil {
   /**
    * Non-RDD version to debug performance problems.
    */
-  def mapToRateEv(aPrioriDistribution: HashMap[Double, Double], samples: Array[CaratRate]) = {
+  def mapToRateEv(aPrioriDistribution: Map[Double, Double], samples: Array[CaratRate]) = {
     val startTime = start
     val evSamples = samples.map(x => {
       if (x.isRateRange()) {

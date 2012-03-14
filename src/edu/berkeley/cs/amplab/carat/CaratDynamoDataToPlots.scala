@@ -607,7 +607,7 @@ object CaratDynamoDataToPlots {
 
     /** Calculate correlation for each model and os version with all rates */
     val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
-    PlotUtil.plotJScores(plotDirectory,distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
+    PlotUtil.plotJScores(plotDirectory, allRates, aPrioriDistribution, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
 
     PlotUtil.writeCorrelationFile(plotDirectory, "All", osCorrelations, modelCorrelations, userCorrelations, 0, 0, null)
     // not allowed to return before everything is done

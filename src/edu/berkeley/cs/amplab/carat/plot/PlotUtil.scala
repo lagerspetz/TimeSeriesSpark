@@ -24,6 +24,7 @@ import scala.actors.scheduler.ResizableThreadPoolScheduler
 import scala.collection.mutable.HashMap
 import com.esotericsoftware.kryo.Kryo
 import edu.berkeley.cs.amplab.carat.CaratRate
+import spark.RDD
 
 /**
  * Do the exact same thing as in CaratDynamoDataToPlots, but do not collect() and write plot files and run plotting in the end.
@@ -70,7 +71,9 @@ object PlotUtil {
    * Note that the server side multiplies the JScore by 100, and we store it here
    * as a fraction.
    */
-  def plotJScores(plotDirectory:String, distsWithUuid: TreeMap[String, Array[(Double, Double)]],
+  def plotJScores(plotDirectory:String, 
+      allRates:RDD[CaratRate], aPrioriDistribution: scala.collection.mutable.Map[Double, Double],
+      distsWithUuid: TreeMap[String, Array[(Double, Double)]],
     distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],

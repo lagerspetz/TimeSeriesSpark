@@ -251,23 +251,24 @@ object ModelAndOsNumbers {
     for (os <- oses) {
       // can be done in parallel, independent of anything else
       val fromOs = allRates.filter(_.os == os)
-      val notFromOs = allRates.filter(_.os != os)
+      //val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      printVarianceAndSampleCount(sem, sc, os, fromOs, notFromOs, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
+      printVarianceAndSampleCount(os, fromOs, aPrioriDistribution, evByUuid, uuidToOsAndModel)
     }
 
     for (model <- models) {
       // can be done in parallel, independent of anything else
       val fromModel = allRates.filter(_.model == model)
-      val notFromModel = allRates.filter(_.model != model)
+      //val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      printVarianceAndSampleCount(sem, sc, model, fromModel, notFromModel, aPrioriDistribution, false, evByUuid, uuidToOsAndModel)
+      printVarianceAndSampleCount(model, fromModel, aPrioriDistribution, evByUuid, uuidToOsAndModel)
     }
   }
 
-  def printVarianceAndSampleCount(sem: Semaphore, sc: SparkContext, title: String, 
-    one: RDD[CaratRate], two: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], isBugOrHog: Boolean, 
-    allEvs: scala.collection.immutable.TreeMap[String,Double], uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], enoughWith: Boolean = false, enoughWithout: Boolean = false) = {
+  def printVarianceAndSampleCount(title: String, 
+    one: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], 
+    allEvs: scala.collection.immutable.TreeMap[String,Double],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)]) = {
     val usersWith = one.map(_.uuid).collect().toSet.size
     // the ev is over all the points in the distribution
     val (probOne, ev) = DynamoAnalysisUtil.getEvAndDistribution(one, aPrioriDistribution)

@@ -39,7 +39,7 @@ object NoRDDPlots {
       plotDirectory = args(1)
     val start = DynamoAnalysisUtil.start()
     CaratAnalysisGeneric.genericAnalysis(master, tmpdir, Int.MaxValue,ENOUGH_USERS, DECIMALS,
-        x => {}, plotDists,PlotUtil.plotJScores(plotDirectory,_,_,_,_,_,_,_),
+        x => {}, plotDists,PlotUtil.plotJScores(plotDirectory,_,_,_,_,_,_,_,_,_),
         PlotUtil.writeCorrelationFile(plotDirectory,_,_,_,_,_,_,_))
         
     DynamoAnalysisUtil.finish(start)
@@ -52,7 +52,7 @@ object NoRDDPlots {
    */
 
   def plotDists(title: String, titleNeg: String,
-    one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: scala.collection.immutable.HashMap[Double, Double], isBugOrHog: Boolean,
+    one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: scala.collection.mutable.Map[Double, Double], isBugOrHog: Boolean,
     filtered: Array[CaratRate], oses: Set[String], models: Set[String], totalsByUuid: TreeMap[String, (Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
     var hasSamples = one.length > 0 && two.length > 0
     if (hasSamples) {

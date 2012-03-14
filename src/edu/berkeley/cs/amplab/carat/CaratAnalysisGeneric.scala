@@ -6,7 +6,7 @@ import spark.timeseries._
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
 import scala.collection.immutable.Set
 import scala.collection.immutable.TreeMap
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.Map
 import collection.JavaConversions._
 
 /**
@@ -17,9 +17,9 @@ import collection.JavaConversions._
 
 object CaratAnalysisGeneric {
   var removeD: ( /*daemonSet:*/ Set[String]) => Unit = null
-  var action: (String, String, Array[CaratRate], Array[CaratRate], scala.collection.immutable.HashMap[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
-  var jsFunction: ( /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
-  var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ Map[String, Double], /*modelCorrelations:*/ Map[String, Double], /*userCorrelations:*/ Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
+  var action: (String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
+  var jsFunction: (/*allRates:*/ RDD[CaratRate],/* aPrioriDistribution: */Map[Double,Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
+  var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
 
   var ENOUGH_USERS = 5
   var DECIMALS = 3
@@ -31,10 +31,10 @@ object CaratAnalysisGeneric {
    */
   def genericAnalysis(master: String, tmpDir: String, clients:Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
-    actionFunction: (String, String, Array[CaratRate], Array[CaratRate], scala.collection.immutable.HashMap[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
-    JScoreFunction: ( /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]],
+    actionFunction: (String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
+    JScoreFunction: (/*allRates:*/ RDD[CaratRate],/* aPrioriDistribution: */Map[Double,Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]],
         /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)],/*decimals:*/ Int) => Unit,
-    correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ Map[String, Double], /*modelCorrelations:*/ Map[String, Double], /*userCorrelations:*/ Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
+    correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
     val start = DynamoAnalysisUtil.start()
 
     // turn off INFO logging for spark:
@@ -185,7 +185,7 @@ object CaratAnalysisGeneric {
     val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
 
     // need to collect uuid stuff here:
-    jsFunction(distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
+    jsFunction(inputRates,aPrioriDistribution,distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
     corrFunction("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0, null)
 
     //scheduler.execute({
@@ -209,7 +209,7 @@ object CaratAnalysisGeneric {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: Array[CaratRate], aPrioriDistribution: scala.collection.immutable.HashMap[Double, Double], i: Int, uuidApps: Set[String]) {
+  def similarApps(all: Array[CaratRate], aPrioriDistribution: Map[Double, Double], i: Int, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -220,7 +220,7 @@ object CaratAnalysisGeneric {
   }
 
   def oneApp(uuidArray: Array[String], allRates: Array[edu.berkeley.cs.amplab.carat.CaratRate], app: String,
-    aPrioriDistribution: scala.collection.immutable.HashMap[Double, Double],
+    aPrioriDistribution: Map[Double, Double],
     oses: scala.collection.immutable.Set[String], models: scala.collection.immutable.Set[String],
     parametersByUuid: scala.collection.immutable.TreeMap[String, (Double, Double, Double)],
     totalsByUuid: scala.collection.immutable.TreeMap[String, (Double, Double)]) {
