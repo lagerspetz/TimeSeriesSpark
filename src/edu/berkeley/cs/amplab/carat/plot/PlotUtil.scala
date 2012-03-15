@@ -308,8 +308,8 @@ object PlotUtil {
             xmax / (math.pow(logBase, buckets - k._1))
         }
         val bucketEnd = xmax / (math.pow(logBase, buckets - k._1 - 1))
-        val x = (bucketEnd - bucketStart) / 2
-        println("Bucket from %s to %s".format(bucketStart, bucketEnd))
+        val x = (bucketEnd + bucketStart) / 2
+        //println("Bucket from %s to %s".format(bucketStart, bucketEnd))
         println("wrote %s %s".format(x, k._2))
         datafile.write(x + " " + k._2 + "\n")
       }
