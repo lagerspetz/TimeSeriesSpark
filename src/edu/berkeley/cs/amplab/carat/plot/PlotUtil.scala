@@ -195,7 +195,7 @@ object PlotUtil {
 
   def plotFile(plotDirectory: String, dir: String, name: String, t1: String, t2: String, xmax: Double, smallestBucket: Double, bucketedEvenly: Boolean = false) = {
     val max = xmax+0.001
-    val min = smallestBucket/2
+    val min = smallestBucket
     val pdir = dir + "/" + PLOTS + "/"
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
@@ -215,12 +215,15 @@ object PlotUtil {
           plotfile.write("set term postscript eps enhanced color 'Helvetica' 32\nset xtics out\n" +
             "set size 1.93,1.1\n" +
             {
+              // free min and max for regular buckets
               if (bucketedEvenly)
                 ""
-              else
-                "set logscale x\nset xtics %s,2,%s\n".format(min, max)
+              else{
+                // for log buckets, min is required. For plain plots, not required.
+                "set logscale x\nset xtics %s,2,%s\n".format(min, max)+
+                "set xrange [%s:%s]\n".format(min, max)
+              }
             } +
-            "set xrange [%s:%s]\n".format(min, max) +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)
