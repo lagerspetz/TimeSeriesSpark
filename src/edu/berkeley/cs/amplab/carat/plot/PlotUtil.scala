@@ -152,7 +152,6 @@ object PlotUtil {
     distWithoutReg: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, decimals: Int) {
     val buckets = 100
-    val decimals = 4
     val (xmax,distWith,distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, buckets)
     var fixedTitle = title
     if (title.startsWith("Hog "))
@@ -172,7 +171,7 @@ object PlotUtil {
   def plotLogBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
     distWithoutReg: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, decimals:Int) {
-    val smallestBucket = 0.0001
+    val smallestBucket = 0.001
     val buckets = 100
     val (distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, xmax, buckets, smallestBucket)
     var fixedTitle = title
@@ -300,18 +299,19 @@ object PlotUtil {
       println("Failed to create " + f + " for plots!")
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
-      
-      for (k <- dist){
+
+      for (k <- dist) {
         val bucketStart = {
-        if (k._1 == 0)
-          0.0
-        else
-          xmax / (math.pow(logBase, buckets - k._1))
-      }
-      val bucketEnd = xmax / (math.pow(logBase, buckets - k._1 - 1))
-      val x = (bucketEnd - bucketStart) / 2
-      println("Bucket from %s to %s".format(bucketStart, bucketEnd))
-        datafile.write(x + " " + k._2 +"\n")
+          if (k._1 == 0)
+            0.0
+          else
+            xmax / (math.pow(logBase, buckets - k._1))
+        }
+        val bucketEnd = xmax / (math.pow(logBase, buckets - k._1 - 1))
+        val x = (bucketEnd - bucketStart) / 2
+        println("Bucket from %s to %s".format(bucketStart, bucketEnd))
+        println("wrote %s %s".format(x, k._2))
+        datafile.write(x + " " + k._2 + "\n")
       }
       datafile.close
     }
