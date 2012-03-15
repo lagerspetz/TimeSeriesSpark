@@ -249,9 +249,13 @@ object ProbUtil extends Logging {
   def bucketDistributionsByX(values: Array[(Double, Double)], others: Array[(Double, Double)], buckets: Int, decimals: Int = 0):
   (Double, TreeMap[Int, Double], TreeMap[Int,Double])= {
     var i1 = new TreeMap[Double, Double]
-    i1 ++= values
+    for (k <- values){
+      i1 += ((k._1, i1.getOrElse(k._1, 0.0) +k._2))
+    }
     var i2 = new TreeMap[Double, Double]
-    i2 ++= others
+    for (k <- others){
+      i2 += ((k._1, i2.getOrElse(k._1, 0.0) +k._2))
+    }
     bucketDistributionsByX(i1,i2,buckets,decimals)
   }
 
@@ -632,7 +636,7 @@ object ProbUtil extends Logging {
           xmax / (math.pow(logbase, buckets - k._1))
       }
       val bucketEnd = xmax / (math.pow(logbase, buckets - k._1 - 1))
-      (bucketEnd - bucketStart) / 2 * k._2
+      (bucketEnd + bucketStart) / 2 * k._2
     }).foreach(x => {
       ev += x
     })
