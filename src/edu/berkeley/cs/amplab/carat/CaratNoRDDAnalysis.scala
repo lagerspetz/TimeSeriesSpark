@@ -24,7 +24,7 @@ object CaratNoRDDAnalysis {
   // How many clients do we need to consider data reliable?
   val ENOUGH_USERS = 5
 
-  var DEBUG = false
+  var pretend = false
   val DECIMALS = 3
   var BUCKETS = 100
   // Isolate from the plotting.
@@ -44,8 +44,11 @@ object CaratNoRDDAnalysis {
     if (args != null && args.length >= 1) {
       master = args(0)
     }
-    if (args != null && args.length > 1)
-      userLimit = args(1).toInt
+    if (args != null && args.length > 1 && args(1) == "true")
+      pretend = true
+
+    if (args != null && args.length > 2)
+      userLimit = args(2).toInt
 
     val start = DynamoAnalysisUtil.start()
     CaratAnalysisGeneric.genericAnalysis(master, tmpdir, userLimit, ENOUGH_USERS, DECIMALS,
@@ -97,7 +100,7 @@ object CaratNoRDDAnalysis {
             }
           }
         }
-        
+
         val putFunction = storageFunction(nature, keyValue1, keyValue2)
         putFunction(xmax, distWith.toSeq, distWithout.toSeq, evDistance, ev, evNeg)
 
@@ -118,29 +121,42 @@ object CaratNoRDDAnalysis {
   }
 
   def storageFunction(nature: String, keyValue1: String, keyValue2: String, uuidApps: Seq[String] = null) = {
-    val putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit = nature match {
-      case "hog" => { DynamoDbEncoder.put(hogsTable, hogKey, keyValue1, _, _, _, _, _, _) }
-      case "similar" => { DynamoDbEncoder.put(similarsTable, similarKey, keyValue1, _, _, _, _, _, _) }
-      case "os" => { DynamoDbEncoder.put(osTable, osKey, keyValue1, _, _, _, _, _, _) }
-      case "model" => { DynamoDbEncoder.put(modelsTable, modelKey, keyValue1, _, _, _, _, _, _) }
-      case "result" => { DynamoDbEncoder.put(resultsTable, resultKey, keyValue1, _, _, _, _, _, _, uuidApps) }
-      case "bug" => { DynamoDbEncoder.putBug(bugsTable, (resultKey, hogKey), (keyValue1, keyValue2), _, _, _, _, _, _) }
-      case _ => null
+    if (pretend) {
+      val putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit = (xmax, wDist, woDist, evD, ev, evNeg) => {
+        println("Pretending to put %s k1=%s k2=%s: xmax=%s ev=%s evN=%s evD=%s wDist=%s woDist=%s".format(
+          nature, keyValue1, keyValue2, xmax, ev, evNeg, evD, wDist, woDist))
+      }
+      putFunction
+    } else {
+
+      val putFunction: (Double, Seq[(Int, Double)], Seq[(Int, Double)], Double, Double, Double) => Unit = nature match {
+        case "hog" => { DynamoDbEncoder.put(hogsTable, hogKey, keyValue1, _, _, _, _, _, _) }
+        case "similar" => { DynamoDbEncoder.put(similarsTable, similarKey, keyValue1, _, _, _, _, _, _) }
+        case "os" => { DynamoDbEncoder.put(osTable, osKey, keyValue1, _, _, _, _, _, _) }
+        case "model" => { DynamoDbEncoder.put(modelsTable, modelKey, keyValue1, _, _, _, _, _, _) }
+        case "result" => { DynamoDbEncoder.put(resultsTable, resultKey, keyValue1, _, _, _, _, _, _, uuidApps) }
+        case "bug" => { DynamoDbEncoder.putBug(bugsTable, (resultKey, hogKey), (keyValue1, keyValue2), _, _, _, _, _, _) }
+        case _ => null
+      }
+      putFunction
     }
-    putFunction
   }
 
   def deleteFunction(nature: String, keyValue1: String, keyValue2: String) {
-    nature match {
-      case "hog" => {
-        DynamoDbDecoder.deleteItem(hogsTable, keyValue1)
+    if (pretend) {
+      println("Pretend to delete %s %s %s".format(hogsTable, keyValue1, keyValue2))
+    } else {
+      nature match {
+        case "hog" => {
+          DynamoDbDecoder.deleteItem(hogsTable, keyValue1)
+        }
+        case "similar" => { { println("Delete not implemented for SimilarApps.") } }
+        case "os" => { { println("Delete not implemented for OS.") } }
+        case "model" => { { println("Delete not implemented for models.") } }
+        case "result" => { { println("Delete not implemented for jscores.") } }
+        case "bug" => { DynamoDbDecoder.deleteItem(bugsTable, keyValue1, keyValue2) }
+        case _ => null
       }
-      case "similar" => { { println("Delete not implemented for SimilarApps.") } }
-      case "os" => { { println("Delete not implemented for OS.") } }
-      case "model" => { { println("Delete not implemented for models.") } }
-      case "result" => { { println("Delete not implemented for jscores.") } }
-      case "bug" => { DynamoDbDecoder.deleteItem(bugsTable, keyValue1, keyValue2) }
-      case _ => null
     }
   }
 
