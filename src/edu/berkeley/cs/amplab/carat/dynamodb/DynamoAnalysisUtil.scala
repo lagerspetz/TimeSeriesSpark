@@ -170,7 +170,9 @@ object DynamoAnalysisUtil {
         }
       }
       /* Only get new rates if we have no old rates, or it has been more than an hour */
-      if (oldRates == null || (System.currentTimeMillis() / 1000 - last_sample > 3600)) {
+      val nowS =  System.currentTimeMillis() / 1000
+      println("Now=%s lastSample=%s diff=%s".format(nowS,last_sample,nowS-last_sample))
+      if (oldRates == null || (nowS - last_sample > 3600)) {
         if (last_reg > 0) {
           DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
             DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
