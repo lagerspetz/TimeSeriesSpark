@@ -269,7 +269,9 @@ object CaratDynamoDataToPlots {
 
     var allRates: spark.RDD[CaratRate] = oldRates
 
-    // closure to forget uuids, models and oses after assigning them to rates
+    /* closure to forget uuids, models and oses after assigning them to rates.
+     * This is because new rates may have new uuids, models and oses.
+    */
     {
       // Unique uuIds, Oses, and Models from registrations.
       val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
@@ -286,38 +288,44 @@ object CaratDynamoDataToPlots {
           allModels += k._2._2
         }
       }
+      /* Only get new rates if we have no old rates, or it has been more than an hour */
+      if (oldRates == null || (System.currentTimeMillis() / 1000 - last_sample > 3600)) {
+        if (last_reg > 0) {
+          DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+            DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
+            handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+        } else {
+          DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+            DynamoDbDecoder.getAllItems(registrationTable, _),
+            handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+        }
 
-      if (last_reg > 0) {
-        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
-          DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-          handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-      } else {
-        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
-          DynamoDbDecoder.getAllItems(registrationTable, _),
-          handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+        /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
+        if (last_sample > 0) {
+          allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
+            DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
+            handleSamples(sc, _, uuidToOsAndModel, _),
+            true,
+            allRates)
+        } else {
+          allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+            DynamoDbDecoder.getAllItems(samplesTable, _),
+            handleSamples(sc, _, uuidToOsAndModel, _),
+            true,
+            allRates)
+        }
       }
 
-      /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      if (last_sample > 0) {
-        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
-          DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-          handleSamples(sc, _, uuidToOsAndModel, _),
-          true,
-          allRates)
-      } else {
-        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
-          DynamoDbDecoder.getAllItems(samplesTable, _),
-          handleSamples(sc, _, uuidToOsAndModel, _),
-          true,
-          allRates)
-      }
-
-      // we may not be interesed in these actually.
+      // we may not be interested in these actually.
       println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
       println("All oses: " + allOses.mkString(", "))
       println("All models: " + allModels.mkString(", "))
     }
-
+    // save entire rate rdd for later:
+    allRates.saveAsObjectFile(RATES_CACHED_NEW)
+    DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
+    DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
+    DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
     allRates
   }
 

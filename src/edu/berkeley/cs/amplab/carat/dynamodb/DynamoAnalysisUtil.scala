@@ -111,7 +111,7 @@ object DynamoAnalysisUtil {
 
   def replaceOldRateFile(oldPath: String, newPath: String) {
     val startTime = start
-    val rem = Runtime.getRuntime().exec(Array("/bin/rm", "-rf", oldPath))
+    val rem = Runtime.getRuntime().exec(Array("/bin/mv", oldPath, oldPath+"-backup"))
     rem.waitFor()
     val move = Runtime.getRuntime().exec(Array("/bin/mv", newPath, oldPath))
     move.waitFor()
