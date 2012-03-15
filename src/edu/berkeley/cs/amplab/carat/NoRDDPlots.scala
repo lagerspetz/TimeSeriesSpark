@@ -51,7 +51,7 @@ object NoRDDPlots {
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
 
-  def plotDists(title: String, titleNeg: String,
+  def plotDists(nature:String, keyValue1:String, keyValue2:String, title: String, titleNeg: String,
     one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: scala.collection.mutable.Map[Double, Double], isBugOrHog: Boolean,
     filtered: Array[CaratRate], oses: Set[String], models: Set[String], totalsByUuid: TreeMap[String, (Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
     var hasSamples = one.length > 0 && two.length > 0

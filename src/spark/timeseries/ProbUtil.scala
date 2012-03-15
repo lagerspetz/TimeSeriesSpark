@@ -553,7 +553,7 @@ object ProbUtil extends Logging {
       0.0
   }
   
-  def logBucketDists(withDist: Array[(Double, Double)], withoutDist: Array[(Double, Double)], buckets: Int, smallestBucket: Double, decimals: Int) = {
+  def logBucketDists(withDist: Array[(Double, Double)], withoutDist: Array[(Double, Double)], xmax:Double, buckets: Int, smallestBucket: Double, decimals: Int) = {
     val emptyWith = withDist.take(1) match {
       case Array(t) => false
       case _ => true
@@ -565,14 +565,7 @@ object ProbUtil extends Logging {
     }
     
     if (!emptyWith && !emptyWithout){
-    /* Find max x*/
-    val xmax = withDist.union(withoutDist).map(_._1).reduce((x, y) => {
-      if (x > y)
-        x
-      else
-        y
-    })
-
+      
     /* xmax / (logBase^buckets) > smallestBucket
      * <=> logBase^buckets * smallestBucket < xmax
      * <=> logBase^buckets < xmax / smallestBucket
@@ -595,10 +588,10 @@ object ProbUtil extends Logging {
     //val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
     //val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
 
-    (xmax, i1.map(x => { (x._1, nDecimal(x._2, decimals)) }),
+    (i1.map(x => { (x._1, nDecimal(x._2, decimals)) }),
       i2.map(x => { (x._1, nDecimal(x._2, decimals)) }))
     }else
-      (0.0, null, null)
+      (null, null)
   }
   
   /**
@@ -688,7 +681,7 @@ object ProbUtil extends Logging {
   
   def logBucketDist(withDist: Array[(Double, Double)], xmax: Double, logbase: Double, buckets: Int) = {
     withDist.map(k => {
-      val bucketDouble = 100 - math.log(xmax / k._1) / math.log(logbase)
+      val bucketDouble = buckets - math.log(xmax / k._1) / math.log(logbase)
       val bucket = {
         if (bucketDouble >= buckets)
           buckets - 1

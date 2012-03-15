@@ -17,7 +17,7 @@ import collection.JavaConversions._
 
 object CaratAnalysisGeneric {
   var removeD: ( /*daemonSet:*/ Set[String]) => Unit = null
-  var action: (String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
+  var action: (/*nature:*/String, /*keyValue1:*/String, /*keyValue2:*/String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
   var jsFunction: (/*allRates:*/ RDD[CaratRate],/* aPrioriDistribution: */Map[Double,Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
   var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
 
@@ -31,7 +31,7 @@ object CaratAnalysisGeneric {
    */
   def genericAnalysis(master: String, tmpDir: String, clients:Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
-    actionFunction: (String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
+    actionFunction: (/*nature:*/String, /*keyValue1:*/String, /*keyValue2:*/String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
     JScoreFunction: (/*allRates:*/ RDD[CaratRate],/* aPrioriDistribution: */Map[Double,Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]],
         /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)],/*decimals:*/ Int) => Unit,
     correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
@@ -144,7 +144,7 @@ object CaratAnalysisGeneric {
       var uuidApps = fromUuid.flatMap(_.allApps).toSet
       uuidApps --= DAEMONS_LIST_GLOBBED
       if (uuidApps.size > 0)
-        similarApps(allRates, aPrioriDistribution, i, uuidApps)
+        similarApps(allRates, aPrioriDistribution, uuid, i, uuidApps)
       /* cache these because they will be used numberOfApps times */
       val notFromUuid = allRates.filter(_.uuid != uuid) //.cache()
       // no distance check, not bug or hog
@@ -169,7 +169,7 @@ object CaratAnalysisGeneric {
       val fromOs = allRates.filter(_.os == os)
       val notFromOs = allRates.filter(_.os != os)
       // no distance check, not bug or hog
-      val ret = action("iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
+      val ret = action("os", os, null, "iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
       //val ret = plotDists("iOS " + os, "Other versions", fromOs, notFromOs, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
     }
 
@@ -178,7 +178,7 @@ object CaratAnalysisGeneric {
       val fromModel = allRates.filter(_.model == model)
       val notFromModel = allRates.filter(_.model != model)
       // no distance check, not bug or hog
-      val ret = action(model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
+      val ret = action("model", model, null, model, "Other models", fromModel, notFromModel, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
     }
 
     /** Calculate correlation for each model and os version with all rates */
@@ -209,14 +209,14 @@ object CaratAnalysisGeneric {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: Array[CaratRate], aPrioriDistribution: Map[Double, Double], i: Int, uuidApps: Set[String]) {
+  def similarApps(all: Array[CaratRate], aPrioriDistribution: Map[Double, Double], uuid:String, i: Int, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
     val dissimilar = all.filter(_.allApps.intersect(uuidApps).size < sCount)
     //printf("SimilarApps similar.count=%s dissimilar.count=%s\n",similar.count(), dissimilar.count())
     // no distance check, not bug or hog
-    action("Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
+    action("similar", uuid, null, "Similar to client " + i, "Not similar to client " + i, similar, dissimilar, aPrioriDistribution, false, null, null, null, null, 0, 0, null)
   }
 
   def oneApp(uuidArray: Array[String], allRates: Array[edu.berkeley.cs.amplab.carat.CaratRate], app: String,
@@ -238,7 +238,7 @@ object CaratAnalysisGeneric {
       val usersWithout = filteredNeg.map(_.uuid).toSet.size
       DynamoAnalysisUtil.finish(fCountStart, "clientCount")
       if (usersWithout >= ENOUGH_USERS) {
-        if (action("Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
+        if (action("hog", app, null, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
           // this is a hog
 
           //allHogs += app
@@ -261,7 +261,7 @@ object CaratAnalysisGeneric {
               stuff += "\n%s running %s\nClient ev=%s total samples=%s apps=%s".format(
                 r.model, r.os, cev, totalSamples, totalApps)
             }
-            if (action("Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
+            if (action("bug", uuid, app, "Bug " + app + " running on client " + i, app + " running on other clients", appFromUuid, appNotFromUuid, aPrioriDistribution, true,
               filtered, oses, models, totalsByUuid, 0, 0, stuff)) {
               //allBugs += app
             }

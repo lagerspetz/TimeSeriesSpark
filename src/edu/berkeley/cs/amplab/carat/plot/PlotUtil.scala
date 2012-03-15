@@ -170,7 +170,7 @@ object PlotUtil {
     // bump up accuracy here so that not everything gets blurred
     val evTitle = fixedTitle + "B (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + "B (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
-    plotFile(plotDirectory, dateString, title +"bucketed", evTitle, evTitleNeg, xmax)
+    plotFile(plotDirectory, dateString, title +"bucketed", evTitle, evTitleNeg, xmax, true)
     writeDataBucketed(dateString, evTitle, distWith, xmax, buckets)
     writeDataBucketed(dateString, evTitleNeg, distWithout, xmax, buckets)
     if (osCorrelations != null) {
@@ -189,7 +189,7 @@ object PlotUtil {
     apps: Seq[String] = null) {
     val smallestBucket = 0.0001
     val buckets = 100
-    val (xmax,distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, buckets, smallestBucket, 3)
+    val (distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, xmax, buckets, smallestBucket, 3)
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -210,7 +210,7 @@ object PlotUtil {
     plotData(dateString, title +"logbucketed")
   }
 
-  def plotFile(plotDirectory:String, dir: String, name: String, t1: String, t2: String, xmax: Double) = {
+  def plotFile(plotDirectory:String, dir: String, name: String, t1: String, t2: String, xmax: Double, bucketed:Boolean = false) = {
     val pdir = dir + "/" + PLOTS + "/"
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
@@ -229,7 +229,12 @@ object PlotUtil {
           val plotfile = new java.io.FileWriter(gdir + name + ".gnuplot")
           plotfile.write("set term postscript eps enhanced color 'Helvetica' 32\nset xtics out\n" +
             "set size 1.93,1.1\n" +
-            "set logscale x\n" +
+            {
+              if (bucketed)
+                ""
+              else
+                "set logscale x\n"
+            } +
             "set xrange [0.0005:" + (xmax + 0.001) + "]\n" +
             "set xtics 0.0005,2," + (xmax + 0.001) + "\n" +
             "set xlabel \"Battery drain % / s\"\n" +
@@ -323,6 +328,7 @@ object PlotUtil {
       }
       val bucketEnd = xmax / (math.pow(logBase, buckets - k._1 - 1))
       val x = (bucketEnd - bucketStart) / 2
+      println("Bucket from %s to %s".format(bucketStart, bucketEnd))
         datafile.write(x + " " + k._2 +"\n")
       }
       datafile.close

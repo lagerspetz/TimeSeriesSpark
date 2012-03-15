@@ -50,7 +50,7 @@ object CaratAnalysisSpeedTest {
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
 
-  def printDists(title: String, titleNeg: String,
+  def printDists(nature:String, keyValue1:String, keyValue2:String, title: String, titleNeg: String,
     one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: Map[Double, Double], isBugOrHog: Boolean,
     filtered: Array[CaratRate], oses: Set[String], models: Set[String], 
     totalsByUuid: scala.collection.immutable.TreeMap[String,(Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
