@@ -171,7 +171,7 @@ object PlotUtil {
   def plotLogBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
     distWithoutReg: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, decimals:Int) {
-    val smallestBucket = 0.001
+    val smallestBucket = 0.0001
     val buckets = 100
     val (distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, xmax, buckets, smallestBucket)
     var fixedTitle = title
