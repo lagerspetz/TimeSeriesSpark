@@ -159,7 +159,9 @@ object PlotUtil {
     userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
     apps: Seq[String] = null) {
-    val (xmax,distWith,distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, 100, 3)
+    val buckets = 100
+    val decimals = 4
+    val (xmax,distWith,distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, buckets, decimals)
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -169,11 +171,11 @@ object PlotUtil {
     val evTitle = fixedTitle + "B (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + "B (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
     plotFile(plotDirectory, dateString, title +"bucketed", evTitle, evTitleNeg, xmax)
-    writeDataBucketed(dateString, evTitle, distWith, xmax)
-    writeDataBucketed(dateString, evTitleNeg, distWithout, xmax)
+    writeDataBucketed(dateString, evTitle, distWith, xmax, buckets)
+    writeDataBucketed(dateString, evTitleNeg, distWithout, xmax, buckets)
     if (osCorrelations != null) {
       var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
-      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
+      //writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
     }
     plotData(dateString, title +"bucketed")
   }
@@ -197,18 +199,13 @@ object PlotUtil {
     val evTitle = fixedTitle + "LB (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + "LB (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
     plotFile(plotDirectory, dateString, title +"logbucketed", evTitle, evTitleNeg, xmax)
-    
-    var i1 = new TreeMap[Int, Double]
-    i1 ++= distWith
-    var i2 = new TreeMap[Int, Double]
-    i2 ++= distWithout
      
     val logBase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
-    writeDataLogBucketed(dateString, evTitle, i1, xmax, buckets, logBase)
-    writeDataLogBucketed(dateString, evTitleNeg, i2, xmax, buckets, logBase)
+    writeDataLogBucketed(dateString, evTitle, distWith, xmax, buckets, logBase)
+    writeDataLogBucketed(dateString, evTitleNeg, distWithout, xmax, buckets, logBase)
     if (osCorrelations != null) {
       var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
-      writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
+      //writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
     }
     plotData(dateString, title +"logbucketed")
   }
@@ -293,7 +290,7 @@ object PlotUtil {
     }
   }
   
-  def writeDataBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax:Double) {
+  def writeDataBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax:Double, buckets:Int) {
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(ddir)
     if (!f.isDirectory() && !f.mkdirs())
@@ -302,7 +299,7 @@ object PlotUtil {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
       
       for (k <- dist){
-        val x = (k._1 + 0.5)/xmax
+        val x = (k._1 + 0.5)/buckets * xmax
         datafile.write(x + " " + k._2 +"\n")
       }
       datafile.close

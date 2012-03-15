@@ -586,11 +586,17 @@ object ProbUtil extends Logging {
     var bucketed = logBucketDist(withDist, xmax, logbase, buckets)
     var bucketedNeg = logBucketDist(withoutDist, xmax, logbase, buckets)
 
+    var i1 = new TreeMap[Int, Double]
+    for (k <- bucketed)
+      i1 += ((k._1, i1.getOrElse(k._1, 0.0) + k._2))
+    var i2 = new TreeMap[Int, Double]
+    for (k <- bucketedNeg)
+      i2 += ((k._1, i1.getOrElse(k._1, 0.0) + k._2))
     //val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
     //val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
 
-    (xmax, bucketed.map(x => { (x._1, nDecimal(x._2, decimals)) }),
-      bucketedNeg.map(x => { (x._1, nDecimal(x._2, decimals)) }))
+    (xmax, i1.map(x => { (x._1, nDecimal(x._2, decimals)) }),
+      i2.map(x => { (x._1, nDecimal(x._2, decimals)) }))
     }else
       (0.0, null, null)
   }
