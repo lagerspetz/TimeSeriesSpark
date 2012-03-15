@@ -26,7 +26,8 @@ object CaratNoRDDAnalysis {
 
   var pretend = false
   val DECIMALS = 3
-  var BUCKETS = 100
+  val smallestBucket = 0.0001
+  val BUCKETS = 100
   // Isolate from the plotting.
   val tmpdir = "/mnt/TimeSeriesSpark-osmodel/spark-temp-plots/"
 
@@ -87,7 +88,7 @@ object CaratNoRDDAnalysis {
         } else {
           printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout)
         }
-        val (xmax2, distWith, distWithout) = ProbUtil.bucketDistributionsByX(probDist, probDistNeg, BUCKETS, DECIMALS)
+        val (distWith, distWithout) = ProbUtil.logBucketDists(probDist, probDistNeg, xmax, BUCKETS, smallestBucket, DECIMALS)
 
         if (nature == "hog" && evDistance > 0) {
           // Need to delete new hogs from the bugs table:
@@ -229,7 +230,7 @@ object CaratNoRDDAnalysis {
       if (distWith != null && distWithout != null && apps != null) {
         val (os, model) = uuidToOsAndModel.getOrElse(k, ("", ""))
         val putFunction = storageFunction("result", k, null, apps.toSeq)
-        val (xmax2, distWith2, distWithout2) = ProbUtil.bucketDistributionsByX(distWith, distWithout, BUCKETS, DECIMALS)
+        val (distWith2, distWithout2) = ProbUtil.logBucketDists(distWith, distWithout, xmax, BUCKETS, smallestBucket, DECIMALS)
         putFunction(xmax, distWith2.toSeq, distWithout2.toSeq, jscore, ev, evNeg)
         println("Calculated Profile for %s %s running %s xmax=%s ev=%s evWithout=%s jscore=%s apps=%s".format(k, model, os, xmax, ev, evNeg, jscore, apps.size))
       } else
