@@ -52,7 +52,7 @@ object PlotUtil {
   val SIM = "similarApps"
   val UUIDS = "uuIds"
 
-  def plot(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+  def plot(plotDirectory: String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
@@ -71,9 +71,9 @@ object PlotUtil {
    * Note that the server side multiplies the JScore by 100, and we store it here
    * as a fraction.
    */
-  def plotJScores(plotDirectory:String, 
-      allRates:RDD[CaratRate], aPrioriDistribution: scala.collection.mutable.Map[Double, Double],
-      distsWithUuid: TreeMap[String, Array[(Double, Double)]],
+  def plotJScores(plotDirectory: String,
+    allRates: RDD[CaratRate], aPrioriDistribution: scala.collection.mutable.Map[Double, Double],
+    distsWithUuid: TreeMap[String, Array[(Double, Double)]],
     distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
     parametersByUuid: TreeMap[String, (Double, Double, Double)],
     evDistanceByUuid: TreeMap[String, Double],
@@ -107,7 +107,7 @@ object PlotUtil {
     }
   }
 
-  def plotSerial(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+  def plotSerial(plotDirectory: String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
@@ -122,14 +122,15 @@ object PlotUtil {
     plotBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, decimals)
     plotLogBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, decimals)
   }
-  
-  def plotRegular(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+
+  def plotRegular(plotDirectory: String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double,
     osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
     userCorrelations: Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
     apps: Seq[String] = null) {
+    val smallestBucket = 0.0001
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -138,7 +139,7 @@ object PlotUtil {
     // bump up accuracy here so that not everything gets blurred
     val evTitle = fixedTitle + " (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + " (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
-    plotFile(plotDirectory, dateString, title, evTitle, evTitleNeg, xmax)
+    plotFile(plotDirectory, dateString, title, evTitle, evTitleNeg, xmax, smallestBucket)
     writeData(dateString, evTitle, distWith)
     writeData(dateString, evTitleNeg, distWithout)
     if (osCorrelations != null) {
@@ -147,12 +148,13 @@ object PlotUtil {
     }
     plotData(dateString, title)
   }
-  
-  def plotBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
+
+  def plotBucketed(plotDirectory: String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
     distWithoutReg: Array[(Double, Double)],
     ev: Double, evNeg: Double, evDistance: Double, decimals: Int) {
+    val smallestBucket = 0.0001
     val buckets = 100
-    val (xmax,distWith,distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, buckets)
+    val (xmax, distWith, distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, buckets)
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -161,19 +163,19 @@ object PlotUtil {
     // bump up accuracy here so that not everything gets blurred
     val evTitle = fixedTitle + "B (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + "B (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
-    plotFile(plotDirectory, dateString, title +"bucketed", evTitle, evTitleNeg, xmax, true)
+    plotFile(plotDirectory, dateString, title + "bucketed", evTitle, evTitleNeg, xmax, smallestBucket, true)
     writeDataBucketed(dateString, evTitle, distWith, xmax, buckets)
     writeDataBucketed(dateString, evTitleNeg, distWithout, xmax, buckets)
 
-    plotData(dateString, title +"bucketed")
+    plotData(dateString, title + "bucketed")
   }
-  
-  def plotLogBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
+
+  def plotLogBucketed(plotDirectory: String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
     distWithoutReg: Array[(Double, Double)],
-    ev: Double, evNeg: Double, evDistance: Double, decimals:Int) {
+    ev: Double, evNeg: Double, evDistance: Double, decimals: Int) {
     val smallestBucket = 0.0001
     val buckets = 100
-    val (distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, xmax, buckets, smallestBucket)
+    val (distWith, distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, xmax, buckets, smallestBucket)
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -182,16 +184,18 @@ object PlotUtil {
     // bump up accuracy here so that not everything gets blurred
     val evTitle = fixedTitle + "LB (EV=" + ProbUtil.nDecimal(ev, decimals + 1) + ")"
     val evTitleNeg = titleNeg + "LB (EV=" + ProbUtil.nDecimal(evNeg, decimals + 1) + ")"
-    plotFile(plotDirectory, dateString, title +"logbucketed", evTitle, evTitleNeg, xmax)
-     
+    plotFile(plotDirectory, dateString, title + "logbucketed", evTitle, evTitleNeg, xmax, smallestBucket)
+
     val logBase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
     writeDataLogBucketed(dateString, evTitle, distWith, xmax, buckets, logBase)
     writeDataLogBucketed(dateString, evTitleNeg, distWithout, xmax, buckets, logBase)
 
-    plotData(dateString, title +"logbucketed")
+    plotData(dateString, title + "logbucketed")
   }
 
-  def plotFile(plotDirectory:String, dir: String, name: String, t1: String, t2: String, xmax: Double, bucketed:Boolean = false) = {
+  def plotFile(plotDirectory: String, dir: String, name: String, t1: String, t2: String, xmax: Double, smallestBucket: Double, bucketedEvenly: Boolean = false) = {
+    val max = xmax+0.001
+    val min = smallestBucket/2
     val pdir = dir + "/" + PLOTS + "/"
     val gdir = dir + "/" + PLOTFILES + "/"
     val ddir = dir + "/" + DATA_DIR + "/"
@@ -211,12 +215,12 @@ object PlotUtil {
           plotfile.write("set term postscript eps enhanced color 'Helvetica' 32\nset xtics out\n" +
             "set size 1.93,1.1\n" +
             {
-              if (bucketed)
+              if (bucketedEvenly)
                 ""
               else
-                "set logscale x\nset xtics 0.0005,2," + (xmax + 0.001) + "\n"
+                "set logscale x\nset xtics %s,2,%s\n".format(min, max)
             } +
-            "set xrange [0.0005:" + (xmax + 0.001) + "]\n" +
+            "set xrange [%s:%s]\n".format(min, max) +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)
@@ -234,7 +238,7 @@ object PlotUtil {
     }
   }
 
-  def assignSubDir(plotDirectory:String, name: String) = {
+  def assignSubDir(plotDirectory: String, name: String) = {
     val p = new File(plotDirectory)
     if (!p.isDirectory() && !p.mkdirs()) {
       ""
@@ -274,24 +278,24 @@ object PlotUtil {
       datafile.close
     }
   }
-  
-  def writeDataBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax:Double, buckets:Int) {
+
+  def writeDataBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax: Double, buckets: Int) {
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(ddir)
     if (!f.isDirectory() && !f.mkdirs())
       println("Failed to create " + f + " for plots!")
     else {
       val datafile = new java.io.FileWriter(ddir + name + ".txt")
-      
-      for (k <- dist){
-        val x = (k._1 + 0.5)/buckets * xmax
-        datafile.write(x + " " + k._2 +"\n")
+
+      for (k <- dist) {
+        val x = (k._1 + 0.5) / buckets * xmax
+        datafile.write(x + " " + k._2 + "\n")
       }
       datafile.close
     }
   }
-  
-  def writeDataLogBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax:Double, buckets:Int, logBase:Double) {
+
+  def writeDataLogBucketed(dir: String, name: String, dist: TreeMap[Int, Double], xmax: Double, buckets: Int, logBase: Double) {
     val ddir = dir + "/" + DATA_DIR + "/"
     var f = new File(ddir)
     if (!f.isDirectory() && !f.mkdirs())
@@ -316,7 +320,7 @@ object PlotUtil {
     }
   }
 
-  def writeCorrelationFile(plotDirectory:String, name: String,
+  def writeCorrelationFile(plotDirectory: String, name: String,
     osCorrelations: Map[String, Double],
     modelCorrelations: Map[String, Double],
     userCorrelations: Map[String, Double],
