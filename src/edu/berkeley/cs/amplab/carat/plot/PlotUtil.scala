@@ -214,10 +214,9 @@ object PlotUtil {
               if (bucketed)
                 ""
               else
-                "set logscale x\n"
+                "set logscale x\nset xtics 0.0005,2," + (xmax + 0.001) + "\n"
             } +
             "set xrange [0.0005:" + (xmax + 0.001) + "]\n" +
-            "set xtics 0.0005,2," + (xmax + 0.001) + "\n" +
             "set xlabel \"Battery drain % / s\"\n" +
             "set ylabel \"Probability\"\n")
           if (plotDirectory != null)
