@@ -32,6 +32,7 @@ object CaratNoRDDAnalysis {
 
   var userLimit = Int.MaxValue
 
+  /* Right now we don't remove non-hogs from the bugs table. That should be done.*/
   var bugsToRemove = new ArrayBuffer[(String, String)]
   var hogsToRemove = new ArrayBuffer[(String, String)]
 
@@ -84,6 +85,19 @@ object CaratNoRDDAnalysis {
           printf("%s evWith=%s evWithout=%s evDistance=%s (%s vs %s users)\n", title, ev, evNeg, evDistance, usersWith, usersWithout)
         }
         val (xmax2, distWith, distWithout) = ProbUtil.bucketDistributionsByX(probDist, probDistNeg, BUCKETS, DECIMALS)
+
+        if (nature == "hog" && evDistance > 0) {
+          // Need to delete new hogs from the bugs table:
+          val (key, items) = DynamoDbDecoder.filterItems(bugsTable, (hogKey, keyValue1))
+          for (k <- items) {
+            val attr = k.get(resultKey)
+            if (attr != null) {
+              val uuid = attr.getS()
+              DynamoDbDecoder.deleteItem(bugsTable, uuid, keyValue1)
+            }
+          }
+        }
+        
         val putFunction = storageFunction(nature, keyValue1, keyValue2)
         putFunction(xmax, distWith.toSeq, distWithout.toSeq, evDistance, ev, evNeg)
 
@@ -95,6 +109,7 @@ object CaratNoRDDAnalysis {
           print(title, titleNeg, xmax, probDist, probDistNeg, ev, evNeg, evDistance, null, null, null, usersWith, usersWithout, uuid)
         }
       } else if (isBugOrHog && evDistance <= 0) {
+        /* delete old hogs and bugs that are no longer hoggy/buggy */
         deleteFunction(nature, keyValue1, keyValue2)
       }
       isBugOrHog && evDistance > 0
@@ -115,9 +130,11 @@ object CaratNoRDDAnalysis {
     putFunction
   }
 
-  def deleteFunction(nature: String, keyValue1: String, keyValue2: String) = {
+  def deleteFunction(nature: String, keyValue1: String, keyValue2: String) {
     nature match {
-      case "hog" => { DynamoDbDecoder.deleteItem(hogsTable, keyValue1) }
+      case "hog" => {
+        DynamoDbDecoder.deleteItem(hogsTable, keyValue1)
+      }
       case "similar" => { { println("Delete not implemented for SimilarApps.") } }
       case "os" => { { println("Delete not implemented for OS.") } }
       case "model" => { { println("Delete not implemented for models.") } }

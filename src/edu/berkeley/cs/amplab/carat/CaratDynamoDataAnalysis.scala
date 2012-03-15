@@ -295,12 +295,14 @@ object CaratDynamoDataAnalysis {
      */
     /* Right way:
       0. determine hogs and store their distributions in memory
-      1. remove non-hogs
+      1. remove non-hogs from both hogs and bugs tables
       2. remove new hogs from bugs table
       3. remove non-bugs from bugs table
       4. insert new hogs
       5. insert new bugs
       6. remove similarApps sets for users with zero intersections while adding new similarApps sets
+      
+      In other words, bugs table is cleared in the beginning anyway.
     */
     println("Clearing bugs")
     DynamoDbDecoder.deleteAllItems(bugsTable, resultKey, hogKey)
