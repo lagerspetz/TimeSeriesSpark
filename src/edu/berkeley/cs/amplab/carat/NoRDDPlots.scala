@@ -21,7 +21,7 @@ import java.text.SimpleDateFormat
 object NoRDDPlots {
   // How many clients do we need to consider data reliable?
   val ENOUGH_USERS = 5
-  val DECIMALS = 3
+  val DECIMALS = 4
   // Isolate from the analysis to db.
   val tmpdir = "/mnt/TimeSeriesSpark-osmodel/spark-temp-plots/"
 

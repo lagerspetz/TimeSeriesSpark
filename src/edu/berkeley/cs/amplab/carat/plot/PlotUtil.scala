@@ -119,12 +119,8 @@ object PlotUtil {
     plotRegular(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
       userCorrelations,
       usersWith, usersWithout, uuid, decimals, apps)
-    plotBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
-      userCorrelations,
-      usersWith, usersWithout, uuid, decimals, apps)
-    plotLogBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, osCorrelations, modelCorrelations,
-      userCorrelations,
-      usersWith, usersWithout, uuid, decimals, apps)
+    plotBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, decimals)
+    plotLogBucketed(plotDirectory, title, titleNeg, xmax, distWith, distWithout, ev, evNeg, evDistance, decimals)
   }
   
   def plotRegular(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
@@ -154,14 +150,10 @@ object PlotUtil {
   
   def plotBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
     distWithoutReg: Array[(Double, Double)],
-    ev: Double, evNeg: Double, evDistance: Double,
-    osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
-    userCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
-    apps: Seq[String] = null) {
+    ev: Double, evNeg: Double, evDistance: Double, decimals: Int) {
     val buckets = 100
     val decimals = 4
-    val (xmax,distWith,distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, buckets, decimals)
+    val (xmax,distWith,distWithout) = ProbUtil.bucketDistributionsByX(distWithReg, distWithoutReg, buckets)
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -173,23 +165,16 @@ object PlotUtil {
     plotFile(plotDirectory, dateString, title +"bucketed", evTitle, evTitleNeg, xmax, true)
     writeDataBucketed(dateString, evTitle, distWith, xmax, buckets)
     writeDataBucketed(dateString, evTitleNeg, distWithout, xmax, buckets)
-    if (osCorrelations != null) {
-      var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
-      //writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
-    }
+
     plotData(dateString, title +"bucketed")
   }
   
   def plotLogBucketed(plotDirectory:String, title: String, titleNeg: String, xmax: Double, distWithReg: Array[(Double, Double)],
     distWithoutReg: Array[(Double, Double)],
-    ev: Double, evNeg: Double, evDistance: Double,
-    osCorrelations: Map[String, Double], modelCorrelations: Map[String, Double],
-    userCorrelations: Map[String, Double],
-    usersWith: Int, usersWithout: Int, uuid: String, decimals: Int,
-    apps: Seq[String] = null) {
+    ev: Double, evNeg: Double, evDistance: Double, decimals:Int) {
     val smallestBucket = 0.0001
     val buckets = 100
-    val (distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, xmax, buckets, smallestBucket, 3)
+    val (distWith,distWithout) = ProbUtil.logBucketDists(distWithReg, distWithoutReg, xmax, buckets, smallestBucket)
     var fixedTitle = title
     if (title.startsWith("Hog "))
       fixedTitle = title.substring(4)
@@ -203,10 +188,7 @@ object PlotUtil {
     val logBase = ProbUtil.getLogBase(buckets, smallestBucket, xmax)
     writeDataLogBucketed(dateString, evTitle, distWith, xmax, buckets, logBase)
     writeDataLogBucketed(dateString, evTitleNeg, distWithout, xmax, buckets, logBase)
-    if (osCorrelations != null) {
-      var stuff = uuid + "\nevWith=%s\nevWithout=%s".format(ev, evNeg)
-      //writeCorrelationFile(plotDirectory, title, osCorrelations, modelCorrelations, userCorrelations, usersWith, usersWithout, stuff)
-    }
+
     plotData(dateString, title +"logbucketed")
   }
 

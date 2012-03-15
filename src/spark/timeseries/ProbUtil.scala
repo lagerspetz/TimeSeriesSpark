@@ -246,7 +246,7 @@ object ProbUtil extends Logging {
     (xmax, bucketed, bucketedNeg)
   }
   
-  def bucketDistributionsByX(values: Array[(Double, Double)], others: Array[(Double, Double)], buckets: Int, decimals: Int):
+  def bucketDistributionsByX(values: Array[(Double, Double)], others: Array[(Double, Double)], buckets: Int, decimals: Int = 0):
   (Double, TreeMap[Int, Double], TreeMap[Int,Double])= {
     var i1 = new TreeMap[Double, Double]
     i1 ++= values
@@ -553,7 +553,7 @@ object ProbUtil extends Logging {
       0.0
   }
   
-  def logBucketDists(withDist: Array[(Double, Double)], withoutDist: Array[(Double, Double)], xmax:Double, buckets: Int, smallestBucket: Double, decimals: Int) = {
+  def logBucketDists(withDist: Array[(Double, Double)], withoutDist: Array[(Double, Double)], xmax:Double, buckets: Int, smallestBucket: Double, decimals: Int = 0) = {
     val emptyWith = withDist.take(1) match {
       case Array(t) => false
       case _ => true
@@ -945,10 +945,14 @@ object ProbUtil extends Logging {
   def weightedDistance(y1: Double, y2: Double, x1: Double, x2: Double) = (y1 - y2) * (x1 - x2) / 2
 
   def nDecimal(orig: Double, decimals: Int) = {
+    if (decimals == 0){
+      orig
+    }else {
     var mul = 1.0
     for (k <- 0 until decimals)
       mul *= 10
     math.round(orig * mul) / mul
+    }
   }
 
   def nInt(orig: Double, decimals: Int) = {
