@@ -30,9 +30,24 @@ object DynamoAnalysisUtil {
   val ABNORMAL_RATE = 0.04
 
   val DIST_THRESHOLD = 10
+  
+  val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
+  val RATES_CACHED_NEW = tmpdir + "cached-rates-new.dat"
+  val RATES_CACHED = tmpdir + "cached-rates.dat"
+  val LAST_SAMPLE = tmpdir + "last-sample.txt"
+  val LAST_REG = tmpdir + "last-reg.txt"
+
+  
+  lazy val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
+
+  var last_sample_write = 0.0
+
+  lazy val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
+
+  var last_reg_write = 0.0
 
   // Daemons list, read from S3
-  val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
+  lazy val DAEMONS_LIST = DynamoAnalysisUtil.readS3LineSet(BUCKET_WEBSITE, DAEMON_FILE)
 
   def start() = System.currentTimeMillis()
 
@@ -116,6 +131,155 @@ object DynamoAnalysisUtil {
     val move = Runtime.getRuntime().exec(Array("/bin/mv", newPath, oldPath))
     move.waitFor()
     finish(startTime)
+  }
+  
+    /**
+   * Get Rates from DynamoDB samples and registrations.
+   */
+
+  def getRates(sc: SparkContext) = {
+    // Master RDD for all data.
+
+    val oldRates: spark.RDD[CaratRate] = {
+      val f = new File(RATES_CACHED)
+      if (f.exists()) {
+        sc.objectFile(RATES_CACHED)
+      } else
+        null
+    }
+
+    var allRates: spark.RDD[CaratRate] = oldRates
+
+    /* closure to forget uuids, models and oses after assigning them to rates.
+     * This is because new rates may have new uuids, models and oses.
+    */
+    {
+      // Unique uuIds, Oses, and Models from registrations.
+      val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
+      val allModels = new scala.collection.mutable.HashSet[String]
+      val allOses = new scala.collection.mutable.HashSet[String]
+
+      if (oldRates != null) {
+        val devices = oldRates.map(x => {
+          (x.uuid, (x.os, x.model))
+        }).collect()
+        for (k <- devices) {
+          uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
+          allOses += k._2._1
+          allModels += k._2._2
+        }
+      }
+      /* Only get new rates if we have no old rates, or it has been more than an hour */
+      if (oldRates == null || (System.currentTimeMillis() / 1000 - last_sample > 3600)) {
+        if (last_reg > 0) {
+          DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+            DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
+            handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+        } else {
+          DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
+            DynamoDbDecoder.getAllItems(registrationTable, _),
+            handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+        }
+
+        /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
+        if (last_sample > 0) {
+          allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
+            DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
+            handleSamples(sc, _, uuidToOsAndModel, _),
+            true,
+            allRates)
+        } else {
+          allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+            DynamoDbDecoder.getAllItems(samplesTable, _),
+            handleSamples(sc, _, uuidToOsAndModel, _),
+            true,
+            allRates)
+        }
+      }
+
+      // we may not be interested in these actually.
+      println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
+      println("All oses: " + allOses.mkString(", "))
+      println("All models: " + allModels.mkString(", "))
+    }
+    // save entire rate rdd for later:
+    allRates.saveAsObjectFile(RATES_CACHED_NEW)
+    DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
+    DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
+    DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
+    allRates
+  }
+
+  /**
+   * Handles a set of registration messages from the Carat DynamoDb.
+   * uuids, oses and models are filled in.
+   */
+  def handleRegs(key: Key, regs: java.util.List[java.util.Map[String, AttributeValue]],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    oses: scala.collection.mutable.Set[String],
+    models: scala.collection.mutable.Set[String]) {
+
+    // Get last reg timestamp for set saving
+    if (regs.size > 0) {
+      last_reg_write = regs.last.get(regsTimestamp).getN().toDouble
+    }
+
+    for (x <- regs) {
+      val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
+      val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
+      val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
+      uuidToOsAndModel += ((uuid, (os, model)))
+      models += model
+      oses += os
+    }
+
+    /*
+     * TODO: Stddev of samples per user over time,
+     * stddev of distributions (hog, etc) per all users over increasing number of users,
+     * change of distance of distributions (hog, etc) over increasing number of users.
+     */
+    //analyzeRateDataStdDevsOverTime(sc, distRet, uuid, os, model, plotDirectory)
+  }
+  /**
+   * Process a bunch of samples, assumed to be in order by uuid and timestamp.
+   * will return an RDD of CaratRates. Samples need not be from the same uuid.
+   */
+  def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    rates: RDD[CaratRate]) = {
+
+    if (samples.size > 0) {
+      val lastSample = samples.last
+      last_sample_write = lastSample.get(sampleTime).getN().toDouble
+    }
+
+    var rateRdd = sc.parallelize[CaratRate]({
+      val mapped = samples.map(x => {
+        /* See properties in package.scala for data keys. */
+        val uuid = x.get(sampleKey).getS()
+        val apps = x.get(sampleProcesses).getSS().map(w => {
+          if (w == null)
+            ""
+          else {
+            val s = w.split(";")
+            if (s.size > 1)
+              s(1).trim
+            else
+              ""
+          }
+        })
+
+        val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
+        val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
+        val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
+        val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
+        (uuid, time, batteryLevel, event, batteryState, apps)
+      })
+      DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
+    })
+    if (rates != null)
+      rateRdd = rateRdd.union(rates)
+    rateRdd
   }
 
   /**

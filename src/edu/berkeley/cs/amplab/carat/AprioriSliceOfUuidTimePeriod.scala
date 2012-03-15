@@ -178,24 +178,24 @@ object AprioriSliceOfUuidTimePeriod {
       if (last_reg > 0) {
         DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
           DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-          CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+          DynamoAnalysisUtil.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
       } else {
         DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
           DynamoDbDecoder.getAllItems(registrationTable, _),
-          CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+          DynamoAnalysisUtil.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
       }
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
       if (last_sample > 0) {
         allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
           DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-          CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
+          DynamoAnalysisUtil.handleSamples(sc, _, uuidToOsAndModel, _),
           true,
           allRates)
       } else {
         allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
           DynamoDbDecoder.getAllItems(samplesTable, _),
-          CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
+          DynamoAnalysisUtil.handleSamples(sc, _, uuidToOsAndModel, _),
           true,
           allRates)
       }

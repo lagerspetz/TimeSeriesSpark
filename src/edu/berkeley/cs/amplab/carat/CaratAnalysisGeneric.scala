@@ -61,7 +61,7 @@ object CaratAnalysisGeneric {
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
     val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataSpeedTest")
     // getRates
-    val allRates = CaratDynamoDataToPlots.getRates(sc)
+    val allRates = DynamoAnalysisUtil.getRates(sc)
     if (allRates != null) {
       // analyze data
       analyzeRateData(allRates)

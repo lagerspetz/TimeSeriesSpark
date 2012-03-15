@@ -139,12 +139,12 @@ object HogBugExcludingDatesForUuid {
 
       DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
         DynamoDbDecoder.getAllItems(registrationTable, _),
-        CaratDynamoDataToPlots.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+        DynamoAnalysisUtil.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
       allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
         DynamoDbDecoder.getAllItems(samplesTable, _),
-        CaratDynamoDataToPlots.handleSamples(sc, _, uuidToOsAndModel, _),
+        DynamoAnalysisUtil.handleSamples(sc, _, uuidToOsAndModel, _),
         true,
         allRates)
 
