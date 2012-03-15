@@ -591,6 +591,16 @@ object ProbUtil extends Logging {
       i2 += ((k._1, i2.getOrElse(k._1, 0.0) + k._2))
     //val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
     //val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
+      
+    // add empty buckets
+    for (i <- 0 until buckets){
+      if (!i1.contains(i)){
+        i1 += ((i, 0.0))
+      }
+      if (!i2.contains(i)){
+        i2 += ((i, 0.0))
+      }
+    }
 
     (i1.map(x => { (x._1, nDecimal(x._2, decimals)) }),
       i2.map(x => { (x._1, nDecimal(x._2, decimals)) }))
