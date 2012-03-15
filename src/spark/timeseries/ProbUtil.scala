@@ -588,7 +588,7 @@ object ProbUtil extends Logging {
       i1 += ((k._1, i1.getOrElse(k._1, 0.0) + k._2))
     var i2 = new TreeMap[Int, Double]
     for (k <- bucketedNeg)
-      i2 += ((k._1, i1.getOrElse(k._1, 0.0) + k._2))
+      i2 += ((k._1, i2.getOrElse(k._1, 0.0) + k._2))
     //val ev1 = getEv(sc, bucketed, xmax, logbase, buckets)
     //val ev2 = getEv(sc, bucketedNeg, xmax, logbase, buckets)
 
