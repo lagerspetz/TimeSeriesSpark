@@ -350,7 +350,7 @@ object DynamoAnalysisUtil {
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
-  def rateMapperPairwise(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String,
+  def rateMapperPairwiseSingleUuid(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String,
       java.lang.String, Seq[String], scala.collection.immutable.Map[String, (String, Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
     var prevD = 0.0
@@ -358,7 +358,7 @@ object DynamoAnalysisUtil {
     var prevEvent = ""
     var prevState = ""
     var prevApps: Seq[String] = Array[String]()
-    var prevFeatures:scala.collection.immutable.Map[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
+    var prevFeatures:scala.collection.immutable.HashMap[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
 
     var d = 0.0
     var batt = 0.0
@@ -447,7 +447,12 @@ object DynamoAnalysisUtil {
       prevEvent = event
       prevState = state
       prevApps = apps
-      prevFeatures = features.map(x => {(x._1, ArrayBuffer(x._2))})
+      prevFeatures.clear()
+      for (k <- features) {
+        val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+        v += k._2
+        prevFeatures.put(k._1, v)
+      }
     }
 
     println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
@@ -474,7 +479,7 @@ object DynamoAnalysisUtil {
     var prevEvent = ""
     var prevState = ""
     var prevApps: Seq[String] = Array[String]()
-    var prevFeatures:scala.collection.immutable.Map[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
+    var prevFeatures:scala.collection.immutable.HashMap[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
 
     var uuid = ""
     var d = 0.0
@@ -588,6 +593,12 @@ object DynamoAnalysisUtil {
       prevEvent = event
       prevState = state
       prevApps = apps
+      prevFeatures.clear()
+      for (k <- features) {
+        val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+        v += k._2
+        prevFeatures.put(k._1, v)
+      }
     }
 
     println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
