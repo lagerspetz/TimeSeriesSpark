@@ -41,7 +41,4 @@ slaves="localhost"
 master_mesos='mesos://master@localhost:5050'
 master_local='local[8]'
 
-datafile=data/d-2g-elisa-tktl-71MB-dispoff-5runs-600MHz-4V.csv
-class=spark.timeseries.EnergyOps
-
 #echo $SPARK_CLASSPATH
