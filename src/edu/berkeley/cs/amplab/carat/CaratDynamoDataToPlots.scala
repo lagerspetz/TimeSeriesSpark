@@ -215,12 +215,12 @@ object CaratDynamoDataToPlots {
     System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
 
     // Fix Spark running out of space on AWS.
-    System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
+    System.setProperty("spark.local.dir", tmpdir)
 
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
     val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataToPlots")
     // getRates
-    val allRates = DynamoAnalysisUtil.getRates(sc)
+    val allRates = DynamoAnalysisUtil.getRates(sc, tmpdir)
     if (allRates != null) {
       // analyze data
       analyzeRateData(sc, allRates, plotDirectory)

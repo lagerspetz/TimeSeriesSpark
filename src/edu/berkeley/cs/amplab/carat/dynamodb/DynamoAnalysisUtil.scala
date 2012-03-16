@@ -30,19 +30,8 @@ object DynamoAnalysisUtil {
   val ABNORMAL_RATE = 0.04
 
   val DIST_THRESHOLD = 10
-  
-  val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
-  val RATES_CACHED_NEW = tmpdir + "cached-rates-new.dat"
-  val RATES_CACHED = tmpdir + "cached-rates.dat"
-  val LAST_SAMPLE = tmpdir + "last-sample.txt"
-  val LAST_REG = tmpdir + "last-reg.txt"
-
-  
-  lazy val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
 
   var last_sample_write = 0.0
-
-  lazy val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
 
   var last_reg_write = 0.0
 
@@ -137,8 +126,16 @@ object DynamoAnalysisUtil {
    * Get Rates from DynamoDB samples and registrations.
    */
 
-  def getRates(sc: SparkContext) = {
+  def getRates(sc: SparkContext, tmpdir:String) = {
     // Master RDD for all data.
+
+    val RATES_CACHED_NEW = tmpdir + "cached-rates-new.dat"
+    val RATES_CACHED = tmpdir + "cached-rates.dat"
+    val LAST_SAMPLE = tmpdir + "last-sample.txt"
+    val LAST_REG = tmpdir + "last-reg.txt"
+  
+    lazy val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
+    lazy val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
 
     val oldRates: spark.RDD[CaratRate] = {
       val f = new File(RATES_CACHED)

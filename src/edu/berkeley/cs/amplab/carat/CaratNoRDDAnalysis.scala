@@ -29,7 +29,7 @@ object CaratNoRDDAnalysis {
   val smallestBucket = 0.0001
   val BUCKETS = 100
   // Isolate from the plotting.
-  val tmpdir = "/mnt/TimeSeriesSpark-osmodel/spark-temp-plots/"
+  val tmpdir = "/mnt/TimeSeriesSpark/spark-temp/"
 
   var userLimit = Int.MaxValue
 
