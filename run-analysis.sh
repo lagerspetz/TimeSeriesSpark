@@ -4,7 +4,7 @@ while true
 do
   d=$( date +%Y-%m-%d-%H-%M-%S )
   echo "Analysis started at $d"
-  ./run-laptop.sh edu.berkeley.cs.amplab.carat.CaratDynamoDataAnalysis DEBUG \
+  ./run-laptop.sh edu.berkeley.cs.amplab.carat.CaratNoRDDAnalysis \
   &> "carat-dynamo-data-analysis-log-$d.txt"
   d=$( date +%Y-%m-%d-%H-%M-%S )
   echo "Analysis finished at $d"
