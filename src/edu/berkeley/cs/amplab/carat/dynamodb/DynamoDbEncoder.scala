@@ -86,27 +86,36 @@ object DynamoDbEncoder {
   // write caps used
   var capUsedPerSec = 0.0
   // time write caps were used in
-  var timeSpent = 0L
+  var lastReq = 0L
   // last request write caps used
   var lastCap = 0.0
   
   
   def safePut(req: PutItemRequest) = {
     val now = System.currentTimeMillis
-    if (timeSpent == 0){
-      timeSpent = now
-    }else
-      timeSpent = now - timeSpent
-    // if LastCap is bigger than capMax, this whole thing makes no sense.
-    if (lastCap > capMax)
-      println("Error: lastCap=%s is greater than max=%s".format(lastCap, capMax))
-    else {
-      if (timeSpent < 1000 && capUsedPerSec + lastCap > capMax) {
-        wait(1000 - timeSpent)
-        timeSpent = now
+    if (now - lastReq > 1000){
+      // allowed, and
+      capUsedPerSec = 0
+      lastReq = now
+    }else{
+      // less than a second elapsed
+      if (lastCap > capMax){
+        println("Error: lastCap=%s is greater than max=%s".format(lastCap, capMax))
+        // invariant fail: do unsafe puts
         capUsedPerSec = 0
+        lastReq = now
+      }else {
+        // wait for a bit
+        if (capUsedPerSec + lastCap > capMax) {
+          wait(now - lastReq)
+          capUsedPerSec = 0
+          lastReq = now
+        }/* else: within same sec,
+        but not past cap limit;
+        do not reset capUsedPerSec, do not wait */
       }
     }
+    /* Now we either waited, reset capUsedPerSec and lastReq, or did nothing.*/
     val res = dd.putItem(req)
     lastCap = res.getConsumedCapacityUnits()
     capUsedPerSec += lastCap
