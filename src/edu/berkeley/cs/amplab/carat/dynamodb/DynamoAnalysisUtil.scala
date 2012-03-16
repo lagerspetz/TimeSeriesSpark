@@ -546,6 +546,10 @@ object DynamoAnalysisUtil {
                 v += k._2
                 prevFeatures += ((k._1, v))
               }
+                println("Extra features:")
+              for (k <- prevFeatures){
+                println(k._1, k._2.mkString("; "))
+              }
                 val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
                   prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
                 if (r.rate() == 0) {
@@ -562,6 +566,10 @@ object DynamoAnalysisUtil {
                 }
               } else {
                 /* One endpoint not BLC, use uniform distribution rate */
+                println("Extra features:")
+              for (k <- prevFeatures){
+                println(k._1, k._2.mkString("; "))
+              }
                 for (k <- features){
                 val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
                 v += k._2
