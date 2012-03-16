@@ -156,6 +156,27 @@ object DynamoDbEncoder {
   }
 
   /**
+   * Returns only a single value for an AttributeValue object.
+   * May lose data if an AttributeValue has multiple values in it.
+   */
+  def fromAttributeValue(thing: AttributeValue) = {
+    val n = thing.getN()
+    val s = thing.getS()
+    val ns = thing.getNS()
+    val ss = thing.getSS()
+    if (n != null)
+      ("N", n)
+    else if (s != null)
+      ("S", s)
+    else if (ns != null)
+      ("NS", ns)
+    else if (ss != null)
+      ("SS", ss)
+    else
+      (null, null)
+  }
+
+  /**
    * Put a new entry into `bugsTable`.
    */
   def putBug(table: String, keyNames: (String, String), keyValues: (String, String),

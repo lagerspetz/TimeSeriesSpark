@@ -104,7 +104,7 @@ object DynamoDbDecoder {
     val cond = new Condition().withComparisonOperator("IN").withAttributeValueList(vals.map(x => {
      new AttributeValue(x._2.toString()) 
     }))
-    val conds = DynamoDbEncoder.convertToMap[Condition](Array((vals.first._1, cond)))
+    val conds = DynamoDbEncoder.convertToMap[Condition](Array((vals.head._1, cond)))
     s.setScanFilter(conds)
     guaranteedScan(s)
   }
@@ -114,7 +114,7 @@ object DynamoDbDecoder {
     val cond = new Condition().withComparisonOperator("IN").withAttributeValueList(vals.map(x => {
       new AttributeValue(x._2.toString())
     }))
-    val conds = DynamoDbEncoder.convertToMap[Condition](Array((vals.first._1, cond)))
+    val conds = DynamoDbEncoder.convertToMap[Condition](Array((vals.head._1, cond)))
     s.setScanFilter(conds)
     guaranteedScan(s, lastKey)
   }

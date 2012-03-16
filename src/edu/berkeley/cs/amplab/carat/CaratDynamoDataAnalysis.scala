@@ -208,27 +208,7 @@ object CaratDynamoDataAnalysis {
     }
 
     var rateRdd = sc.parallelize[CaratRate]({
-      val mapped = samples.map(x => {
-        /* See properties in package.scala for data keys. */
-        val uuid = x.get(sampleKey).getS()
-        val apps = x.get(sampleProcesses).getSS().map(w => {
-          if (w == null)
-            ""
-          else {
-            val s = w.split(";")
-            if (s.size > 1)
-              s(1).trim
-            else
-              ""
-          }
-        })
-
-        val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
-        val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
-        val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
-        val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
-        (uuid, time, batteryLevel, event, batteryState, apps)
-      })
+      val mapped = samples.map(DynamoAnalysisUtil.sampleMapper)
       DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
     })
     if (rates != null)

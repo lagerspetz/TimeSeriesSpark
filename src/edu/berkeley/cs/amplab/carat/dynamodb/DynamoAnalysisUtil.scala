@@ -253,27 +253,7 @@ object DynamoAnalysisUtil {
     }
 
     var rateRdd = sc.parallelize[CaratRate]({
-      val mapped = samples.map(x => {
-        /* See properties in package.scala for data keys. */
-        val uuid = x.get(sampleKey).getS()
-        val apps = x.get(sampleProcesses).getSS().map(w => {
-          if (w == null)
-            ""
-          else {
-            val s = w.split(";")
-            if (s.size > 1)
-              s(1).trim
-            else
-              ""
-          }
-        })
-
-        val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
-        val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
-        val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
-        val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
-        (uuid, time, batteryLevel, event, batteryState, apps)
-      })
+      val mapped = samples.map(sampleMapper)
       DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
     })
     if (rates != null)
@@ -317,7 +297,9 @@ object DynamoAnalysisUtil {
 
   def sampleMapper(x: java.util.Map[String, AttributeValue]) = {
     /* See properties in package.scala for data keys. */
+    
     val uuid = x.get(sampleKey).getS()
+    x.remove(sampleKey)
     val apps = x.get(sampleProcesses).getSS().map(w => {
       if (w == null)
         ""
@@ -329,12 +311,21 @@ object DynamoAnalysisUtil {
           ""
       }
     })
+    x.remove(sampleProcesses)
 
     val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
+    x.remove(sampleTime)
     val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
+    x.remove(sampleBatteryState)
     val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
+    x.remove(sampleBatteryLevel)
     val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
-    (uuid, time, batteryLevel, event, batteryState, apps)
+    x.remove(sampleEvent)
+    // key -> (type,value) 
+    var features:scala.collection.immutable.Map[String, (String, Object)] = new HashMap[String, (String, Object)]
+    for (k <- x)
+      features += ((k._1, DynamoDbEncoder.fromAttributeValue(k._2)))
+    (uuid, time, batteryLevel, event, batteryState, apps, features)
   }
 
   /**
@@ -357,19 +348,22 @@ object DynamoAnalysisUtil {
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
-  def rateMapperPairwise(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
+  def rateMapperPairwise(os: String, model: String, observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String,
+      java.lang.String, Seq[String], scala.collection.immutable.Map[String, (String, Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
     var prevD = 0.0
     var prevBatt = 0.0
     var prevEvent = ""
     var prevState = ""
     var prevApps: Seq[String] = Array[String]()
+    var prevFeatures:scala.collection.immutable.Map[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
 
     var d = 0.0
     var batt = 0.0
     var event = ""
     var state = ""
     var apps: Seq[String] = Array[String]()
+    var features: scala.collection.immutable.Map[String, (String, Object)] = null
 
     var negDrainSamples = 0
     var abandonedSamples = 0
@@ -386,6 +380,7 @@ object DynamoAnalysisUtil {
       event = k._4.trim().toLowerCase()
       state = k._5.trim().toLowerCase()
       apps = k._6
+      features = k._7
 
       if (state != STATE_CHARGING) {
         /* Record rates. First time fall through */
@@ -401,8 +396,17 @@ object DynamoAnalysisUtil {
             /* now prevBatt - batt >= 0 */
             if (prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED) {
               /* Point rate */
+              for (k <- features){
+                val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+                v += k._2
+                prevFeatures.put(k._1, v)
+              }
+              println("Extra features:")
+              for (k <- prevFeatures){
+                println(k._1, k._2.mkString("; "))
+              }
               val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
-                prevEvent, event, prevApps, apps)
+                prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
               if (r.rate() == 0) {
                 // This should never happen
                 println("RATE ERROR: BatteryLevelChanged with zero rate: " + r.toString(false))
@@ -417,8 +421,13 @@ object DynamoAnalysisUtil {
               }
             } else {
               /* One endpoint not BLC, use uniform distribution rate */
+              for (k <- features){
+                val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+                v += k._2
+                prevFeatures.put(k._1, v)
+              }
               val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
-                prevEvent, event, prevApps, apps)
+                prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
               if (considerRate(r)) {
                 rates += r
               } else {
@@ -436,6 +445,7 @@ object DynamoAnalysisUtil {
       prevEvent = event
       prevState = state
       prevApps = apps
+      prevFeatures = features.map(x => {(x._1, ArrayBuffer(x._2))})
     }
 
     println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
@@ -452,7 +462,8 @@ object DynamoAnalysisUtil {
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
   def rateMapperPairwise(uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
-    observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String])]) = {
+    observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String],
+        scala.collection.immutable.Map[String, (String, Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
     val startTime = start
     var prevUuid = ""
@@ -461,6 +472,7 @@ object DynamoAnalysisUtil {
     var prevEvent = ""
     var prevState = ""
     var prevApps: Seq[String] = Array[String]()
+    var prevFeatures:scala.collection.immutable.Map[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
 
     var uuid = ""
     var d = 0.0
@@ -468,6 +480,7 @@ object DynamoAnalysisUtil {
     var event = ""
     var state = ""
     var apps: Seq[String] = Array[String]()
+    var features: scala.collection.immutable.Map[String, (String, Object)] = null
 
     var negDrainSamples = 0
     var abandonedSamples = 0
@@ -499,6 +512,8 @@ object DynamoAnalysisUtil {
       event = k._4.trim().toLowerCase()
       state = k._5.trim().toLowerCase()
       apps = k._6
+      features = k._7
+      
       if (model != MODEL_SIMULATOR) {
         if (state != STATE_CHARGING) {
           /* Record rates. First time fall through.
@@ -519,8 +534,13 @@ object DynamoAnalysisUtil {
               /* now prevBatt - batt >= 0 */
               if (prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED) {
                 /* Point rate */
+                for (k <- features){
+                val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+                v += k._2
+                prevFeatures.put(k._1, v)
+              }
                 val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
-                  prevEvent, event, prevApps, apps)
+                  prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
                 if (r.rate() == 0) {
                   // This should never happen
                   println("RATE ERROR: BatteryLevelChanged with zero rate: " + r.toString(false))
@@ -535,8 +555,13 @@ object DynamoAnalysisUtil {
                 }
               } else {
                 /* One endpoint not BLC, use uniform distribution rate */
+                for (k <- features){
+                val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+                v += k._2
+                prevFeatures.put(k._1, v)
+              }
                 val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
-                  prevEvent, event, prevApps, apps)
+                  prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
                 if (considerRate(r)) {
                   rates += r
                 } else {
