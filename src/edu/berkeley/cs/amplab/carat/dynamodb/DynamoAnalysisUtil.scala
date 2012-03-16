@@ -401,7 +401,7 @@ object DynamoAnalysisUtil {
               for (k <- features){
                 val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
                 v += k._2
-                prevFeatures.put(k._1, v)
+                prevFeatures += ((k._1, v))
               }
               println("Extra features:")
               for (k <- prevFeatures){
@@ -426,7 +426,7 @@ object DynamoAnalysisUtil {
               for (k <- features){
                 val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
                 v += k._2
-                prevFeatures.put(k._1, v)
+                prevFeatures += ((k._1, v))
               }
               val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
                 prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
@@ -451,7 +451,7 @@ object DynamoAnalysisUtil {
       for (k <- features) {
         val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
         v += k._2
-        prevFeatures.put(k._1, v)
+        prevFeatures += ((k._1, v))
       }
     }
 
@@ -544,7 +544,7 @@ object DynamoAnalysisUtil {
                 for (k <- features){
                 val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
                 v += k._2
-                prevFeatures.put(k._1, v)
+                prevFeatures += ((k._1, v))
               }
                 val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
                   prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
@@ -565,7 +565,7 @@ object DynamoAnalysisUtil {
                 for (k <- features){
                 val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
                 v += k._2
-                prevFeatures.put(k._1, v)
+                prevFeatures += ((k._1, v))
               }
                 val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
                   prevEvent, event, prevApps, apps, prevFeatures.map(x => {(x._1, x._2.toSeq)}))
@@ -597,7 +597,7 @@ object DynamoAnalysisUtil {
       for (k <- features) {
         val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
         v += k._2
-        prevFeatures.put(k._1, v)
+        prevFeatures += ((k._1, v))
       }
     }
 
