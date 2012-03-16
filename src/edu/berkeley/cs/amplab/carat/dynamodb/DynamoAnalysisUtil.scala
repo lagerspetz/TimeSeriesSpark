@@ -447,7 +447,7 @@ object DynamoAnalysisUtil {
       prevEvent = event
       prevState = state
       prevApps = apps
-      prevFeatures.clear()
+      prevFeatures = new HashMap[String, ArrayBuffer[(String, Object)]]
       for (k <- features) {
         val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
         v += k._2
@@ -593,7 +593,7 @@ object DynamoAnalysisUtil {
       prevEvent = event
       prevState = state
       prevApps = apps
-      prevFeatures.clear()
+      prevFeatures = new HashMap[String, ArrayBuffer[(String, Object)]]
       for (k <- features) {
         val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
         v += k._2
