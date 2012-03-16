@@ -28,6 +28,8 @@ object DynamoAnalysisUtil {
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 0.04
+  
+  val knownKeys = Array(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)
 
   val DIST_THRESHOLD = 10
 
@@ -296,12 +298,11 @@ object DynamoAnalysisUtil {
     finish(startTime)
     distRet
   }
-
+  
   def sampleMapper(x: java.util.Map[String, AttributeValue]) = {
     /* See properties in package.scala for data keys. */
     
     val uuid = x.get(sampleKey).getS()
-    x.remove(sampleKey)
     val apps = x.get(sampleProcesses).getSS().map(w => {
       if (w == null)
         ""
@@ -313,20 +314,19 @@ object DynamoAnalysisUtil {
           ""
       }
     })
-    x.remove(sampleProcesses)
-
+    
     val time = { val attr = x.get(sampleTime); if (attr != null) attr.getN() else "" }
-    x.remove(sampleTime)
     val batteryState = { val attr = x.get(sampleBatteryState); if (attr != null) attr.getS() else "" }
-    x.remove(sampleBatteryState)
     val batteryLevel = { val attr = x.get(sampleBatteryLevel); if (attr != null) attr.getN() else "" }
-    x.remove(sampleBatteryLevel)
     val event = { val attr = x.get(sampleEvent); if (attr != null) attr.getS() else "" }
-    x.remove(sampleEvent)
+    
     // key -> (type,value) 
     var features:scala.collection.immutable.Map[String, (String, Object)] = new HashMap[String, (String, Object)]
-    for (k <- x)
-      features += ((k._1, DynamoDbEncoder.fromAttributeValue(k._2)))
+    for (k <- x){
+      val key = k._1
+      if (!knownKeys.contains(key))
+        features += ((key, DynamoDbEncoder.fromAttributeValue(k._2)))
+    }
     (uuid, time, batteryLevel, event, batteryState, apps, features)
   }
 
