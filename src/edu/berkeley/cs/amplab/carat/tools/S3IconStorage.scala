@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.tools
 
 import java.io.File
 import edu.berkeley.cs.amplab.carat.s3.S3Decoder

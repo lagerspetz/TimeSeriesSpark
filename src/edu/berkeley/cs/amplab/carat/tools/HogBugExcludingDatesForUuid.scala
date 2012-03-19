@@ -1,8 +1,9 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.tools
 
 import spark._
 import spark.SparkContext._
 import spark.timeseries._
+import edu.berkeley.cs.amplab.carat._
 import java.util.concurrent.Semaphore
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq

@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.tools
 
 import scala.io.Source
 import scala.collection.immutable.TreeMap

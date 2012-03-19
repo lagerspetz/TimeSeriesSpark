@@ -1,8 +1,9 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.tools
 
 import scala.io.Source
 import scala.collection.immutable.TreeMap
 import scala.sys.process._
+import edu.berkeley.cs.amplab.carat._
 
 
 object DataPlotter extends App {

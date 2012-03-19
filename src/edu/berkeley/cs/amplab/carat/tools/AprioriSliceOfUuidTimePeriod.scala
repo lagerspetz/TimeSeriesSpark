@@ -1,4 +1,4 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.tools
 
 import spark._
 import spark.SparkContext._
@@ -21,6 +21,7 @@ import java.io.FileInputStream
 import java.io.FileWriter
 import java.io.FileOutputStream
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoAnalysisUtil
+import edu.berkeley.cs.amplab.carat._
 import scala.collection.immutable.TreeSet
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbDecoder
 import scala.actors.scheduler.ResizableThreadPoolScheduler

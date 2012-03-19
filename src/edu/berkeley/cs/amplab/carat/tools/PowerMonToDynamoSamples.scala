@@ -1,10 +1,11 @@
-package edu.berkeley.cs.amplab.carat
+package edu.berkeley.cs.amplab.carat.tools
 
 import spark._
 import spark.SparkContext._
 import spark.timeseries._
 import scala.collection.mutable.ArrayBuffer
 import java.text.SimpleDateFormat
+import edu.berkeley.cs.amplab.carat._
 import edu.berkeley.cs.amplab.carat.dynamodb.DynamoDbEncoder
 
 object PowerMonToDynamoSamples {
