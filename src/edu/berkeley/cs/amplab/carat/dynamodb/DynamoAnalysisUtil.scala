@@ -157,17 +157,30 @@ object DynamoAnalysisUtil {
     {
       // Unique uuIds, Oses, and Models from registrations.
       val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
+      // UUID -> [(timestamp,os), (timestamp,model), ...]
+      val uuidToOsesAndModels = new scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]]
+      // TODO: Make uuids to multiple OSes actually usable
       val allModels = new scala.collection.mutable.HashSet[String]
       val allOses = new scala.collection.mutable.HashSet[String]
 
       if (oldRates != null) {
         val devices = oldRates.map(x => {
-          (x.uuid, (x.os, x.model))
-        }).collect()
+          // the latest time that they had an OS and model
+          (x.uuid, (x.time2, x.os, x.model))
+        }).groupByKey().collect()
         for (k <- devices) {
-          uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
-          allOses += k._2._1
-          allModels += k._2._2
+          val uuid = k._1
+          val s = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
+          s.addAll(k._2)
+          uuidToOsesAndModels += ((uuid, s.sortWith((x, y) => {
+            x._1 < y._1
+          })))
+          
+          for (j <- k._2) {
+            uuidToOsAndModel += ((uuid, (j._2, j._3)))
+            allOses += j._2
+            allModels += j._3
+          }
         }
       }
       /* Only get new rates if we have no old rates, or it has been more than an hour */
@@ -177,24 +190,24 @@ object DynamoAnalysisUtil {
         if (last_reg > 0) {
           DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
             DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-            handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+            handleRegs(_, _, uuidToOsesAndModels, allOses, allModels))
         } else {
           DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
             DynamoDbDecoder.getAllItems(registrationTable, _),
-            handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
+            handleRegs(_, _, uuidToOsesAndModels, allOses, allModels))
         }
 
         /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
         if (last_sample > 0) {
           allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
             DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-            handleSamples(sc, _, uuidToOsAndModel, _),
+            handleSamples(sc, _, uuidToOsesAndModels, _),
             true,
             allRates)
         } else {
           allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
             DynamoDbDecoder.getAllItems(samplesTable, _),
-            handleSamples(sc, _, uuidToOsAndModel, _),
+            handleSamples(sc, _, uuidToOsesAndModels, _),
             true,
             allRates)
         }
@@ -218,7 +231,7 @@ object DynamoAnalysisUtil {
    * uuids, oses and models are filled in.
    */
   def handleRegs(key: Key, regs: java.util.List[java.util.Map[String, AttributeValue]],
-    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]],
     oses: scala.collection.mutable.Set[String],
     models: scala.collection.mutable.Set[String]) {
 
@@ -231,7 +244,12 @@ object DynamoAnalysisUtil {
       val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
       val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
       val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
-      uuidToOsAndModel += ((uuid, (os, model)))
+      val time = { val attr = x.get(regsTimestamp); if (attr != null) attr.getN().toDouble else 0.0 }
+      val s = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
+      s.add((time, os, model))
+      uuidToOsesAndModels += ((uuid, s.sortWith((x, y) => {
+            x._1 < y._1
+          })))
       models += model
       oses += os
     }
@@ -248,7 +266,7 @@ object DynamoAnalysisUtil {
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
   def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
-    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]],
     rates: RDD[CaratRate]) = {
 
     if (samples.size > 0) {
@@ -258,7 +276,7 @@ object DynamoAnalysisUtil {
 
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(sampleMapper)
-      DynamoAnalysisUtil.rateMapperPairwise(uuidToOsAndModel, mapped)
+      DynamoAnalysisUtil.rateMapperPairwise(uuidToOsesAndModels, mapped)
     })
     if (rates != null)
       rateRdd = rateRdd.union(rates)
@@ -468,7 +486,7 @@ object DynamoAnalysisUtil {
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
-  def rateMapperPairwise(uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+  def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]],
     observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String],
         scala.collection.immutable.Map[String, (String, Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
@@ -513,8 +531,37 @@ object DynamoAnalysisUtil {
     })
     for (k <- obsSorted) {
       uuid = k._1
-      val (os, model) = uuidToOsAndModel.get(k._1).getOrElse("", "")
       d = k._2.toDouble
+      val list = uuidToOsesAndModels.get(k._1).getOrElse(new ArrayBuffer[(Double, String, String)])
+
+      var os = ""
+      var model = ""
+      var last = list.head
+      // if all registrations are somehow later than the measurement:
+      if (last._1 > d) {
+        os = last._2
+        model = last._3
+      } else {
+        // some registrations are before measurement
+        for (k <- list) {
+          if (last._1 < d && k._1 <= d) {
+            os = k._2
+            model = k._3
+          }
+          last = k
+        }
+        if (os == ""){
+          /* no interval found for d.
+           * Probably all regs are before the measurement.
+           * In this case, take the last os/model.
+           */
+          os = last._2
+          model = last._3
+        }
+      }
+      // Now we have the right os and model.
+      
+          
       batt = k._3.toDouble
       event = k._4.trim().toLowerCase()
       state = k._5.trim().toLowerCase()

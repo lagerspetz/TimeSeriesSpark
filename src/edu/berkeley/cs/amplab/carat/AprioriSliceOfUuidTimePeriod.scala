@@ -125,94 +125,21 @@ object AprioriSliceOfUuidTimePeriod {
       System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
 
       // Fix Spark running out of space on AWS.
-      System.setProperty("spark.local.dir", "/mnt/TimeSeriesSpark-unstable/spark-temp-plots")
+      System.setProperty("spark.local.dir", tmpdir)
 
       //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
 
       if (givenUuid != "" && (time1 < time2) && (time1 != 0 || time2 != 0)) {
         val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataToPlots")
-        analyzeData(sc, givenUuid, time1, time2)
+        val allRates = DynamoAnalysisUtil.getRates(sc, tmpdir)
+        analyzeRateData(sc, allRates, givenUuid, time1, time2)
       }else{
         println("Usage: AprioriSliceOfUuidTimePeriod master debug uuid time1 time2\n"+
             "Example: AprioriSliceOfUuidTimePeriod local[8] false 11-22-33-44-55 139547 1294574")
       }
     }
+    
     DynamoAnalysisUtil.finish(start)
-  }
-
-  /**
-   * Main function. Called from main() after sc initialization.
-   */
-
-  def analyzeData(sc: SparkContext, givenUuid: String, time1: Long, time2: Long) = {
-    // Master RDD for all data.
-
-    val oldRates: spark.RDD[CaratRate] = {
-      val f = new File(RATES_CACHED)
-      if (f.exists()) {
-        sc.objectFile(RATES_CACHED)
-      } else
-        null
-    }
-
-    var allRates: spark.RDD[CaratRate] = oldRates
-
-    // closure to forget uuids, models and oses after assigning them to rates
-    {
-      // Unique uuIds, Oses, and Models from registrations.
-      val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
-      val allModels = new scala.collection.mutable.HashSet[String]
-      val allOses = new scala.collection.mutable.HashSet[String]
-
-      if (oldRates != null) {
-        val devices = oldRates.map(x => {
-          (x.uuid, (x.os, x.model))
-        }).collect()
-        for (k <- devices) {
-          uuidToOsAndModel += ((k._1, (k._2._1, k._2._2)))
-          allOses += k._2._1
-          allModels += k._2._2
-        }
-      }
-
-      if (last_reg > 0) {
-        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
-          DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
-          DynamoAnalysisUtil.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-      } else {
-        DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(registrationTable),
-          DynamoDbDecoder.getAllItems(registrationTable, _),
-          DynamoAnalysisUtil.handleRegs(_, _, uuidToOsAndModel, allOses, allModels))
-      }
-
-      /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-      if (last_sample > 0) {
-        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
-          DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-          DynamoAnalysisUtil.handleSamples(sc, _, uuidToOsAndModel, _),
-          true,
-          allRates)
-      } else {
-        allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
-          DynamoDbDecoder.getAllItems(samplesTable, _),
-          DynamoAnalysisUtil.handleSamples(sc, _, uuidToOsAndModel, _),
-          true,
-          allRates)
-      }
-
-      // we may not be interesed in these actually.
-      println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
-      println("All oses: " + allOses.mkString(", "))
-      println("All models: " + allModels.mkString(", "))
-    }
-
-    if (allRates != null) {
-      allRates.saveAsObjectFile(RATES_CACHED_NEW)
-      DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
-      DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
-      analyzeRateData(sc, allRates, givenUuid, time1, time2)
-    } else
-      null
   }
   
   /**
