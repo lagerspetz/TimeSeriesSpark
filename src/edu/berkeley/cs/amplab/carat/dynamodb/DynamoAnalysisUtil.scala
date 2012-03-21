@@ -542,11 +542,11 @@ object DynamoAnalysisUtil {
         os = last._2
         model = last._3
       } else {
-        // some registrations are before measurement
+        // some registrations are before the measurement
         for (k <- list) {
           if (last._1 < d && k._1 <= d) {
-            os = k._2
-            model = k._3
+            os = last._2
+            model = last._3
           }
           last = k
         }
