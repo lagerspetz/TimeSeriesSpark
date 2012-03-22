@@ -158,7 +158,7 @@ object DynamoAnalysisUtil {
       // Unique uuIds, Oses, and Models from registrations.
       val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
       // UUID -> [(timestamp,os), (timestamp,model), ...]
-      val uuidToOsesAndModels = new scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]]
+      val uuidToOsesAndModels = new scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]
       // TODO: Make uuids to multiple OSes actually usable
       val allModels = new scala.collection.mutable.HashSet[String]
       val allOses = new scala.collection.mutable.HashSet[String]
@@ -231,7 +231,7 @@ object DynamoAnalysisUtil {
    * uuids, oses and models are filled in.
    */
   def handleRegs(key: Key, regs: java.util.List[java.util.Map[String, AttributeValue]],
-    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]],
+    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
     oses: scala.collection.mutable.Set[String],
     models: scala.collection.mutable.Set[String]) {
 
@@ -266,7 +266,7 @@ object DynamoAnalysisUtil {
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
   def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
-    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]],
+    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
     rates: RDD[CaratRate]) = {
 
     if (samples.size > 0) {
@@ -486,7 +486,7 @@ object DynamoAnalysisUtil {
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
-  def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, Seq[(Double, String, String)]],
+  def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
     observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String],
         scala.collection.immutable.Map[String, (String, Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
