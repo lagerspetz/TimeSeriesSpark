@@ -29,6 +29,8 @@ object DynamoAnalysisUtil {
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 0.04
   
+  val FRESHNESS_SECONDS = 3600*2
+  
   val knownKeys = Array(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)
 
   val DIST_THRESHOLD = 10
@@ -130,7 +132,7 @@ object DynamoAnalysisUtil {
    * Get Rates from DynamoDB samples and registrations.
    */
 
-  def getRates(sc: SparkContext, tmpdir:String) = {
+  def getRates(sc: SparkContext, tmpdir:String, clean:Boolean = true) = {
     // Master RDD for all data.
 
     val RATES_CACHED_NEW = tmpdir + "cached-rates-new.dat"
@@ -141,9 +143,12 @@ object DynamoAnalysisUtil {
     lazy val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
     lazy val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
 
+    val nowS =  System.currentTimeMillis() / 1000
+    println("Now=%s lastSample=%s diff=%s".format(nowS,last_sample,nowS-last_sample))
+    
     val oldRates: spark.RDD[CaratRate] = {
       val f = new File(RATES_CACHED)
-      if (f.exists()) {
+      if (f.exists() && (!clean || (nowS - last_sample < FRESHNESS_SECONDS))) {
         sc.objectFile(RATES_CACHED)
       } else
         null
@@ -184,9 +189,8 @@ object DynamoAnalysisUtil {
         }
       }
       /* Only get new rates if we have no old rates, or it has been more than an hour */
-      val nowS =  System.currentTimeMillis() / 1000
-      println("Now=%s lastSample=%s diff=%s".format(nowS,last_sample,nowS-last_sample))
-      if (oldRates == null || (nowS - last_sample > 3600)) {
+      
+      if (oldRates == null || (nowS - last_sample > FRESHNESS_SECONDS)) {
         if (last_reg > 0) {
           DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
             DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
