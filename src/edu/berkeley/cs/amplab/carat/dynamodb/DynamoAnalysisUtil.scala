@@ -191,7 +191,7 @@ object DynamoAnalysisUtil {
       /* Only get new rates if we have no old rates, or it has been more than an hour */
       
       if (oldRates == null || (nowS - last_sample > FRESHNESS_SECONDS)) {
-        if (last_reg > 0) {
+        if (!clean && last_reg > 0) {
           DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
             DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
             handleRegs(_, _, uuidToOsesAndModels, allOses, allModels))
@@ -202,7 +202,7 @@ object DynamoAnalysisUtil {
         }
 
         /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
-        if (last_sample > 0) {
+        if (!clean && last_sample > 0) {
           allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
             DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
             handleSamples(sc, _, uuidToOsesAndModels, _),
