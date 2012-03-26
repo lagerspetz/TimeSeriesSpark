@@ -121,7 +121,7 @@ object DynamoDbDecoder {
 
   def filterItemsAfter(table: String, attrName: String, attrValue: String, lastKey: Key = null) = {
     val s = new ScanRequest(table)
-    val cond = new Condition().withComparisonOperator("GE").withAttributeValueList(new AttributeValue().withN(attrValue))
+    val cond = new Condition().withComparisonOperator("GT").withAttributeValueList(new AttributeValue().withN(attrValue))
     val conds = DynamoDbEncoder.convertToMap[Condition](Array((attrName, cond)))
     s.setScanFilter(conds)
     guaranteedScan(s, lastKey)

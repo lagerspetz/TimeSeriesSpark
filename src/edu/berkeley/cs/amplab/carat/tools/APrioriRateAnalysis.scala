@@ -35,7 +35,7 @@ object APrioriRateAnalysis extends App {
 
   val rdd = {
     if (!f.exists()) {
-      val allRates = DynamoAnalysisUtil.getRates(sc, tmpdir)
+      val allRates = DynamoAnalysisUtil.getRatesUnabriged(sc, tmpdir)
       saveApriori(sc, allRates)
     } else {
       loadApriori(sc)
