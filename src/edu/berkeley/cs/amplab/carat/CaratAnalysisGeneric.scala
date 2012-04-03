@@ -17,23 +17,22 @@ import collection.JavaConversions._
 
 object CaratAnalysisGeneric {
   var removeD: ( /*daemonSet:*/ Set[String]) => Unit = null
-  var action: (/*nature:*/String, /*keyValue1:*/String, /*keyValue2:*/String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
-  var jsFunction: (/*allRates:*/ RDD[CaratRate],/* aPrioriDistribution: */Map[Double,Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
+  var action: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
+  var jsFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
   var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
 
   var ENOUGH_USERS = 5
   var DECIMALS = 3
-  
+
   var userLimit = Int.MaxValue
 
   /**
    * Main program entry point.
    */
-  def genericAnalysis(master: String, tmpDir: String, clients:Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
+  def genericAnalysis(master: String, tmpDir: String, clients: Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
-    actionFunction: (/*nature:*/String, /*keyValue1:*/String, /*keyValue2:*/String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
-    JScoreFunction: (/*allRates:*/ RDD[CaratRate],/* aPrioriDistribution: */Map[Double,Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]],
-        /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)],/*decimals:*/ Int) => Unit,
+    actionFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
+    JScoreFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
     correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
     val start = DynamoAnalysisUtil.start()
 
@@ -78,12 +77,17 @@ object CaratAnalysisGeneric {
     var allRates = inputRates.collect()
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
-    uuidToOsAndModel ++= allRates.map(x => { (x.uuid, (x.os, x.model)) })
+    /* We do not know the final OS for an uuid. This takes care of that.
+     Rates are sorted chronologically, so this yields the latest os and model. */
+    for (k <- allRates) {
+      val old = uuidToOsAndModel.getOrElse(k.uuid, (k.os, k.model))
+      uuidToOsAndModel += ((k.uuid, old))
+    }
 
     var uuidArray = uuidToOsAndModel.keySet.toArray.sortWith((s, t) => {
       s < t
     })
-  
+
     if (userLimit < uuidArray.length) {
       println("Running analysis for %s users.".format(userLimit))
       // limit data to these users:
@@ -139,7 +143,10 @@ object CaratAnalysisGeneric {
     for (i <- 0 until uuidArray.length) {
       // these are independent until JScores.
       val uuid = uuidArray(i)
-      val fromUuid = allRates.filter(_.uuid == uuid) //.cache()
+      // Take care here to use samples for the _latest_ os
+      val fromUuid = allRates.filter(x => {
+        x.uuid == uuid && x.os == uuidToOsAndModel.get(x.uuid)
+      }) //.cache()
 
       var uuidApps = fromUuid.flatMap(_.allApps).toSet
       uuidApps --= DAEMONS_LIST_GLOBBED
@@ -185,7 +192,7 @@ object CaratAnalysisGeneric {
     val (osCorrelations, modelCorrelations, userCorrelations) = DynamoAnalysisUtil.correlation("All", allRates, aPrioriDistribution, models, oses, totalsByUuid)
 
     // need to collect uuid stuff here:
-    jsFunction(inputRates,aPrioriDistribution,distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
+    jsFunction(inputRates, aPrioriDistribution, distsWithUuid, distsWithoutUuid, parametersByUuid, evDistanceByUuid, appsByUuid, uuidToOsAndModel, DECIMALS)
     corrFunction("All", osCorrelations, modelCorrelations, userCorrelations, 0, 0, null)
 
     //scheduler.execute({
@@ -194,7 +201,7 @@ object CaratAnalysisGeneric {
 
     /* Hogs: Consider all apps except daemons. */
     for (app <- allApps) {
-      oneApp(uuidArray, allRates, app, aPrioriDistribution, oses, models, parametersByUuid, totalsByUuid)
+      oneApp(uuidArray, allRates, app, aPrioriDistribution, oses, models, parametersByUuid, totalsByUuid, uuidToOsAndModel)
     }
 
     /*val globalNonHogs = allApps -- allHogs
@@ -209,7 +216,7 @@ object CaratAnalysisGeneric {
    * Calculate similar apps for device `uuid` based on all rate measurements and apps reported on the device.
    * Write them to DynamoDb.
    */
-  def similarApps(all: Array[CaratRate], aPrioriDistribution: Map[Double, Double], uuid:String, i: Int, uuidApps: Set[String]) {
+  def similarApps(all: Array[CaratRate], aPrioriDistribution: Map[Double, Double], uuid: String, i: Int, uuidApps: Set[String]) {
     val sCount = similarityCount(uuidApps.size)
     printf("SimilarApps client=%s sCount=%s uuidApps.size=%s\n", i, sCount, uuidApps.size)
     val similar = all.filter(_.allApps.intersect(uuidApps).size >= sCount)
@@ -223,7 +230,8 @@ object CaratAnalysisGeneric {
     aPrioriDistribution: Map[Double, Double],
     oses: scala.collection.immutable.Set[String], models: scala.collection.immutable.Set[String],
     parametersByUuid: scala.collection.immutable.TreeMap[String, (Double, Double, Double)],
-    totalsByUuid: scala.collection.immutable.TreeMap[String, (Double, Double)]) {
+    totalsByUuid: scala.collection.immutable.TreeMap[String, (Double, Double)],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)]) {
     val filtered = allRates.filter(_.allApps.contains(app))
     val filteredNeg = allRates.filter(!_.allApps.contains(app))
 
@@ -246,8 +254,11 @@ object CaratAnalysisGeneric {
           // not a hog. is it a bug for anyone?
           for (i <- 0 until uuidArray.length) {
             val uuid = uuidArray(i)
-            /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. */
-            val appFromUuid = filtered.filter(_.uuid == uuid) //.cache()
+            /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. 
+             * Only consider samples from the latest OS of the uuId. */
+            val appFromUuid = filtered.filter(x => {
+              x.uuid == uuid && x.os == uuidToOsAndModel.get(x.uuid)
+            }) //.cache()
             val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
             /**
              * TODO: Require BUG_REFERENCE client devices in the reference distribution.

@@ -19,6 +19,7 @@ import edu.berkeley.cs.amplab.carat.CaratRate
 import spark.timeseries.ProbUtil
 import scala.collection.immutable.TreeMap
 import scala.collection.mutable.Map
+import java.util.Date
 
 object DynamoAnalysisUtil {
 
@@ -269,7 +270,7 @@ object DynamoAnalysisUtil {
       println("All oses: " + allOses.mkString(", "))
       println("All models: " + allModels.mkString(", "))
     }
-    
+
     allRates
   }
 
@@ -293,7 +294,9 @@ object DynamoAnalysisUtil {
       val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
       val time = { val attr = x.get(regsTimestamp); if (attr != null) attr.getN().toDouble else 0.0 }
       val s = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
-      s.add((time, os, model))
+      // only record changes in OS.
+      if (s.last._2 != os)
+        s.add((time, os, model))
       uuidToOsesAndModels += ((uuid, s.sortWith((x, y) => {
         x._1 < y._1
       })))
@@ -567,6 +570,9 @@ object DynamoAnalysisUtil {
     var prevApps: Seq[String] = Array[String]()
     var prevFeatures: scala.collection.immutable.HashMap[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
 
+    // Store a map of feature name to its value history for each uuid: 
+    var featureTracking = new HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]
+
     var uuid = ""
     var d = 0.0
     var batt = 0.0
@@ -634,6 +640,49 @@ object DynamoAnalysisUtil {
       state = k._5.trim().toLowerCase()
       apps = k._6
       features = k._7
+
+      /* Do this early not to censor any values out of the history.
+       */
+
+      var old = featureTracking.get(uuid).getOrElse(new HashMap[String, ArrayBuffer[(Long, Object)]])
+
+      var bl = old.getOrElse("BatteryLevel", new ArrayBuffer[(Long, Object)])
+      if (bl.length <= 0 || bl.last._2 != batt) {
+        bl += ((d.toLong, new java.lang.Double(batt)))
+        old += (("BatteryLevel", bl))
+      }
+      val bs = old.getOrElse("BatteryState", new ArrayBuffer[(Long, Object)])
+      if (bs.length <= 0 || bs.last._2 != state) {
+        bs += ((d.toLong, state))
+        old += (("BatteryState", bs))
+      }
+      val ev = old.getOrElse("Event", new ArrayBuffer[(Long, Object)])
+      if (ev.length <= 0 || ev.last._2 != event) {
+        ev += ((d.toLong, event))
+        old += (("Event", ev))
+      }
+      val om = old.getOrElse("Model", new ArrayBuffer[(Long, Object)])
+      if (om.length <= 0 || om.last._2 != model) {
+        om += ((d.toLong, model))
+        old += (("Model", om))
+      }
+      val od = old.getOrElse("OS", new ArrayBuffer[(Long, Object)])
+      if (od.length <= 0 || od.last._2 != os) {
+        od += ((d.toLong, os))
+        old += (("Model", od))
+      }
+      val oldApps = old.getOrElse("Apps", new ArrayBuffer[(Long, Object)])
+      if (oldApps.length <= 0 || oldApps.last._2 != apps) {
+        oldApps += ((d.toLong, apps))
+        old += (("Apps", oldApps))
+      }
+      val oldFeatures = old.getOrElse("Features", new ArrayBuffer[(Long, Object)])
+      if (oldFeatures.length <= 0 || oldFeatures.last._2 != features) {
+        oldFeatures += ((d.toLong, features))
+        old += (("Model", oldFeatures))
+      }
+      // Fixme: does == comparison of Scala Arrays or sets work properly? (Features, Apps)
+      featureTracking += ((uuid, old))
 
       if (model != MODEL_SIMULATOR) {
         if (state != STATE_CHARGING) {
@@ -730,9 +779,36 @@ object DynamoAnalysisUtil {
       nzf("%s > " + ABNORMAL_RATE + " drain, ", abandonedSamples) +
       nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
     finish(startTime)
+    printFeatures(featureTracking)
     rates.toSeq
   }
 
+  def printFeatures(featureTracking: 
+ scala.collection.immutable.HashMap[String,scala.collection.immutable.HashMap[String,scala.
+ collection.mutable.ArrayBuffer[(Long, java.lang.Object)]]]){
+    var changePairs = new HashMap[String, HashSet[(Object, Object)]]
+    for ((uuid, featureMap) <- featureTracking){
+      for ((feature, history) <- featureMap){
+        println("Feature history for %s and %s:".format(uuid, feature))
+        var prev:Object = null
+        for ((time, thing) <- history){
+          if (prev != null){
+            var pairSet = changePairs.getOrElse(feature, new HashSet[(Object, Object)])
+            pairSet += ((prev, thing))
+            changePairs += ((feature, pairSet))
+          }
+          // Convert time to milliseconds and display using current locale
+          println("%s %s".format(new Date(time*1000), thing))
+          prev = thing
+        }
+      }
+    }
+    
+    for ((feature, pairSet) <- changePairs)
+      for (pair <- pairSet)
+        println("%s change: %s to %s".format(feature, pair._1, pair._2))
+  }
+  
   /**
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
