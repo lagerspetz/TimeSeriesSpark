@@ -295,7 +295,7 @@ object DynamoAnalysisUtil {
       val time = { val attr = x.get(regsTimestamp); if (attr != null) attr.getN().toDouble else 0.0 }
       val s = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
       // only record changes in OS.
-      if (s.last._2 != os)
+      if (s.size <= 0 || s.last._2 != os)
         s.add((time, os, model))
       uuidToOsesAndModels += ((uuid, s.sortWith((x, y) => {
         x._1 < y._1
