@@ -669,18 +669,22 @@ object DynamoAnalysisUtil {
       val od = old.getOrElse("OS", new ArrayBuffer[(Long, Object)])
       if (od.length <= 0 || od.last._2 != os) {
         od += ((d.toLong, os))
-        old += (("Model", od))
+        old += (("OS", od))
       }
       val oldApps = old.getOrElse("Apps", new ArrayBuffer[(Long, Object)])
       if (oldApps.length <= 0 || oldApps.last._2 != apps) {
-        oldApps += ((d.toLong, apps))
+        oldApps += ((d.toLong, apps.sorted))
         old += (("Apps", oldApps))
       }
-      val oldFeatures = old.getOrElse("Features", new ArrayBuffer[(Long, Object)])
-      if (oldFeatures.length <= 0 || oldFeatures.last._2 != features) {
-        oldFeatures += ((d.toLong, features))
-        old += (("Model", oldFeatures))
+      /* Handle extra features: */
+      for ((feature, (fType, value)) <- features){
+        val oldFeature = old.getOrElse(feature, new ArrayBuffer[(Long, Object)])
+        if (oldFeature.length <= 0 || oldFeature.last._2 != value) {
+          oldFeature += ((d.toLong, value))
+          old += ((feature, oldFeature))
+        }
       }
+
       // Fixme: does == comparison of Scala Arrays or sets work properly? (Features, Apps)
       featureTracking += ((uuid, old))
 
