@@ -144,9 +144,7 @@ object CaratAnalysisGeneric {
       // these are independent until JScores.
       val uuid = uuidArray(i)
       // Take care here to use samples for the _latest_ os
-      val fromUuid = allRates.filter(x => {
-        x.uuid == uuid && x.os == uuidToOsAndModel.get(x.uuid)
-      }) //.cache()
+      val fromUuid = allRates.filter(uuidOsFilter(uuidToOsAndModel, uuid, _))
 
       var uuidApps = fromUuid.flatMap(_.allApps).toSet
       uuidApps --= DAEMONS_LIST_GLOBBED
@@ -256,9 +254,7 @@ object CaratAnalysisGeneric {
             val uuid = uuidArray(i)
             /* Bugs: Only consider apps reported from this uuId. Only consider apps not known to be hogs. 
              * Only consider samples from the latest OS of the uuId. */
-            val appFromUuid = filtered.filter(x => {
-              x.uuid == uuid && x.os == uuidToOsAndModel.get(x.uuid)
-            }) //.cache()
+            val appFromUuid = filtered.filter(uuidOsFilter(uuidToOsAndModel, uuid, _))
             val appNotFromUuid = filtered.filter(_.uuid != uuid) //.cache()
             /**
              * TODO: Require BUG_REFERENCE client devices in the reference distribution.
@@ -284,5 +280,9 @@ object CaratAnalysisGeneric {
     } else {
       println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
     }
+  }
+  
+  def uuidOsFilter(uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], uuid:String, x: CaratRate) = {
+    x.uuid == uuid && x.os == uuidToOsAndModel.getOrElse(x.uuid, ("", ""))._1
   }
 }
