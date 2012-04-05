@@ -39,7 +39,7 @@ object NoRDDPlots {
       plotDirectory = args(1)
     val start = DynamoAnalysisUtil.start()
     CaratAnalysisGeneric.genericAnalysis(master, tmpdir, Int.MaxValue,ENOUGH_USERS, DECIMALS,
-        x => {}, plotDists,PlotUtil.plotJScores(plotDirectory,_,_,_,_,_,_,_,_,_),
+        x => {}, plotDists, skipped, PlotUtil.plotJScores(plotDirectory,_,_,_,_,_,_,_,_,_),
         PlotUtil.writeCorrelationFile(plotDirectory,_,_,_,_,_,_,_))
         
     DynamoAnalysisUtil.finish(start)
@@ -50,6 +50,10 @@ object NoRDDPlots {
    * Save it as "plots/data/titleWith-titleWithout".txt.
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
+  
+  def skipped(nature:String, keyValue1:String, keyValue2:String, title:String) {
+    // no-op.
+  }
 
   def plotDists(nature:String, keyValue1:String, keyValue2:String, title: String, titleNeg: String,
     one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: scala.collection.mutable.Map[Double, Double], isBugOrHog: Boolean,

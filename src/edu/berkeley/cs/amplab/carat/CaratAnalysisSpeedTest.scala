@@ -41,7 +41,7 @@ object CaratAnalysisSpeedTest {
 
     val start = DynamoAnalysisUtil.start()
     CaratAnalysisGeneric.genericAnalysis(master, tmpdir, userLimit, ENOUGH_USERS, DECIMALS,
-        x => {}, printDists, printJScores, globalCorrelations)
+      x => {}, printDists, printSkipped, printJScores, globalCorrelations)
   }
 
   /* Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -50,10 +50,10 @@ object CaratAnalysisSpeedTest {
    * Also generate a plotfile called plots/plotfiles/titleWith-titleWithout.gnuplot
    */
 
-  def printDists(nature:String, keyValue1:String, keyValue2:String, title: String, titleNeg: String,
+  def printDists(nature: String, keyValue1: String, keyValue2: String, title: String, titleNeg: String,
     one: Array[CaratRate], two: Array[CaratRate], aPrioriDistribution: Map[Double, Double], isBugOrHog: Boolean,
-    filtered: Array[CaratRate], oses: Set[String], models: Set[String], 
-    totalsByUuid: scala.collection.immutable.TreeMap[String,(Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
+    filtered: Array[CaratRate], oses: Set[String], models: Set[String],
+    totalsByUuid: scala.collection.immutable.TreeMap[String, (Double, Double)], usersWith: Int, usersWithout: Int, uuid: String) = {
     var hasSamples = true
     if (usersWith == 0 && usersWithout == 0) {
       hasSamples = one.take(1) match {
@@ -87,10 +87,14 @@ object CaratAnalysisSpeedTest {
       false
   }
 
-  def print(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)], 
-    distWithout: Array[(Double, Double)], 
-    ev: Double, evNeg: Double, evDistance: Double, 
-    osCorrelations: scala.collection.immutable.Map[String, Double], modelCorrelations: scala.collection.immutable.Map[String, Double], userCorrelations: scala.collection.immutable.Map[String, Double], 
+  def printSkipped(nature: String, keyValue1: String, keyValue2: String, title: String) {
+    printf("%s %s skipped for too few points.".format(nature, title))
+  }
+
+  def print(title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
+    distWithout: Array[(Double, Double)],
+    ev: Double, evNeg: Double, evDistance: Double,
+    osCorrelations: scala.collection.immutable.Map[String, Double], modelCorrelations: scala.collection.immutable.Map[String, Double], userCorrelations: scala.collection.immutable.Map[String, Double],
     usersWith: Int, usersWithout: Int, uuid: String) {
     println("Calculated %s vs %s xmax=%s ev=%s evWithout=%s evDistance=%s osCorrelations=%s modelCorrelations=%s userCorrelations=%s uuid=%s".format(
       title, titleNeg, xmax, ev, evNeg, evDistance, osCorrelations, modelCorrelations, userCorrelations, uuid))
@@ -103,15 +107,14 @@ object CaratAnalysisSpeedTest {
    * Note that the server side multiplies the JScore by 100, and we store it here
    * as a fraction.
    */
-  
-  
-  def printJScores(allRates:RDD[CaratRate], aPrioriDistribution: Map[Double, Double], distsWithUuid: TreeMap[String, Array[(Double, Double)]], 
-    distsWithoutUuid: TreeMap[String, Array[(Double, Double)]], 
-    parametersByUuid: TreeMap[String, (Double, Double, Double)], 
-    evDistanceByUuid: TreeMap[String, Double], 
-    appsByUuid: TreeMap[String, Set[String]], 
-    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], 
-    decimals:Int) {
+
+  def printJScores(allRates: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], distsWithUuid: TreeMap[String, Array[(Double, Double)]],
+    distsWithoutUuid: TreeMap[String, Array[(Double, Double)]],
+    parametersByUuid: TreeMap[String, (Double, Double, Double)],
+    evDistanceByUuid: TreeMap[String, Double],
+    appsByUuid: TreeMap[String, Set[String]],
+    uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)],
+    decimals: Int) {
     val oses = uuidToOsAndModel.map(_._2._1).toSet
     val models = uuidToOsAndModel.map(_._2._2).toSet
     val evByUuid = parametersByUuid.map(x => {
@@ -133,7 +136,7 @@ object CaratAnalysisSpeedTest {
       // no distance check, not bug or hog
       printVarianceAndSampleCount(model, fromModel, aPrioriDistribution, evByUuid, uuidToOsAndModel)
     }
-    
+
     val dists = evDistanceByUuid.map(_._2).toSeq.sorted
 
     for (k <- distsWithUuid.keys) {
@@ -161,10 +164,10 @@ object CaratAnalysisSpeedTest {
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
   }
-  
-  def printVarianceAndSampleCount(title: String, 
-    one: RDD[CaratRate], aPrioriDistribution: Map[Double, Double], 
-    allEvs: scala.collection.immutable.TreeMap[String,Double],
+
+  def printVarianceAndSampleCount(title: String,
+    one: RDD[CaratRate], aPrioriDistribution: Map[Double, Double],
+    allEvs: scala.collection.immutable.TreeMap[String, Double],
     uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)]) = {
     val usersWith = one.map(_.uuid).collect().toSet.size
     // the ev is over all the points in the distribution
@@ -174,28 +177,28 @@ object CaratAnalysisSpeedTest {
     val mean = ProbUtil.mean(evOne)
     val variance = ProbUtil.variance(evOne, mean)
     val sampleCount = one.count()
-    
+
     val userEvs = allEvs.filter(x => {
       val p = uuidToOsAndModel.get(x._1).getOrElse("", "")
       p._1 == title || p._2 == title
     }).map(_._2).toSeq
     val meanU = ProbUtil.mean(userEvs)
     val varianceU = ProbUtil.variance(userEvs, meanU)
-    
+
     var imprMin = (100.0 / (ev) - 100.0 / (ev + variance)) / 60.0
     var imprHr = (imprMin / 60.0).toInt
     imprMin -= imprHr * 60.0
     var imprD = (imprHr / 24.0).toInt
     imprHr -= imprD * 24
-    
+
     println("%s ev=%s mean=%s variance=%s (%s d %s h %s min), clients=%s samples=%s".format(title, ev, mean, variance, imprD, imprHr, imprMin, usersWith, sampleCount))
-        
+
     var imprMinU = (100.0 / (ev) - 100.0 / (ev + varianceU)) / 60.0
     var imprHrU = (imprMinU / 60.0).toInt
     imprMinU -= imprHrU * 60.0
     var imprDU = (imprHrU / 24.0).toInt
     imprHrU -= imprDU * 24
-    
+
     println("%s ev=%s meanU=%s varianceU=%s (%s d %s h %s min), clients=%s samples=%s".format(title, ev, meanU, varianceU, imprDU, imprHrU, imprMinU, usersWith, sampleCount))
   }
 

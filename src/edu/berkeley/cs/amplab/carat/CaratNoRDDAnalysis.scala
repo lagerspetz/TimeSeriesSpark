@@ -53,7 +53,7 @@ object CaratNoRDDAnalysis {
 
     val start = DynamoAnalysisUtil.start()
     CaratAnalysisGeneric.genericAnalysis(master, tmpdir, userLimit, ENOUGH_USERS, DECIMALS,
-      DynamoAnalysisUtil.removeDaemons, storeDists, storeJScores, globalCorrelations)
+      DynamoAnalysisUtil.removeDaemons, storeDists, skippedHog, storeJScores, globalCorrelations)
   }
 
   /* Generate a gnuplot-readable plot file of the bucketed distribution.
@@ -119,6 +119,23 @@ object CaratNoRDDAnalysis {
       isBugOrHog && evDistance > 0
     } else
       false
+  }
+
+  def skippedHog(nature: String, keyValue1: String, keyValue2: String, title: String) {
+    if (nature == "hog") {
+      // Need to delete old bugs that have too few users:
+      val (key, items) = DynamoDbDecoder.filterItems(bugsTable, (hogKey, keyValue1))
+      for (k <- items) {
+        val attr = k.get(resultKey)
+        if (attr != null) {
+          val uuid = attr.getS()
+          DynamoDbDecoder.deleteItem(bugsTable, uuid, keyValue1)
+        }
+      }
+    }
+
+    /* delete old hogs and bugs that are no longer hoggy/buggy */
+    deleteFunction(nature, keyValue1, keyValue2)
   }
 
   def storageFunction(nature: String, keyValue1: String, keyValue2: String, uuidApps: Seq[String] = null) = {

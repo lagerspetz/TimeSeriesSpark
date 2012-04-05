@@ -18,6 +18,7 @@ import collection.JavaConversions._
 object CaratAnalysisGeneric {
   var removeD: ( /*daemonSet:*/ Set[String]) => Unit = null
   var action: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
+  var skipped: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, /*title:*/ String) => Unit = null
   var jsFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
   var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
 
@@ -31,7 +32,8 @@ object CaratAnalysisGeneric {
    */
   def genericAnalysis(master: String, tmpDir: String, clients: Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
-    actionFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
+    actionFunction:  (/*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
+    skippedFunction: (/*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String) => Unit,
     JScoreFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
     correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
     val start = DynamoAnalysisUtil.start()
@@ -49,6 +51,7 @@ object CaratAnalysisGeneric {
 
     removeD = removeDaemonsFunction
     action = actionFunction
+    skipped = skippedFunction
     jsFunction = JScoreFunction
     corrFunction = correlationFunction
     ENOUGH_USERS = CLIENT_THRESHOLD
@@ -275,9 +278,11 @@ object CaratAnalysisGeneric {
           }
         }
       } else {
+        skipped("hog", app, null, "Hog " + app + " running")
         println("Skipped app " + app + " for too few points in: without: %s < thresh=%s".format(usersWithout, ENOUGH_USERS))
       }
     } else {
+      skipped("hog", app, null, "Hog " + app + " running")
       println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
     }
   }
