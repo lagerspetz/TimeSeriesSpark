@@ -156,6 +156,12 @@ object DynamoAnalysisUtil {
     }
 
     var allRates: spark.RDD[CaratRate] = oldRates
+    
+    /* TODO: FIXME: featureTracking can only be done for samples, not stored rates.
+       * Obvious fix: save samples instead of Rates, then save features and Rates after those. 
+      */
+      var featureTracking = new scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]
+    
 
     /* closure to forget uuids, models and oses after assigning them to rates.
      * This is because new rates may have new uuids, models and oses.
@@ -206,13 +212,13 @@ object DynamoAnalysisUtil {
         if (!clean && last_sample > 0) {
           allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
             DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
-            handleSamples(sc, _, uuidToOsesAndModels, _),
+            handleSamples(sc, _, uuidToOsesAndModels, featureTracking, _),
             true,
             allRates)
         } else {
           allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
             DynamoDbDecoder.getAllItems(samplesTable, _),
-            handleSamples(sc, _, uuidToOsesAndModels, _),
+            handleSamples(sc, _, uuidToOsesAndModels, featureTracking, _),
             true,
             allRates)
         }
@@ -222,12 +228,15 @@ object DynamoAnalysisUtil {
       println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
       println("All oses: " + allOses.mkString(", "))
       println("All models: " + allModels.mkString(", "))
+      
+      printFeatures(featureTracking, uuidToOsesAndModels)
     }
     // save entire rate rdd for later:
     allRates.saveAsObjectFile(RATES_CACHED_NEW)
     DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
     DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
     DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
+    
     allRates
   }
 
@@ -318,6 +327,7 @@ object DynamoAnalysisUtil {
    */
   def handleSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
     uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
+    featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],
     rates: RDD[CaratRate]) = {
 
     if (samples.size > 0) {
@@ -327,7 +337,7 @@ object DynamoAnalysisUtil {
 
     var rateRdd = sc.parallelize[CaratRate]({
       val mapped = samples.map(sampleMapper)
-      DynamoAnalysisUtil.rateMapperPairwise(uuidToOsesAndModels, mapped)
+      DynamoAnalysisUtil.rateMapperPairwise(uuidToOsesAndModels, featureTracking, mapped)
     })
     if (rates != null)
       rateRdd = rateRdd.union(rates)
@@ -559,6 +569,7 @@ object DynamoAnalysisUtil {
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
   def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
+      featureTracking: scala.collection.mutable.HashMap[String,HashMap[String,ArrayBuffer[(Long, Object)]]],
     observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String], scala.collection.immutable.Map[String, (String, Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
     val startTime = start
@@ -570,8 +581,7 @@ object DynamoAnalysisUtil {
     var prevApps: Seq[String] = Array[String]()
     var prevFeatures: scala.collection.immutable.HashMap[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
 
-    // Store a map of feature name to its value history for each uuid: 
-    var featureTracking = new HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]
+    // Store a map of feature name to its value history for each uuid in featureTracking.
 
     var uuid = ""
     var d = 0.0
@@ -686,7 +696,7 @@ object DynamoAnalysisUtil {
       }
 
       // Fixme: does == comparison of Scala Arrays or sets work properly? (Features, Apps)
-      featureTracking += ((uuid, old))
+      featureTracking.put(uuid, old)
 
       if (model != MODEL_SIMULATOR) {
         if (state != STATE_CHARGING) {
@@ -783,14 +793,13 @@ object DynamoAnalysisUtil {
       nzf("%s > " + ABNORMAL_RATE + " drain, ", abandonedSamples) +
       nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
     finish(startTime)
-    printFeatures(featureTracking)
     rates.toSeq
   }
 
-  def printFeatures(featureTracking: 
- scala.collection.immutable.HashMap[String,scala.collection.immutable.HashMap[String,scala.
- collection.mutable.ArrayBuffer[(Long, java.lang.Object)]]]){
+  def printFeatures(featureTracking: scala.collection.mutable.HashMap[String,HashMap[String, ArrayBuffer[(Long, Object)]]],
+      uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]){
     var changePairs = new HashMap[String, HashSet[(Object, Object)]]
+    // retrieve change pairs
     for ((uuid, featureMap) <- featureTracking){
       for ((feature, history) <- featureMap){
         println("Feature history for %s and %s:".format(uuid, feature))
@@ -811,6 +820,23 @@ object DynamoAnalysisUtil {
     for ((feature, pairSet) <- changePairs)
       for (pair <- pairSet)
         println("%s change: %s to %s".format(feature, pair._1, pair._2))
+        
+    // group by model:
+    val modelFeatures = featureTracking.map(x => {
+      val list = uuidToOsesAndModels.getOrElse(x._1, new ArrayBuffer[(Double, String, String)])
+      var model = ""
+      if (!list.isEmpty)
+        model = list.last._3
+      val lastFeatures = x._2.map(y => {
+        (y._1, y._2.last)
+      })
+      (x._1 +" "+ model, lastFeatures)
+    })
+    for ((model, features) <- modelFeatures){
+      println("Last features of %s".format(model))
+      for ((feature, value) <- features)
+        println("%s %s %s %s".format(model, feature, new Date(value._1*1000), value._2))
+    }
   }
   
   /**
