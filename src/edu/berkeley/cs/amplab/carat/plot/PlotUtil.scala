@@ -51,6 +51,9 @@ object PlotUtil {
   val HOGS = "hogs"
   val SIM = "similarApps"
   val UUIDS = "uuIds"
+    // Whether to compute app usage percentages and print them. Later to be saved to dynamodb.
+    
+  val appUsage = true
 
   def plot(plotDirectory: String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
@@ -105,7 +108,48 @@ object PlotUtil {
       else
         printf("Error: Could not plot jscore, because: distWith=%s distWithout=%s apps=%s\n", distWith, distWithout, apps)
     }
+    
+    if (appUsage){
+      appUsagePercentages(allRates)
+    }
   }
+  
+  def appUsagePercentages(allRates: RDD[CaratRate]) = {
+    val uuidAppTimes = allRates.flatMap(x => {
+      val ab = new ArrayBuffer[(String, String, Double)]
+      for (k <- x.allApps){
+        ab += ((x.uuid, k, x.time2 - x.time1))
+      }
+      ab.toSeq
+    })
+    val grouped = uuidAppTimes.groupBy[String](groupByUuid(_))
+    /* Contains an RDD of uuids, total Rate count, total rate time,
+     * and a list of their apps, app count fractions and app time fractions.
+     */
+    val uuidAppFractions = grouped.map(x => {
+      val uuid = x._1
+      val tuples = x._2.map(y => {
+        (y._2, y._3)
+      })
+      val tgroups = tuples.groupBy[String]((x) => x._1)
+      val countsAndTimes = tgroups.map(x =>{
+        (x._1, x._2.size, x._2.map(_._2).sum)
+      })
+      
+      val totalCount = countsAndTimes.map(_._2).sum
+      val totalTime = countsAndTimes.map(_._3).sum
+     (uuid, totalCount, totalTime, countsAndTimes.map(x => {
+        (x._1, x._2 * 1.0 / totalCount, x._3 / totalTime)
+      }))
+    })
+    uuidAppFractions.foreach(x =>{
+      println("%s rates %s time %s s app fractions:".format(x._1, x._2, x._3))
+      for ((app, countFrac, timeFrac) <- x._4)
+        println("%s %4.2f %4.2f".format(app,countFrac,timeFrac))
+    })
+  }
+  
+  def groupByUuid(k: (String, String, Double)) = {k._1}
 
   def plotSerial(plotDirectory: String, title: String, titleNeg: String, xmax: Double, distWith: Array[(Double, Double)],
     distWithout: Array[(Double, Double)],
