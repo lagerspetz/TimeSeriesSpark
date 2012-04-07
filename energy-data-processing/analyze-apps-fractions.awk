@@ -2,6 +2,7 @@
 
 $0 ~ "app fractions:" {
   print $0
+  uuid=$1
   c=1
 }
 
@@ -14,6 +15,6 @@ c == 1 {
     next
   if (w == 0 && v == 0)
     next
-  print $0
+  print uuid,$0
 }
 
