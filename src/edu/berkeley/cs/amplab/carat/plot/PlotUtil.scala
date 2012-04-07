@@ -122,8 +122,19 @@ object PlotUtil {
       }
       ab.toSeq
     })
+    val samplesAndTimes = allRates.map(x =>{
+      (x.uuid, x.time2-x.time1)
+    }).collect()
+    
+    val times = new HashMap[String,Double]
+    val counts = new HashMap[String,Int]
+    for ((uuid, time) <- samplesAndTimes){
+      times += ((uuid, times.getOrElse(uuid, 0.0)+time))
+      counts += ((uuid, counts.getOrElse(uuid, 0)+1))
+    }
+    
     val grouped = uuidAppTimes.groupBy[String](groupByUuid(_))
-    /* Contains an RDD of uuids, total Rate count, total rate time,
+    /* Will contain an RDD of uuids, total Rate count, total rate time,
      * and a list of their apps, app count fractions and app time fractions.
      */
     val uuidAppFractions = grouped.map(x => {
@@ -136,8 +147,8 @@ object PlotUtil {
         (x._1, x._2.size, x._2.map(_._2).sum)
       })
       
-      val totalCount = countsAndTimes.map(_._2).sum
-      val totalTime = countsAndTimes.map(_._3).sum
+      val totalCount = counts.getOrElse(uuid,0)
+      val totalTime = times.getOrElse(uuid,0.0)
      (uuid, totalCount, totalTime, countsAndTimes.map(x => {
         (x._1, x._2 * 1.0 / totalCount, x._3 / totalTime)
       }))
@@ -145,7 +156,7 @@ object PlotUtil {
     uuidAppFractions.foreach(x =>{
       println("%s rates %s time %s s app fractions:".format(x._1, x._2, x._3))
       for ((app, countFrac, timeFrac) <- x._4)
-        println("%s %4.2f %4.2f".format(app,countFrac,timeFrac))
+        println("%s %6f %6f".format(app,countFrac,timeFrac))
     })
   }
   
