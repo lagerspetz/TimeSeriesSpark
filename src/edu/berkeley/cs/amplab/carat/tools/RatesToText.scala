@@ -35,8 +35,7 @@ object RatesToText extends App {
 
   val rdd = {
     if (!f.exists()) {
-      println("Error: Could not find cached rates file!")
-      sys.exit(1)
+      DynamoAnalysisUtil.getRates(sc, tmpdir, true)
     } else {
       sc.objectFile[CaratRate](rfile)
     }
