@@ -73,9 +73,9 @@ class CaratRate(var uuid: String, val os: String, val model: String,
     } + " time1=%4f time2=%4f batt1=%4.2f batt2=%4.2f uuid=%s os=%s model=%s events=%s %s".format(time1, time2, batt1, batt2,
       uuid, os, model, getTriggers(), {
         if (verbose)
-          "apps=%s".format(allApps)
+          "apps=%s extra features: %s".format(allApps, features)
         else
-          "%d apps".format(allApps.size)
+          "%d apps and %d extra features".format(allApps.size, features.size)
       })
   }
 
