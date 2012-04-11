@@ -9,7 +9,7 @@ import scala.collection.mutable.Buffer
 import collection.JavaConversions._
 
 object SamplesToText extends App {
-  
+
   /**
    * Define a utility function to print regs and samples:
    */
@@ -25,28 +25,38 @@ object SamplesToText extends App {
       }
     }
 
-    println("There are a total of %d regs. They are:".format(regRdd.count()))
-    regRdd.foreach(x => {
-      printf("%s %s %s %s\n", x._1, x._4, x._2, x._3)
-    })
+    {
+      println("There are a total of %d regs. They are:".format(regRdd.count()))
+      val regStrs = regRdd.map(x => {
+        "%s %s %s %s".format(x._1, x._4, x._2, x._3)
+      }).collect().sorted
 
-    println("There are a total of %d samples. They are:".format(sampleRdd.count()))
-    sampleRdd.foreach(x => {
-      // print others first
-      printf("%s %s %s %s %s apps=%s", x._1, x._2, x._3, x._4, x._5, x._6.mkString(","))
-      // then print features:
-      for ((feature, (fType,value)) <- x._7){
-        if (fType == "S" || fType == "N"){
-          printf(" %s=%s", feature, value)
-        } else if (fType == "SS" || fType == "NS"){
-          val cVal = value.asInstanceOf[java.util.List[String]]
-          printf(" %s=%s", feature, cVal.mkString(","))
+      for (str <- regStrs)
+        println(str)
+    }
+
+    {
+      println("There are a total of %d samples. They are:".format(sampleRdd.count()))
+      val sampleStrs = sampleRdd.map(x => {
+        // print others first
+        var str1 = "%s %s %s %s %s apps=%s".format(x._1, x._2, x._3, x._4, x._5, x._6.mkString(","))
+        // then print features:
+        for ((feature, (fType, value)) <- x._7) {
+          if (fType == "S" || fType == "N") {
+            str1 += " %s=%s".format(feature, value)
+          } else if (fType == "SS" || fType == "NS") {
+            val cVal = value.asInstanceOf[java.util.List[String]]
+            str1 += " %s=%s".format(feature, cVal.mkString(","))
+          }
         }
-      }
-      println()
-    })
+        str1
+      }).collect().sorted
+
+      for (str <- sampleStrs)
+        println(str)
+    }
   }
-  
+
   // Start program:
 
   val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
