@@ -20,6 +20,7 @@ import spark.timeseries.ProbUtil
 import scala.collection.immutable.TreeMap
 import scala.collection.mutable.Map
 import java.util.Date
+import scala.collection.mutable.Buffer
 
 object DynamoAnalysisUtil {
 
@@ -156,12 +157,11 @@ object DynamoAnalysisUtil {
     }
 
     var allRates: spark.RDD[CaratRate] = oldRates
-    
+
     /* TODO: FIXME: featureTracking can only be done for samples, not stored rates.
        * Obvious fix: save samples instead of Rates, then save features and Rates after those. 
       */
-      var featureTracking = new scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]
-    
+    var featureTracking = new scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]
 
     /* closure to forget uuids, models and oses after assigning them to rates.
      * This is because new rates may have new uuids, models and oses.
@@ -210,13 +210,13 @@ object DynamoAnalysisUtil {
 
         /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
         if (!clean && last_sample > 0) {
-          allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
+          allRates = DynamoAnalysisUtil.DynamoDbItemLoop[CaratRate](DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
             DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
             handleSamples(sc, _, uuidToOsesAndModels, featureTracking, _),
             true,
             allRates)
         } else {
-          allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+          allRates = DynamoAnalysisUtil.DynamoDbItemLoop[CaratRate](DynamoDbDecoder.getAllItems(samplesTable),
             DynamoDbDecoder.getAllItems(samplesTable, _),
             handleSamples(sc, _, uuidToOsesAndModels, featureTracking, _),
             true,
@@ -228,7 +228,7 @@ object DynamoAnalysisUtil {
       println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
       println("All oses: " + allOses.mkString(", "))
       println("All models: " + allModels.mkString(", "))
-      
+
       printFeatures(featureTracking, uuidToOsesAndModels)
     }
     // save entire rate rdd for later:
@@ -236,7 +236,7 @@ object DynamoAnalysisUtil {
     DynamoAnalysisUtil.replaceOldRateFile(RATES_CACHED, RATES_CACHED_NEW)
     DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
     DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
-    
+
     allRates
   }
 
@@ -269,7 +269,7 @@ object DynamoAnalysisUtil {
 
       /* Limit attributesToGet here so that bandwidth is not used for nothing. Right now the memory attributes of samples are not considered. */
 
-      allRates = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+      allRates = DynamoAnalysisUtil.DynamoDbItemLoop[CaratRate](DynamoDbDecoder.getAllItems(samplesTable),
         DynamoDbDecoder.getAllItems(samplesTable, _),
         handleSamplesUnabriged(sc, _, uuidToOsesAndModels, _),
         true,
@@ -367,21 +367,67 @@ object DynamoAnalysisUtil {
   }
 
   /**
+   * Process a bunch of regs, just aggregating them into an RDD.
+   * will return an RDD of regs.
+   */
+  def accumulateRegs(sc: SparkContext, regs: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
+    oldRegs: RDD[(String, String, String, Double)]) = {
+
+    // Get last reg timestamp for set saving
+    if (regs.size > 0) {
+      last_reg_write = regs.last.get(regsTimestamp).getN().toDouble
+    }
+
+    var regRdd = sc.parallelize[(String, String, String, Double)]({
+      regs.map(x => {
+        val uuid = { val attr = x.get(regsUuid); if (attr != null) attr.getS() else "" }
+        val model = { val attr = x.get(regsModel); if (attr != null) attr.getS() else "" }
+        val os = { val attr = x.get(regsOs); if (attr != null) attr.getS() else "" }
+        val time = { val attr = x.get(regsTimestamp); if (attr != null) attr.getN().toDouble else 0.0 }
+        (uuid, model, os, time)
+      })
+    })
+
+    if (oldRegs != null)
+      regRdd = regRdd.union(oldRegs)
+    regRdd
+  }
+
+  /**
+   * Process a bunch of samples, just aggregating them into an RDD.
+   * will return an RDD of samples.
+   */
+  def accumulateSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
+    oldSamples: RDD[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])]) = {
+
+    // Get last reg timestamp for set saving
+    if (samples.size > 0) {
+      last_reg_write = samples.last.get(sampleTime).getN().toDouble
+    }
+
+    var sampleRdd = sc.parallelize[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])]({
+      samples.map(sampleMapper)
+    })
+
+    if (oldSamples != null)
+      sampleRdd = sampleRdd.union(oldSamples)
+    sampleRdd
+  }
+
+  /**
    * Generic Carat DynamoDb loop function. Gets items from a table using keys given, and continues until the table scan is complete.
    * This function achieves a block by block read until the end of a table, regardless of throughput or manual limits.
    */
-  def DynamoDbItemLoop(tableAndValueToKeyAndResults: => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
-    tableAndValueToKeyAndResultsContinue: com.amazonaws.services.dynamodb.model.Key => (com.amazonaws.services.dynamodb.model.Key, java.util.List[java.util.Map[String, AttributeValue]]),
-    stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) => spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate],
-    prefix: Boolean, /*prefixer: (java.util.List[java.util.Map[String, AttributeValue]]) => java.util.List[java.util.Map[String, AttributeValue]],*/
-    dist: spark.RDD[edu.berkeley.cs.amplab.carat.CaratRate]) = {
+  def DynamoDbItemLoop[T](tableAndValueToKeyAndResults: => (Key, java.util.List[java.util.Map[String, AttributeValue]]),
+    tableAndValueToKeyAndResultsContinue: Key => (Key, java.util.List[java.util.Map[String, AttributeValue]]),
+    stepHandler: (java.util.List[java.util.Map[String, AttributeValue]], RDD[T]) => RDD[T], prefix: Boolean, dist: RDD[T]) = {
     val startTime = start
     var finished = false
 
     var (key, results) = tableAndValueToKeyAndResults
     println("Got: " + results.size + " results.")
 
-    var distRet: spark.RDD[CaratRate] = null
+    var distRet: RDD[T] = null
     distRet = stepHandler(results, dist)
 
     while (key != null) {
@@ -398,6 +444,85 @@ object DynamoAnalysisUtil {
     }
     finish(startTime)
     distRet
+  }
+
+  /**
+   * Get the contents of the DynamoDb samples and registrations tables as RDDs.
+   * @param clean when true, either take all new or all old values, but do not merge.
+   * @param sc the SparkContext to use for building the RDDs and saving them to files.
+   * @param tmpdir the directory to use for temporary files created by Spark and also for saving the RDDs.
+   */
+  def getSamples(sc: SparkContext, tmpdir: String, clean: Boolean = true) = {
+    val SAMPLES_CACHED_NEW = tmpdir + "cached-samples-new.dat"
+    val SAMPLES_CACHED = tmpdir + "cached-samples.dat"
+    val REGS_CACHED_NEW = tmpdir + "cached-regs-new.dat"
+    val REGS_CACHED = tmpdir + "cached-regs.dat"
+    val LAST_SAMPLE = tmpdir + "last-sample.txt"
+    val LAST_REG = tmpdir + "last-reg.txt"
+
+    lazy val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
+    lazy val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
+
+    val nowS = System.currentTimeMillis() / 1000
+    println("Now=%s lastSample=%s diff=%s".format(nowS, last_sample, nowS - last_sample))
+
+    val oldSamples: RDD[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])] = {
+      val f = new File(SAMPLES_CACHED)
+      if (f.exists() && (!clean || (nowS - last_sample < FRESHNESS_SECONDS))) {
+        sc.objectFile(SAMPLES_CACHED)
+      } else
+        null
+    }
+
+    val oldRegs: RDD[(String, String, String, Double)] = {
+      val f = new File(REGS_CACHED)
+      if (f.exists() && (!clean || (nowS - last_sample < FRESHNESS_SECONDS))) {
+        sc.objectFile(REGS_CACHED)
+      } else
+        null
+    }
+
+    // Master RDDs for all data.
+    var allRegs: RDD[(String, String, String, Double)] = oldRegs
+    var allSamples: RDD[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])] = oldSamples
+
+    /* Only get new samples if we have no old samples, or it has been more than an hour */
+
+    if (allSamples == null || (nowS - last_sample > FRESHNESS_SECONDS)) {
+      if (!clean && last_reg > 0) {
+        allRegs = DynamoAnalysisUtil.DynamoDbItemLoop[(String, String, String, Double)](DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + ""),
+          DynamoDbDecoder.filterItemsAfter(registrationTable, regsTimestamp, last_reg + "", _),
+          accumulateRegs(sc, _, _), false, allRegs)
+      } else {
+        allRegs = DynamoAnalysisUtil.DynamoDbItemLoop[(String, String, String, Double)](DynamoDbDecoder.getAllItems(registrationTable),
+          DynamoDbDecoder.getAllItems(registrationTable, _),
+          accumulateRegs(sc, _, _), false, allRegs)
+      }
+
+      if (!clean && last_sample > 0) {
+        allSamples = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + ""),
+          DynamoDbDecoder.filterItemsAfter(samplesTable, sampleTime, last_sample + "", _),
+          accumulateSamples(sc, _, _),
+          false,
+          allSamples)
+      } else {
+        allSamples = DynamoAnalysisUtil.DynamoDbItemLoop(DynamoDbDecoder.getAllItems(samplesTable),
+          DynamoDbDecoder.getAllItems(samplesTable, _),
+          accumulateSamples(sc, _, _),
+          false,
+          allSamples)
+      }
+    }
+
+    // save entire sample and reg rdd for later:
+    allSamples.saveAsObjectFile(SAMPLES_CACHED_NEW)
+    DynamoAnalysisUtil.replaceOldRateFile(SAMPLES_CACHED, SAMPLES_CACHED_NEW)
+    allRegs.saveAsObjectFile(REGS_CACHED_NEW)
+    DynamoAnalysisUtil.replaceOldRateFile(REGS_CACHED, REGS_CACHED_NEW)
+    DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
+    DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
+
+    (allRegs, allSamples)
   }
 
   def sampleMapper(x: java.util.Map[String, AttributeValue]) = {
@@ -569,7 +694,7 @@ object DynamoAnalysisUtil {
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
   def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
-      featureTracking: scala.collection.mutable.HashMap[String,HashMap[String,ArrayBuffer[(Long, Object)]]],
+    featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],
     observations: Seq[(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, Seq[String], scala.collection.immutable.Map[String, (String, Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps)
     val startTime = start
@@ -687,7 +812,7 @@ object DynamoAnalysisUtil {
         old += (("Apps", oldApps))
       }
       /* Handle extra features: */
-      for ((feature, (fType, value)) <- features){
+      for ((feature, (fType, value)) <- features) {
         val oldFeature = old.getOrElse(feature, new ArrayBuffer[(Long, Object)])
         if (oldFeature.length <= 0 || oldFeature.last._2 != value) {
           oldFeature += ((d.toLong, value))
@@ -796,31 +921,31 @@ object DynamoAnalysisUtil {
     rates.toSeq
   }
 
-  def printFeatures(featureTracking: scala.collection.mutable.HashMap[String,HashMap[String, ArrayBuffer[(Long, Object)]]],
-      uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]){
+  def printFeatures(featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],
+    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]) {
     var changePairs = new HashMap[String, HashSet[(Object, Object)]]
     // retrieve change pairs
-    for ((uuid, featureMap) <- featureTracking){
-      for ((feature, history) <- featureMap){
+    for ((uuid, featureMap) <- featureTracking) {
+      for ((feature, history) <- featureMap) {
         println("Feature history for %s and %s:".format(uuid, feature))
-        var prev:Object = null
-        for ((time, thing) <- history){
-          if (prev != null){
+        var prev: Object = null
+        for ((time, thing) <- history) {
+          if (prev != null) {
             var pairSet = changePairs.getOrElse(feature, new HashSet[(Object, Object)])
             pairSet += ((prev, thing))
             changePairs += ((feature, pairSet))
           }
           // Convert time to milliseconds and display using current locale
-          println("%s %s".format(new Date(time*1000), thing))
+          println("%s %s".format(new Date(time * 1000), thing))
           prev = thing
         }
       }
     }
-    
+
     for ((feature, pairSet) <- changePairs)
       for (pair <- pairSet)
         println("%s change: %s to %s".format(feature, pair._1, pair._2))
-        
+
     // group by model:
     val modelFeatures = featureTracking.map(x => {
       val list = uuidToOsesAndModels.getOrElse(x._1, new ArrayBuffer[(Double, String, String)])
@@ -830,15 +955,15 @@ object DynamoAnalysisUtil {
       val lastFeatures = x._2.map(y => {
         (y._1, y._2.last)
       })
-      (x._1 +" "+ model, lastFeatures)
+      (x._1 + " " + model, lastFeatures)
     })
-    for ((model, features) <- modelFeatures){
+    for ((model, features) <- modelFeatures) {
       println("Last features of %s".format(model))
       for ((feature, value) <- features)
-        println("%s %s %s %s".format(model, feature, new Date(value._1*1000), value._2))
+        println("%s %s %s %s".format(model, feature, new Date(value._1 * 1000), value._2))
     }
   }
-  
+
   /**
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
