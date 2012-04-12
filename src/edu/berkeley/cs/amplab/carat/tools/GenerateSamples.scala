@@ -23,8 +23,8 @@ object GenerateSamples extends App {
     if (!f.exists()) {
       DynamoAnalysisUtil.getSamples(sc, tmpdir, true)
     } else {
-      (sc.objectFile[(String, String, String, Double)](rfile),
-        sc.objectFile[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])](rfile2))
+      (sc.objectFile[(String, String, String, Double)](tmpdir+rfile),
+        sc.objectFile[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])](tmpdir+rfile2))
     }
   }
   
