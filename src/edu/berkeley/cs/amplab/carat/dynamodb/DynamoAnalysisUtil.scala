@@ -313,13 +313,32 @@ object DynamoAnalysisUtil {
       models += model
       oses += os
     }
+  }
 
-    /*
-     * TODO: Stddev of samples per user over time,
-     * stddev of distributions (hog, etc) per all users over increasing number of users,
-     * change of distance of distributions (hog, etc) over increasing number of users.
-     */
-    //analyzeRateDataStdDevsOverTime(sc, distRet, uuid, os, model, plotDirectory)
+  /**
+   * Handles a set of registration messages as an RDD.
+   * uuids, oses and models are filled in.
+   */
+  def handleRegs(regs: RDD[(String, String, String, Double)],
+    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
+    oses: scala.collection.mutable.Set[String],
+    models: scala.collection.mutable.Set[String]) {
+
+    regs.foreach(x => {
+      val uuid = x._1
+      val model = x._2
+      val os = x._3
+      val time = x._4
+      val s = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
+      // only record changes in OS.
+      if (s.size <= 0 || s.last._2 != os)
+        s.add((time, os, model))
+      uuidToOsesAndModels += ((uuid, s.sortWith((x, y) => {
+        x._1 < y._1
+      })))
+      models += model
+      oses += os
+    })
   }
 
   /**
@@ -345,6 +364,21 @@ object DynamoAnalysisUtil {
     rateRdd
   }
 
+    /**
+   * Process a bunch of samples, assumed to be in order by uuid and timestamp.
+   * will return an RDD of CaratRates. Samples need not be from the same uuid.
+   */
+  def handleSamples(allSamples: spark.RDD[(String, String, String, String, String, 
+ scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String,(String, 
+ java.lang.Object)])],
+    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
+    featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]) = {
+
+    val rateRdd = DynamoAnalysisUtil.rateMapperPairwise(uuidToOsesAndModels, featureTracking, allSamples)
+    rateRdd
+  }
+  
+  
   /**
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
@@ -366,6 +400,8 @@ object DynamoAnalysisUtil {
       rateRdd = rateRdd.union(rates)
     rateRdd
   }
+  
+  
 
   /**
    * Process a bunch of regs, just aggregating them into an RDD.
@@ -524,6 +560,48 @@ object DynamoAnalysisUtil {
     DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
 
     (allRegs, allSamples)
+  }
+  
+  /**
+   * Get Rates from DynamoDB samples and registrations.
+   */
+
+  def samplesToRates(allRegs: spark.RDD[(String, String, String, Double)],
+      allSamples: spark.RDD[(String, String, String, String, String, 
+ scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String,(String, 
+ java.lang.Object)])]) = {
+    // Master RDD for all data.
+    var allRates: spark.RDD[CaratRate] = null
+
+    /* TODO: FIXME: featureTracking can only be done for samples, not stored rates.
+       * Obvious fix: save samples instead of Rates, then save features and Rates after those. 
+      */
+    var featureTracking = new scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]
+
+    /* closure to forget uuids, models and oses after assigning them to rates.
+     * This is because new rates may have new uuids, models and oses.
+    */
+    {
+      // Unique uuIds, Oses, and Models from registrations.
+      val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
+      // UUID -> [(timestamp,os), (timestamp,model), ...]
+      val uuidToOsesAndModels = new scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]
+      // TODO: Make uuids to multiple OSes actually usable
+      val allModels = new scala.collection.mutable.HashSet[String]
+      val allOses = new scala.collection.mutable.HashSet[String]
+      // fill in uuidToOsesAndModels, allOses, and allModels.
+	  handleRegs(allRegs, uuidToOsesAndModels, allOses, allModels)
+      handleSamples(allSamples, uuidToOsesAndModels, featureTracking)
+
+      // we may not be interested in these actually.
+      println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
+      println("All oses: " + allOses.mkString(", "))
+      println("All models: " + allModels.mkString(", "))
+
+      printFeatures(featureTracking, uuidToOsesAndModels)
+    }
+
+    allRates
   }
 
   def sampleMapper(x: java.util.Map[String, AttributeValue]) = {
@@ -739,6 +817,244 @@ object DynamoAnalysisUtil {
         true
       // if time and uuid are the same, sort first parameter first
     })
+    for (k <- obsSorted) {
+      uuid = k._1
+      d = k._2.toDouble
+      val list = uuidToOsesAndModels.get(k._1).getOrElse(new ArrayBuffer[(Double, String, String)])
+
+      var os = ""
+      var model = ""
+      var last = list.head
+      // if all registrations are somehow later than the measurement:
+      if (last._1 > d) {
+        os = last._2
+        model = last._3
+      } else {
+        // some registrations are before the measurement
+        for (k <- list) {
+          if (last._1 < d && k._1 <= d) {
+            os = last._2
+            model = last._3
+          }
+          last = k
+        }
+        if (os == "") {
+          /* no interval found for d.
+           * Probably all regs are before the measurement.
+           * In this case, take the last os/model.
+           */
+          os = last._2
+          model = last._3
+        }
+      }
+      // Now we have the right os and model.
+
+      batt = k._3.toDouble
+      event = k._4.trim().toLowerCase()
+      state = k._5.trim().toLowerCase()
+      apps = k._6
+      features = k._7
+
+      /* Do this early not to censor any values out of the history.
+       */
+
+      var old = featureTracking.get(uuid).getOrElse(new HashMap[String, ArrayBuffer[(Long, Object)]])
+
+      var bl = old.getOrElse("BatteryLevel", new ArrayBuffer[(Long, Object)])
+      if (bl.length <= 0 || bl.last._2 != batt) {
+        bl += ((d.toLong, new java.lang.Double(batt)))
+        old += (("BatteryLevel", bl))
+      }
+      val bs = old.getOrElse("BatteryState", new ArrayBuffer[(Long, Object)])
+      if (bs.length <= 0 || bs.last._2 != state) {
+        bs += ((d.toLong, state))
+        old += (("BatteryState", bs))
+      }
+      val ev = old.getOrElse("Event", new ArrayBuffer[(Long, Object)])
+      if (ev.length <= 0 || ev.last._2 != event) {
+        ev += ((d.toLong, event))
+        old += (("Event", ev))
+      }
+      val om = old.getOrElse("Model", new ArrayBuffer[(Long, Object)])
+      if (om.length <= 0 || om.last._2 != model) {
+        om += ((d.toLong, model))
+        old += (("Model", om))
+      }
+      val od = old.getOrElse("OS", new ArrayBuffer[(Long, Object)])
+      if (od.length <= 0 || od.last._2 != os) {
+        od += ((d.toLong, os))
+        old += (("OS", od))
+      }
+      val oldApps = old.getOrElse("Apps", new ArrayBuffer[(Long, Object)])
+      if (oldApps.length <= 0 || oldApps.last._2 != apps) {
+        oldApps += ((d.toLong, apps.sorted))
+        old += (("Apps", oldApps))
+      }
+      /* Handle extra features: */
+      for ((feature, (fType, value)) <- features) {
+        val oldFeature = old.getOrElse(feature, new ArrayBuffer[(Long, Object)])
+        if (oldFeature.length <= 0 || oldFeature.last._2 != value) {
+          oldFeature += ((d.toLong, value))
+          old += ((feature, oldFeature))
+        }
+      }
+
+      // Fixme: does == comparison of Scala Arrays or sets work properly? (Features, Apps)
+      featureTracking.put(uuid, old)
+
+      if (model != MODEL_SIMULATOR) {
+        if (state != STATE_CHARGING && state != STATE_UNKNOWN) {
+          /* Record rates. First time fall through.
+           * Note: same date or different uuid does not result
+           * in discard of the sample as a starting point for a rate.
+           * However, we cannot have a rate across UUIDs or the same timestamp.
+           */
+          if (prevD != 0 && prevD != d && prevUuid == uuid) {
+            if (prevBatt - batt < 0) {
+              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
+              negDrainSamples += 1
+            } else if (prevBatt == 0 && batt == 0) {
+              /* Assume simulator, ignore */
+              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
+              allZeroSamples += 1
+            } else {
+
+              /* now prevBatt - batt >= 0 */
+              if (prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED) {
+                /* Point rate */
+                for (k <- features) {
+                  val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+                  v += k._2
+                  prevFeatures += ((k._1, v))
+                }
+                println("Extra features:")
+                for (k <- prevFeatures) {
+                  println(k._1, k._2.mkString("; "))
+                }
+                val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+                  prevEvent, event, prevApps, apps, prevFeatures.map(x => { (x._1, x._2.toSeq) }))
+                if (r.rate() == 0) {
+                  // This should never happen
+                  println("RATE ERROR: BatteryLevelChanged with zero rate: " + r.toString(false))
+                  zeroBLCSamples += 1
+                } else {
+                  if (considerRate(r)) {
+                    rates += r
+                    pointRates += 1
+                  } else {
+                    abandonedSamples += 1
+                  }
+                }
+              } else {
+                /* One endpoint not BLC, use uniform distribution rate */
+                println("Extra features:")
+                for (k <- prevFeatures) {
+                  println(k._1, k._2.mkString("; "))
+                }
+                for (k <- features) {
+                  val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+                  v += k._2
+                  prevFeatures += ((k._1, v))
+                }
+                val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
+                  prevEvent, event, prevApps, apps, prevFeatures.map(x => { (x._1, x._2.toSeq) }))
+                if (considerRate(r)) {
+                  rates += r
+                } else {
+                  println("Abandoned uniform rate with abnormally high EV: " + r.toString(false))
+                  abandonedSamples += 1
+                }
+              }
+            }
+          }
+        } else {
+          chargingSamples += 1
+          // do not use charging samples as even starting points.
+          prevD = 0
+        }
+      } else {
+        // simulator samples also reset prevD
+        prevD = 0
+      }
+      prevUuid = uuid
+      prevD = d
+      prevBatt = batt
+      prevEvent = event
+      prevState = state
+      prevApps = apps
+      prevFeatures = new HashMap[String, ArrayBuffer[(String, Object)]]
+      for (k <- features) {
+        val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
+        v += k._2
+        prevFeatures += ((k._1, v))
+      }
+    }
+
+    println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
+      nzf("%s all zero, ", allZeroSamples) +
+      nzf("%s charging, ", chargingSamples) +
+      nzf("%s negative drain, ", negDrainSamples) +
+      nzf("%s > " + ABNORMAL_RATE + " drain, ", abandonedSamples) +
+      nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
+    finish(startTime)
+    rates.toSeq
+  }
+  
+  /**
+   * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
+   * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
+   */
+  def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
+    featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],
+    observations: RDD[(String, String, String, String, String, 
+ scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String,(String, 
+ java.lang.Object)])]) = {
+    // Observations format: (uuid, time, batteryLevel, event, batteryState, apps, other features)
+    val startTime = start
+    var prevUuid = ""
+    var prevD = 0.0
+    var prevBatt = 0.0
+    var prevEvent = ""
+    var prevState = ""
+    var prevApps: Seq[String] = Array[String]()
+    var prevFeatures: scala.collection.immutable.HashMap[String, ArrayBuffer[(String, Object)]] = new HashMap[String, ArrayBuffer[(String, Object)]]
+
+    // Store a map of feature name to its value history for each uuid in featureTracking.
+
+    var uuid = ""
+    var d = 0.0
+    var batt = 0.0
+    var event = ""
+    var state = ""
+    var apps: Seq[String] = Array[String]()
+    var features: scala.collection.immutable.Map[String, (String, Object)] = null
+
+    var negDrainSamples = 0
+    var abandonedSamples = 0
+    var chargingSamples = 0
+    var zeroBLCSamples = 0
+    var allZeroSamples = 0
+    var pointRates = 0
+
+    var rates = new ArrayBuffer[CaratRate]
+    val obsSorted = observations
+    /*
+     * FIXME: Install newest Spark and use the sort operation
+    observations.sortWith((x, y) => {
+      // order lexicographically by uuid
+      if (x._1 < y._1)
+        true
+      else if (x._1 > y._1)
+        false
+      else if (x._1 == y._1 && x._2 < y._2)
+        true
+      else if (x._1 == y._1 && x._2 > y._2)
+        false
+      else
+        true
+      // if time and uuid are the same, sort first parameter first
+    })*/
+    
     for (k <- obsSorted) {
       uuid = k._1
       d = k._2.toDouble
