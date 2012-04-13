@@ -10,7 +10,14 @@ import scala.collection.mutable.Map
 import collection.JavaConversions._
 
 /**
- * Do the exact same thing as in CaratDynamoDataToPlots, but do not collect() and write plot files and run plotting in the end.
+ * Generic analysis program. Runs given functions on data following the carat analysis process.
+ * This allows customization such as saving rates to disk or dynamodb, plotting distributions of
+ * features, just speed testing, etc.
+ * 
+ * This differs from `CaratAnalysisGeneric` by using an intermediate sample and reg format,
+ * allowing stored samples and regs to be used for feature tracking. In the older
+ * `CaratAnalysisGeneric`, stored Rates could no longer be used for feature tracking, and that
+ * meant doing analysis from DynamoDB when feature tracking was desired.
  *
  * @author Eemil Lagerspetz
  */
@@ -28,12 +35,12 @@ object StoredSampleAnalysisGeneric {
   var userLimit = Int.MaxValue
 
   /**
-   * Main program entry point.
+   * Analyze data directly from DynamoDb.
    */
   def genericAnalysis(master: String, tmpDir: String, clients: Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
-    actionFunction:  (/*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
-    skippedFunction: (/*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String) => Unit,
+    actionFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
+    skippedFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String) => Unit,
     JScoreFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
     correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
     val start = DynamoAnalysisUtil.start()
@@ -61,21 +68,63 @@ object StoredSampleAnalysisGeneric {
     System.setProperty("spark.local.dir", tmpDir)
 
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
-    val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataSpeedTest")
-    // getRates
-    // FIXME: This needs to take regs and samples from DynamoDb or from disk, and then convert those to Rates instead.
-    
-    
-    val allRates = {
+    val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoAnalysis")
+    // get samples from DynamoDB, save them to disk, convert to rates, and analyze:
     val (regs, samples) = DynamoAnalysisUtil.getSamples(sc, tmpDir)
-    DynamoAnalysisUtil.samplesToRates(regs, samples)
+    analyzeSamples(regs, samples)
+    DynamoAnalysisUtil.finish(start)
+  }
+
+  /**
+   * Analyze data from given regs and samples.
+   */
+  def genericAnalysisForSamples(regs: spark.RDD[(String, String, String, Double)],
+    samples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])],
+    clients: Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
+    removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
+    actionFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
+    skippedFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String) => Unit,
+    JScoreFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
+    correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
+    val start = DynamoAnalysisUtil.start()
+
+    // turn off INFO logging for spark:
+    System.setProperty("hadoop.root.logger", "WARN,console")
+    // This is misspelled in the spark jar log4j.properties:
+    System.setProperty("log4j.threshhold", "WARN")
+    // Include correct spelling to make sure
+    System.setProperty("log4j.threshold", "WARN")
+
+    // turn on ProbUtil debug logging
+    //System.setProperty("log4j.category.spark.timeseries.ProbUtil.threshold", "DEBUG")
+    //System.setProperty("log4j.appender.spark.timeseries.ProbUtil.threshold", "DEBUG")
+
+    removeD = removeDaemonsFunction
+    action = actionFunction
+    skipped = skippedFunction
+    jsFunction = JScoreFunction
+    corrFunction = correlationFunction
+    ENOUGH_USERS = CLIENT_THRESHOLD
+    userLimit = clients
+
+    analyzeSamples(regs, samples)
+    DynamoAnalysisUtil.finish(start)
+  }
+  
+  
+  def analyzeSamples(regs: spark.RDD[(String, String, String, Double)],
+    samples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])]) = {
+     val allRates = {
+      if (regs == null || samples == null)
+        null
+      else
+        DynamoAnalysisUtil.samplesToRates(regs, samples)
     }
     if (allRates != null) {
       // analyze data
       analyzeRateData(allRates)
       // do not save rates in this version. Saving will be done by another program.
     }
-    DynamoAnalysisUtil.finish(start)
   }
 
   /**
@@ -292,8 +341,8 @@ object StoredSampleAnalysisGeneric {
       println("Skipped app " + app + " for too few points in: with: %s < thresh=%s".format(usersWith, ENOUGH_USERS))
     }
   }
-  
-  def uuidOsFilter(uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], uuid:String, x: CaratRate) = {
+
+  def uuidOsFilter(uuidToOsAndModel: scala.collection.mutable.HashMap[String, (String, String)], uuid: String, x: CaratRate) = {
     x.uuid == uuid && x.os == uuidToOsAndModel.getOrElse(x.uuid, ("", ""))._1
   }
 }
