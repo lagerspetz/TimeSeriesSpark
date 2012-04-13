@@ -63,6 +63,7 @@ object CaratAnalysisGeneric {
     //System.setProperty("spark.kryo.registrator", classOf[CaratRateRegistrator].getName)
     val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoDataSpeedTest")
     // getRates
+    // FIXME: This needs to take regs and samples from DynamoDb or from disk, and then convert those to Rates instead. 
     val allRates = DynamoAnalysisUtil.getRates(sc, tmpDir)
     if (allRates != null) {
       // analyze data
