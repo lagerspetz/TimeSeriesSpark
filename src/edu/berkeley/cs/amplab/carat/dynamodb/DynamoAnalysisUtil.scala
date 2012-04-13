@@ -27,6 +27,7 @@ object DynamoAnalysisUtil {
   // constants for battery state and sample triggers
   val MODEL_SIMULATOR = "Simulator"
   val STATE_CHARGING = "charging"
+  val STATE_UNKNOWN = "unknown"
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 0.04
@@ -824,7 +825,7 @@ object DynamoAnalysisUtil {
       featureTracking.put(uuid, old)
 
       if (model != MODEL_SIMULATOR) {
-        if (state != STATE_CHARGING) {
+        if (state != STATE_CHARGING && state != STATE_UNKNOWN) {
           /* Record rates. First time fall through.
            * Note: same date or different uuid does not result
            * in discard of the sample as a starting point for a rate.
