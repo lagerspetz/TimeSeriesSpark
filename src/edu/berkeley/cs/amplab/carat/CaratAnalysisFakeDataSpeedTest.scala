@@ -61,7 +61,7 @@ object CaratAnalysisFakeDataSpeedTest {
     val regs = sc.objectFile[(String, String, String, Double)](fakeRegs)
     val samples = sc.objectFile[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])](fakeSamples)
     // analyze them and time the whole thing
-    StoredSampleAnalysisGeneric.genericAnalysisForSamples(regs, samples, userLimit, ENOUGH_USERS, DECIMALS,
+    StoredSampleAnalysisGeneric.genericAnalysisForSamples(sc, regs, samples, userLimit, ENOUGH_USERS, DECIMALS,
       x => {}, printDists, printSkipped, printJScores, globalCorrelations)
     DynamoAnalysisUtil.finish(start)
   }

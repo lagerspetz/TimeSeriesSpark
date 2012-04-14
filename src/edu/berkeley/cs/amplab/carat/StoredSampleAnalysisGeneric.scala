@@ -71,14 +71,14 @@ object StoredSampleAnalysisGeneric {
     val sc = TimeSeriesSpark.init(master, "default", "CaratDynamoAnalysis")
     // get samples from DynamoDB, save them to disk, convert to rates, and analyze:
     val (regs, samples) = DynamoAnalysisUtil.getSamples(sc, tmpDir)
-    analyzeSamples(regs, samples)
+    analyzeSamples(sc, regs, samples)
     DynamoAnalysisUtil.finish(start)
   }
 
   /**
    * Analyze data from given regs and samples.
    */
-  def genericAnalysisForSamples(regs: spark.RDD[(String, String, String, Double)],
+  def genericAnalysisForSamples(sc:SparkContext, regs: spark.RDD[(String, String, String, Double)],
     samples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])],
     clients: Int, CLIENT_THRESHOLD: Int, DECIMALS: Int,
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
@@ -107,18 +107,18 @@ object StoredSampleAnalysisGeneric {
     ENOUGH_USERS = CLIENT_THRESHOLD
     userLimit = clients
 
-    analyzeSamples(regs, samples)
+    analyzeSamples(sc, regs, samples)
     DynamoAnalysisUtil.finish(start)
   }
   
   
-  def analyzeSamples(regs: spark.RDD[(String, String, String, Double)],
+  def analyzeSamples(sc:SparkContext, regs: spark.RDD[(String, String, String, Double)],
     samples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])]) = {
      val allRates = {
       if (regs == null || samples == null)
         null
       else
-        DynamoAnalysisUtil.samplesToRates(regs, samples)
+        DynamoAnalysisUtil.samplesToRates(sc, regs, samples)
     }
     if (allRates != null) {
       // analyze data

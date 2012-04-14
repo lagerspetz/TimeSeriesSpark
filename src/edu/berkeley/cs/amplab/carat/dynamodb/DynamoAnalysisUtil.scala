@@ -32,6 +32,8 @@ object DynamoAnalysisUtil {
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
   val ABNORMAL_RATE = 0.04
 
+  val RATE_BUFFER_SIZE = 1000
+
   val FRESHNESS_SECONDS = 3600 * 2
 
   val knownKeys = Array(sampleKey, sampleProcesses, sampleTime, sampleBatteryState, sampleBatteryLevel, sampleEvent)
@@ -364,21 +366,18 @@ object DynamoAnalysisUtil {
     rateRdd
   }
 
-    /**
+  /**
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
-  def handleSamples(allSamples: spark.RDD[(String, String, String, String, String, 
- scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String,(String, 
- java.lang.Object)])],
+  def handleSamples(sc: SparkContext, allSamples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])],
     uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
     featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]) = {
 
-    val rateRdd = DynamoAnalysisUtil.rateMapperPairwise(uuidToOsesAndModels, featureTracking, allSamples)
+    val rateRdd = DynamoAnalysisUtil.rateMapperPairwise(sc, uuidToOsesAndModels, featureTracking, allSamples)
     rateRdd
   }
-  
-  
+
   /**
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
@@ -400,8 +399,6 @@ object DynamoAnalysisUtil {
       rateRdd = rateRdd.union(rates)
     rateRdd
   }
-  
-  
 
   /**
    * Process a bunch of regs, just aggregating them into an RDD.
@@ -561,15 +558,13 @@ object DynamoAnalysisUtil {
 
     (allRegs, allSamples)
   }
-  
+
   /**
    * Get Rates from DynamoDB samples and registrations.
    */
 
-  def samplesToRates(allRegs: spark.RDD[(String, String, String, Double)],
-      allSamples: spark.RDD[(String, String, String, String, String, 
- scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String,(String, 
- java.lang.Object)])]) = {
+  def samplesToRates(sc:SparkContext, allRegs: spark.RDD[(String, String, String, Double)],
+    allSamples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])]) = {
     // Master RDD for all data.
     var allRates: spark.RDD[CaratRate] = null
 
@@ -583,18 +578,16 @@ object DynamoAnalysisUtil {
     */
     {
       // Unique uuIds, Oses, and Models from registrations.
-      val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
       // UUID -> [(timestamp,os), (timestamp,model), ...]
       val uuidToOsesAndModels = new scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]
       // TODO: Make uuids to multiple OSes actually usable
       val allModels = new scala.collection.mutable.HashSet[String]
       val allOses = new scala.collection.mutable.HashSet[String]
       // fill in uuidToOsesAndModels, allOses, and allModels.
-	  handleRegs(allRegs, uuidToOsesAndModels, allOses, allModels)
-      handleSamples(allSamples, uuidToOsesAndModels, featureTracking)
+      handleRegs(allRegs, uuidToOsesAndModels, allOses, allModels)
+      allRates = handleSamples(sc, allSamples, uuidToOsesAndModels, featureTracking)
 
       // we may not be interested in these actually.
-      println("All uuIds: " + uuidToOsAndModel.keySet.mkString(", "))
       println("All oses: " + allOses.mkString(", "))
       println("All models: " + allModels.mkString(", "))
 
@@ -999,16 +992,32 @@ object DynamoAnalysisUtil {
     finish(startTime)
     rates.toSeq
   }
-  
+
+  class SampleKey(val uuid: String, val time: Double) extends Ordered[SampleKey] {
+
+    def compare(that: SampleKey) = {
+      if (this.uuid < that.uuid)
+        -1
+      else if (this.uuid == that.uuid) {
+        if (this.time < that.time)
+          -1
+        else
+          1
+      } else 1
+    }
+  }
+
+  class Sample(val battery: String, val event: String, val state: String, val apps: scala.collection.mutable.Buffer[String], val features: scala.collection.immutable.Map[String, (String, java.lang.Object)]) {
+
+  }
+
   /**
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
    */
-  def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
+  def rateMapperPairwise(sc: SparkContext, uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
     featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],
-    observations: RDD[(String, String, String, String, String, 
- scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String,(String, 
- java.lang.Object)])]) = {
+    observations: RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps, other features)
     val startTime = start
     var prevUuid = ""
@@ -1036,29 +1045,22 @@ object DynamoAnalysisUtil {
     var allZeroSamples = 0
     var pointRates = 0
 
-    var rates = new ArrayBuffer[CaratRate]
-    val obsSorted = observations
-    /*
-     * FIXME: Install newest Spark and use the sort operation
-    observations.sortWith((x, y) => {
-      // order lexicographically by uuid
-      if (x._1 < y._1)
-        true
-      else if (x._1 > y._1)
-        false
-      else if (x._1 == y._1 && x._2 < y._2)
-        true
-      else if (x._1 == y._1 && x._2 > y._2)
-        false
-      else
-        true
-      // if time and uuid are the same, sort first parameter first
-    })*/
-    
-    for (k <- obsSorted) {
-      uuid = k._1
-      d = k._2.toDouble
-      val list = uuidToOsesAndModels.get(k._1).getOrElse(new ArrayBuffer[(Double, String, String)])
+    var rates: RDD[CaratRate] = null
+    var rateArray = new ArrayBuffer[CaratRate]
+    val obsKeyed = observations.map(x => {
+      val k = new SampleKey(x._1, x._2.toDouble)
+      val v = new Sample(x._3, x._4, x._5, x._6, x._7)
+      (k, v)
+    })
+
+    // sort ascending by uuid, time
+    // Requires Spark git from March 2012
+    val obsSorted = obsKeyed.sortByKey(true)
+
+    for ((key, value) <- obsSorted) {
+      uuid = key.uuid
+      d = key.time
+      val list = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
 
       var os = ""
       var model = ""
@@ -1087,11 +1089,11 @@ object DynamoAnalysisUtil {
       }
       // Now we have the right os and model.
 
-      batt = k._3.toDouble
-      event = k._4.trim().toLowerCase()
-      state = k._5.trim().toLowerCase()
-      apps = k._6
-      features = k._7
+      batt = value.battery.toDouble
+      event = value.event.trim().toLowerCase()
+      state = value.state.trim().toLowerCase()
+      apps = value.apps
+      features = value.features
 
       /* Do this early not to censor any values out of the history.
        */
@@ -1149,11 +1151,11 @@ object DynamoAnalysisUtil {
            */
           if (prevD != 0 && prevD != d && prevUuid == uuid) {
             if (prevBatt - batt < 0) {
-              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
+              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, uuid)
               negDrainSamples += 1
             } else if (prevBatt == 0 && batt == 0) {
               /* Assume simulator, ignore */
-              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, k._1)
+              printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, uuid)
               allZeroSamples += 1
             } else {
 
@@ -1169,7 +1171,7 @@ object DynamoAnalysisUtil {
                 for (k <- prevFeatures) {
                   println(k._1, k._2.mkString("; "))
                 }
-                val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt,
+                val r = new CaratRate(uuid, os, model, prevD, d, prevBatt, batt,
                   prevEvent, event, prevApps, apps, prevFeatures.map(x => { (x._1, x._2.toSeq) }))
                 if (r.rate() == 0) {
                   // This should never happen
@@ -1177,7 +1179,16 @@ object DynamoAnalysisUtil {
                   zeroBLCSamples += 1
                 } else {
                   if (considerRate(r)) {
-                    rates += r
+                    rateArray += r
+                    if (rateArray.size == RATE_BUFFER_SIZE) {
+                      if (rates == null) {
+                        rates = sc.parallelize[CaratRate](rateArray)
+                      } else {
+                        rates ++= sc.parallelize[CaratRate](rateArray)
+                      }
+                      rateArray = new ArrayBuffer[CaratRate]
+                    }
+
                     pointRates += 1
                   } else {
                     abandonedSamples += 1
@@ -1194,10 +1205,18 @@ object DynamoAnalysisUtil {
                   v += k._2
                   prevFeatures += ((k._1, v))
                 }
-                val r = new CaratRate(k._1, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
+                val r = new CaratRate(uuid, os, model, prevD, d, prevBatt, batt, new UniformDist(prevBatt, batt, prevD, d),
                   prevEvent, event, prevApps, apps, prevFeatures.map(x => { (x._1, x._2.toSeq) }))
                 if (considerRate(r)) {
-                  rates += r
+                  rateArray += r
+                  if (rateArray.size == RATE_BUFFER_SIZE) {
+                    if (rates == null) {
+                      rates = sc.parallelize[CaratRate](rateArray)
+                    } else {
+                      rates ++= sc.parallelize[CaratRate](rateArray)
+                    }
+                    rateArray = new ArrayBuffer[CaratRate]
+                  }
                 } else {
                   println("Abandoned uniform rate with abnormally high EV: " + r.toString(false))
                   abandonedSamples += 1
@@ -1235,7 +1254,15 @@ object DynamoAnalysisUtil {
       nzf("%s > " + ABNORMAL_RATE + " drain, ", abandonedSamples) +
       nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
     finish(startTime)
-    rates.toSeq
+
+    if (rateArray.size > 0) {
+      if (rates == null) {
+        rates = sc.parallelize[CaratRate](rateArray)
+      } else {
+        rates ++= sc.parallelize[CaratRate](rateArray)
+      }
+    }
+    rates
   }
 
   def printFeatures(featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],
