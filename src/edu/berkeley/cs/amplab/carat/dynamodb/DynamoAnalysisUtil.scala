@@ -993,24 +993,6 @@ object DynamoAnalysisUtil {
     rates.toSeq
   }
 
-  class SampleKey(val uuid: String, val time: Double) extends Ordered[SampleKey] {
-
-    def compare(that: SampleKey) = {
-      if (this.uuid < that.uuid)
-        -1
-      else if (this.uuid == that.uuid) {
-        if (this.time < that.time)
-          -1
-        else
-          1
-      } else 1
-    }
-  }
-
-  class Sample(val battery: String, val event: String, val state: String, val apps: scala.collection.mutable.Buffer[String], val features: scala.collection.immutable.Map[String, (String, java.lang.Object)]) {
-
-  }
-
   /**
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
