@@ -370,18 +370,6 @@ object DynamoAnalysisUtil {
    * Process a bunch of samples, assumed to be in order by uuid and timestamp.
    * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
-  def handleSamples(sc: SparkContext, allSamples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])],
-    uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
-    featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]) = {
-
-    val rateRdd = DynamoAnalysisUtil.rateMapperPairwise(sc, uuidToOsesAndModels, featureTracking, allSamples)
-    rateRdd
-  }
-
-  /**
-   * Process a bunch of samples, assumed to be in order by uuid and timestamp.
-   * will return an RDD of CaratRates. Samples need not be from the same uuid.
-   */
   def handleSamplesUnabriged(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
     uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
     rates: RDD[CaratRate]) = {
@@ -585,7 +573,7 @@ object DynamoAnalysisUtil {
       val allOses = new scala.collection.mutable.HashSet[String]
       // fill in uuidToOsesAndModels, allOses, and allModels.
       handleRegs(allRegs, uuidToOsesAndModels, allOses, allModels)
-      allRates = handleSamples(sc, allSamples, uuidToOsesAndModels, featureTracking)
+      allRates = rateMapperPairwise(uuidToOsesAndModels, featureTracking, allSamples)
 
       // we may not be interested in these actually.
       println("All oses: " + allOses.mkString(", "))
@@ -996,8 +984,9 @@ object DynamoAnalysisUtil {
   /**
    * Map samples into CaratRates. `os` and `model` are inserted for easier later processing.
    * Consider sample pairs with non-blc endpoints rates from 0 to prevBatt - batt with uniform probability.
+   * will return an RDD of CaratRates. Samples need not be from the same uuid.
    */
-  def rateMapperPairwise(sc: SparkContext, uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
+  def rateMapperPairwise(uuidToOsesAndModels: scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]],
     featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],
     observations: RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])]) = {
     // Observations format: (uuid, time, batteryLevel, event, batteryState, apps, other features)
@@ -1028,7 +1017,7 @@ object DynamoAnalysisUtil {
     var pointRates = 0
 
     var rates: RDD[CaratRate] = null
-    var rateArray = new ArrayBuffer[CaratRate]
+    
     val obsKeyed = observations.map(x => {
       val k = new SampleKey(x._1, x._2.toDouble)
       val v = new Sample(x._3, x._4, x._5, x._6, x._7)
@@ -1038,9 +1027,13 @@ object DynamoAnalysisUtil {
     // sort ascending by uuid, time
     // Requires Spark git from March 2012
     val obsSorted = obsKeyed.sortByKey(true)
-
-    for ((key, value) <- obsSorted) {
-      uuid = key.uuid
+    
+    // FIXME: This may not work if prev stuff does not carry between partitions.
+    // However, sc.parallelize() did not work at all since SparkContext is not serializable...
+    val rr = obsSorted.mapPartitions( x=> {
+      var rateArray = new ArrayBuffer[CaratRate]
+      for ((key, value) <- x) {
+         uuid = key.uuid
       d = key.time
       val list = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
 
@@ -1162,15 +1155,6 @@ object DynamoAnalysisUtil {
                 } else {
                   if (considerRate(r)) {
                     rateArray += r
-                    if (rateArray.size == RATE_BUFFER_SIZE) {
-                      if (rates == null) {
-                        rates = sc.parallelize[CaratRate](rateArray)
-                      } else {
-                        rates ++= sc.parallelize[CaratRate](rateArray)
-                      }
-                      rateArray = new ArrayBuffer[CaratRate]
-                    }
-
                     pointRates += 1
                   } else {
                     abandonedSamples += 1
@@ -1191,14 +1175,6 @@ object DynamoAnalysisUtil {
                   prevEvent, event, prevApps, apps, prevFeatures.map(x => { (x._1, x._2.toSeq) }))
                 if (considerRate(r)) {
                   rateArray += r
-                  if (rateArray.size == RATE_BUFFER_SIZE) {
-                    if (rates == null) {
-                      rates = sc.parallelize[CaratRate](rateArray)
-                    } else {
-                      rates ++= sc.parallelize[CaratRate](rateArray)
-                    }
-                    rateArray = new ArrayBuffer[CaratRate]
-                  }
                 } else {
                   println("Abandoned uniform rate with abnormally high EV: " + r.toString(false))
                   abandonedSamples += 1
@@ -1227,7 +1203,9 @@ object DynamoAnalysisUtil {
         v += k._2
         prevFeatures += ((k._1, v))
       }
-    }
+      }
+      rateArray.iterator
+    })
 
     println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
       nzf("%s all zero, ", allZeroSamples) +
@@ -1237,13 +1215,6 @@ object DynamoAnalysisUtil {
       nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
     finish(startTime)
 
-    if (rateArray.size > 0) {
-      if (rates == null) {
-        rates = sc.parallelize[CaratRate](rateArray)
-      } else {
-        rates ++= sc.parallelize[CaratRate](rateArray)
-      }
-    }
     rates
   }
 
