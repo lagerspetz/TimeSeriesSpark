@@ -551,36 +551,31 @@ object DynamoAnalysisUtil {
    * Get Rates from DynamoDB samples and registrations.
    */
 
-  def samplesToRates(sc:SparkContext, allRegs: spark.RDD[(String, String, String, Double)],
+  def samplesToRates(sc: SparkContext, allRegs: spark.RDD[(String, String, String, Double)],
     allSamples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])]) = {
     // Master RDD for all data.
-    var allRates: spark.RDD[CaratRate] = null
+    // RDD not used right now.
+    //var allRates: spark.RDD[CaratRate] = null
 
     /* TODO: FIXME: featureTracking can only be done for samples, not stored rates.
-       * Obvious fix: save samples instead of Rates, then save features and Rates after those. 
-      */
+     * Obvious fix: save samples instead of Rates, then save features and Rates after those. 
+     */
     var featureTracking = new scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]]
+    // Unique uuIds, Oses, and Models from registrations.
+    // UUID -> [(timestamp,os), (timestamp,model), ...]
+    val uuidToOsesAndModels = new scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]
+    // TODO: Make uuids to multiple OSes actually usable
+    val allModels = new scala.collection.mutable.HashSet[String]
+    val allOses = new scala.collection.mutable.HashSet[String]
+    // fill in uuidToOsesAndModels, allOses, and allModels.
+    handleRegs(allRegs, uuidToOsesAndModels, allOses, allModels)
+    val allRates = rateMapperPairwise(uuidToOsesAndModels, featureTracking, allSamples)
 
-    /* closure to forget uuids, models and oses after assigning them to rates.
-     * This is because new rates may have new uuids, models and oses.
-    */
-    {
-      // Unique uuIds, Oses, and Models from registrations.
-      // UUID -> [(timestamp,os), (timestamp,model), ...]
-      val uuidToOsesAndModels = new scala.collection.mutable.HashMap[String, ArrayBuffer[(Double, String, String)]]
-      // TODO: Make uuids to multiple OSes actually usable
-      val allModels = new scala.collection.mutable.HashSet[String]
-      val allOses = new scala.collection.mutable.HashSet[String]
-      // fill in uuidToOsesAndModels, allOses, and allModels.
-      handleRegs(allRegs, uuidToOsesAndModels, allOses, allModels)
-      allRates = rateMapperPairwise(uuidToOsesAndModels, featureTracking, allSamples)
+    // we may not be interested in these actually.
+    println("All oses: " + allOses.mkString(", "))
+    println("All models: " + allModels.mkString(", "))
 
-      // we may not be interested in these actually.
-      println("All oses: " + allOses.mkString(", "))
-      println("All models: " + allModels.mkString(", "))
-
-      printFeatures(featureTracking, uuidToOsesAndModels)
-    }
+    printFeatures(featureTracking, uuidToOsesAndModels)
 
     allRates
   }
@@ -1016,8 +1011,10 @@ object DynamoAnalysisUtil {
     var allZeroSamples = 0
     var pointRates = 0
 
+    var rateArray = new ArrayBuffer[CaratRate]
+
     var rates: RDD[CaratRate] = null
-    
+
     val obsKeyed = observations.map(x => {
       val k = new SampleKey(x._1, x._2.toDouble)
       val v = new Sample(x._3, x._4, x._5, x._6, x._7)
@@ -1026,14 +1023,12 @@ object DynamoAnalysisUtil {
 
     // sort ascending by uuid, time
     // Requires Spark git from March 2012
-    val obsSorted = obsKeyed.sortByKey(true)
-    
+    val obsSorted = obsKeyed.sortByKey(true).collect()
+
     // FIXME: This may not work if prev stuff does not carry between partitions.
     // However, sc.parallelize() did not work at all since SparkContext is not serializable...
-    val rr = obsSorted.mapPartitions( x=> {
-      var rateArray = new ArrayBuffer[CaratRate]
-      for ((key, value) <- x) {
-         uuid = key.uuid
+    for ((key, value) <- obsSorted) {
+      uuid = key.uuid
       d = key.time
       val list = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
 
@@ -1203,9 +1198,7 @@ object DynamoAnalysisUtil {
         v += k._2
         prevFeatures += ((k._1, v))
       }
-      }
-      rateArray.iterator
-    })
+    }
 
     println(nzf("Recorded %s point rates ", pointRates) + "abandoned " +
       nzf("%s all zero, ", allZeroSamples) +
@@ -1215,7 +1208,7 @@ object DynamoAnalysisUtil {
       nzf("%s zero drain BLC", zeroBLCSamples) + " samples.")
     finish(startTime)
 
-    rates
+    rateArray
   }
 
   def printFeatures(featureTracking: scala.collection.mutable.HashMap[String, HashMap[String, ArrayBuffer[(Long, Object)]]],

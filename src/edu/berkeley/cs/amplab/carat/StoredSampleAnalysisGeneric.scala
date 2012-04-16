@@ -8,6 +8,7 @@ import scala.collection.immutable.Set
 import scala.collection.immutable.TreeMap
 import scala.collection.mutable.Map
 import collection.JavaConversions._
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * Generic analysis program. Runs given functions on data following the carat analysis process.
@@ -26,7 +27,7 @@ object StoredSampleAnalysisGeneric {
   var removeD: ( /*daemonSet:*/ Set[String]) => Unit = null
   var action: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean = null
   var skipped: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, /*title:*/ String) => Unit = null
-  var jsFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
+  var jsFunction: ( /*allRates:*/ Array[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit = null
   var corrFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit = null
 
   var ENOUGH_USERS = 5
@@ -41,7 +42,7 @@ object StoredSampleAnalysisGeneric {
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
     actionFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
     skippedFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String) => Unit,
-    JScoreFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
+    JScoreFunction: ( /*allRates:*/ Array[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
     correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
     val start = DynamoAnalysisUtil.start()
 
@@ -84,7 +85,7 @@ object StoredSampleAnalysisGeneric {
     removeDaemonsFunction: ( /*daemonSet:*/ Set[String]) => Unit,
     actionFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String, String, Array[CaratRate], Array[CaratRate], Map[Double, Double], Boolean, Array[CaratRate], Set[String], Set[String], TreeMap[String, (Double, Double)], Int, Int, String) => Boolean,
     skippedFunction: ( /*nature:*/ String, /*keyValue1:*/ String, /*keyValue2:*/ String, String) => Unit,
-    JScoreFunction: ( /*allRates:*/ RDD[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
+    JScoreFunction: ( /*allRates:*/ Array[CaratRate], /* aPrioriDistribution: */ Map[Double, Double], /*distsWithUuid:*/ TreeMap[String, Array[(Double, Double)]], /*distsWithoutUuid:*/ TreeMap[String, Array[(Double, Double)]], /*parametersByUuid:*/ TreeMap[String, (Double, Double, Double)], /*evDistanceByUuid:*/ TreeMap[String, Double], /*appsByUuid:*/ TreeMap[String, Set[String]], /*uuidToOsAndModel:*/ scala.collection.mutable.HashMap[String, (String, String)], /*decimals:*/ Int) => Unit,
     correlationFunction: ( /*name:*/ String, /*osCorrelations:*/ scala.collection.immutable.Map[String, Double], /*modelCorrelations:*/ scala.collection.immutable.Map[String, Double], /*userCorrelations:*/ scala.collection.immutable.Map[String, Double], /*usersWith:*/ Int, /*usersWithout:*/ Int, /*uuid:*/ String) => Unit) {
     val start = DynamoAnalysisUtil.start()
 
@@ -118,7 +119,7 @@ object StoredSampleAnalysisGeneric {
       if (regs == null || samples == null)
         null
       else
-        DynamoAnalysisUtil.samplesToRates(sc, regs, samples)
+        DynamoAnalysisUtil.samplesToRates(sc, regs, samples).toArray
     }
     if (allRates != null) {
       // analyze data
@@ -130,9 +131,10 @@ object StoredSampleAnalysisGeneric {
   /**
    * Main analysis function. Called on the entire collected set of CaratRates.
    */
-  def analyzeRateData(inputRates: RDD[CaratRate]) = {
+  def analyzeRateData(inputRates: Array[CaratRate]) = {
     // make everything non-rdd from now on
-    var allRates = inputRates.collect()
+    //var allRates = inputRates.collect()
+    var allRates = inputRates
     // determine oses and models that appear in accepted data and use those
     val uuidToOsAndModel = new scala.collection.mutable.HashMap[String, (String, String)]
     /* We do not know the final OS for an uuid. This takes care of that.
@@ -152,8 +154,7 @@ object StoredSampleAnalysisGeneric {
       uuidArray = uuidArray.slice(0, userLimit)
       allRates = inputRates.filter(x => {
         uuidArray.contains(x.uuid)
-      }).collect()
-
+      })//.collect()
     } else {
       println("Running analysis for all users.")
     }
