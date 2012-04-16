@@ -337,6 +337,9 @@ object DynamoAnalysisUtil {
       })))
       models += model
       oses += os
+      // Save last requested reg time
+      if (time > last_reg_write)
+        last_reg_write = time
     }
   }
 
@@ -472,6 +475,7 @@ object DynamoAnalysisUtil {
    * @param tmpdir the directory to use for temporary files created by Spark and also for saving the RDDs.
    */
   def getSamples(sc: SparkContext, tmpdir: String, clean: Boolean = true) = {
+    val startTime = start
     val SAMPLES_CACHED_NEW = tmpdir + "cached-samples-new.dat"
     val SAMPLES_CACHED = tmpdir + "cached-samples.dat"
     val REGS_CACHED_NEW = tmpdir + "cached-regs-new.dat"
@@ -541,6 +545,7 @@ object DynamoAnalysisUtil {
     DynamoAnalysisUtil.saveDoubleToFile(last_sample_write, LAST_SAMPLE)
     DynamoAnalysisUtil.saveDoubleToFile(last_reg_write, LAST_REG)
 
+    finish(startTime)
     (allRegs, allSamples)
   }
 
@@ -550,6 +555,7 @@ object DynamoAnalysisUtil {
 
   def samplesToRates(sc: SparkContext, allRegs: spark.RDD[(String, String, String, Double)],
     allSamples: spark.RDD[(String, String, String, String, String, scala.collection.mutable.Buffer[String], scala.collection.immutable.Map[String, (String, java.lang.Object)])]) = {
+    val startTime = start
     // Master RDD for all data.
     // RDD not used right now.
     //var allRates: spark.RDD[CaratRate] = null
@@ -574,6 +580,7 @@ object DynamoAnalysisUtil {
 
     printFeatures(featureTracking, uuidToOsesAndModels)
 
+    finish(startTime)
     allRates
   }
 
@@ -1027,6 +1034,10 @@ object DynamoAnalysisUtil {
     for ((key, value) <- obsSorted) {
       uuid = key.uuid
       d = key.time
+      // Save last requested sample time
+      if (key.time > last_sample_write)
+        last_sample_write = key.time
+        
       val list = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
 
       var os = ""
@@ -1134,10 +1145,10 @@ object DynamoAnalysisUtil {
                   v += k._2
                   prevFeatures += ((k._1, v))
                 }
-                println("Extra features:")
+                /*println("Extra features:")
                 for (k <- prevFeatures) {
                   println(k._1, k._2.mkString("; "))
-                }
+                }*/
                 val r = new CaratRate(uuid, os, model, prevD, d, prevBatt, batt,
                   prevEvent, event, prevApps, apps, prevFeatures.map(x => { (x._1, x._2.toSeq) }))
                 if (r.rate() == 0) {
@@ -1154,10 +1165,10 @@ object DynamoAnalysisUtil {
                 }
               } else {
                 /* One endpoint not BLC, use uniform distribution rate */
-                println("Extra features:")
+                /*println("Extra features:")
                 for (k <- prevFeatures) {
                   println(k._1, k._2.mkString("; "))
-                }
+                }*/
                 for (k <- features) {
                   val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
                   v += k._2
