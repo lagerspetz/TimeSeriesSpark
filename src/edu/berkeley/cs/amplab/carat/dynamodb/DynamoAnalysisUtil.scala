@@ -22,6 +22,13 @@ import scala.collection.mutable.Map
 import java.util.Date
 import scala.collection.mutable.Buffer
 
+/**
+ * Utility class for functions related to DynamoDb and Rates.
+ * Does all the hard work behind the CaratAnalysisGeneric and StoredSampleAnalysisGeneric classes.
+ * 
+ * @author Eemil Lagerspetz
+ */
+
 object DynamoAnalysisUtil {
 
   // constants for battery state and sample triggers
@@ -420,6 +427,7 @@ object DynamoAnalysisUtil {
     oldSamples: RDD[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])]) = {
 
     // Get last sample timestamp for set saving
+    // FIXME: does this actually return the latest timestamp? are they ordered properly?
     if (samples.size > 0) {
       last_sample_write = samples.last.get(sampleTime).getN().toDouble
     }
@@ -533,6 +541,10 @@ object DynamoAnalysisUtil {
           allSamples)
       }
     }
+    
+    // Fix for last sample happening more than 1h ago:
+    last_sample_write = nowS
+    last_reg_write = nowS
 
     // save entire sample and reg rdd for later:
     allSamples.saveAsObjectFile(SAMPLES_CACHED_NEW)

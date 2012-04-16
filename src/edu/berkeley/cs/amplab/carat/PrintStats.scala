@@ -12,8 +12,7 @@ import collection.JavaConversions._
 import scala.collection.mutable.Buffer
 
 /**
- * Run Carat Analysis without storing any data, just speed testing the implementation.
- * Uses the newer `StoredSampleAnalysisGeneric` for the analysis.
+ * Print utility class for SpeedTest programs.
  *
  * @author Eemil Lagerspetz
  */

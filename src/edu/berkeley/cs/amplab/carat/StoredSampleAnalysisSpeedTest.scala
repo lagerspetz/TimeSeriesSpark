@@ -11,7 +11,8 @@ import scala.collection.mutable.Map
 import collection.JavaConversions._
 
 /**
- * Do the exact same thing as in CaratDynamoDataToPlots, but do not collect() and write plot files and run plotting in the end.
+ * Run Carat Analysis without storing any data, just speed testing the implementation.
+ * Uses the newer `StoredSampleAnalysisGeneric` for the analysis.
  *
  * @author Eemil Lagerspetz
  */
