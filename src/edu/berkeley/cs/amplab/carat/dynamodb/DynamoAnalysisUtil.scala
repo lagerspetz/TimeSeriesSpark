@@ -326,11 +326,8 @@ object DynamoAnalysisUtil {
     oses: scala.collection.mutable.Set[String],
     models: scala.collection.mutable.Set[String]) {
 
-    regs.foreach(x => {
-      val uuid = x._1
-      val model = x._2
-      val os = x._3
-      val time = x._4
+    val regA = regs.collect()
+    for ((uuid, model, os, time) <- regA) {
       val s = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
       // only record changes in OS.
       if (s.size <= 0 || s.last._2 != os)
@@ -340,7 +337,7 @@ object DynamoAnalysisUtil {
       })))
       models += model
       oses += os
-    })
+    }
   }
 
   /**
