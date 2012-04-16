@@ -337,9 +337,6 @@ object DynamoAnalysisUtil {
       })))
       models += model
       oses += os
-      // Save last requested reg time
-      if (time > last_reg_write)
-        last_reg_write = time
     }
   }
 
@@ -422,9 +419,9 @@ object DynamoAnalysisUtil {
   def accumulateSamples(sc: SparkContext, samples: java.util.List[java.util.Map[java.lang.String, AttributeValue]],
     oldSamples: RDD[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])]) = {
 
-    // Get last reg timestamp for set saving
+    // Get last sample timestamp for set saving
     if (samples.size > 0) {
-      last_reg_write = samples.last.get(sampleTime).getN().toDouble
+      last_sample_write = samples.last.get(sampleTime).getN().toDouble
     }
 
     var sampleRdd = sc.parallelize[(String, String, String, String, String, Buffer[String], scala.collection.immutable.Map[String, (String, Object)])]({
@@ -483,8 +480,8 @@ object DynamoAnalysisUtil {
     val LAST_SAMPLE = tmpdir + "last-sample.txt"
     val LAST_REG = tmpdir + "last-reg.txt"
 
-    lazy val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
-    lazy val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
+    val last_sample = DynamoAnalysisUtil.readDoubleFromFile(LAST_SAMPLE)
+    val last_reg = DynamoAnalysisUtil.readDoubleFromFile(LAST_REG)
 
     val nowS = System.currentTimeMillis() / 1000
     println("Now=%s lastSample=%s diff=%s".format(nowS, last_sample, nowS - last_sample))
@@ -1034,9 +1031,6 @@ object DynamoAnalysisUtil {
     for ((key, value) <- obsSorted) {
       uuid = key.uuid
       d = key.time
-      // Save last requested sample time
-      if (key.time > last_sample_write)
-        last_sample_write = key.time
         
       val list = uuidToOsesAndModels.get(uuid).getOrElse(new ArrayBuffer[(Double, String, String)])
 
