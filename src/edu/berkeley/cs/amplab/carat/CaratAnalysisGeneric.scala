@@ -10,7 +10,13 @@ import scala.collection.mutable.Map
 import collection.JavaConversions._
 
 /**
- * Do the exact same thing as in CaratDynamoDataToPlots, but do not collect() and write plot files and run plotting in the end.
+ * Analysis progrma body. Old version.
+ * To be implemented:
+ * TODO: feature tracking
+ * TODO: use of stored samples instead of CaratRates (for feature tracking)
+ * The above TODOs can be solved by refactoring this to use StoredSampleAnalysisGeneric
+ * instead of CaratAnalysisGeneric.
+ * TODO: Parallelism - please work on StoredSampleAnalysisGeneric.
  *
  * @author Eemil Lagerspetz
  */

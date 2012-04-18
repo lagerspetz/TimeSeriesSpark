@@ -2,6 +2,11 @@ package edu.berkeley.cs.amplab
 
 import spark.RDD
 import scala.collection.immutable.TreeMap
+
+/**
+ * The main analysis body is in StoredSampleAnalysisGeneric.
+ * It should be used for all the live analysis, plotting, and speed testing classes.
+ */
 package object carat {
 
   val CARAT = "Carat"

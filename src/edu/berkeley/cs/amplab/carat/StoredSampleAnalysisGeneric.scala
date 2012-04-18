@@ -20,6 +20,8 @@ import scala.collection.mutable.ArrayBuffer
  * `CaratAnalysisGeneric`, stored Rates could no longer be used for feature tracking, and that
  * meant doing analysis from DynamoDB when feature tracking was desired.
  *
+ * TODO: Parallelism.
+ * 
  * @author Eemil Lagerspetz
  */
 
