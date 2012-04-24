@@ -33,10 +33,12 @@ object DynamoAnalysisUtil {
 
   // constants for battery state and sample triggers
   val MODEL_SIMULATOR = "Simulator"
+  val MODEL_ANDROID_SDK = "sdk"
   val STATE_CHARGING = "charging"
   val STATE_UNKNOWN = "unknown"
   val STATE_DISCHARGING = "unplugged"
   val TRIGGER_BATTERYLEVELCHANGED = "batterylevelchanged"
+  val TRIGGER_ANDROID_BATTERY_CHANGED = "android.intent.action.BATTERY_CHANGED"
   val ABNORMAL_RATE = 0.04
 
   val RATE_BUFFER_SIZE = 1000
@@ -891,7 +893,7 @@ object DynamoAnalysisUtil {
       // Fixme: does == comparison of Scala Arrays or sets work properly? (Features, Apps)
       featureTracking.put(uuid, old)
 
-      if (model != MODEL_SIMULATOR) {
+      if (model != MODEL_SIMULATOR && model != MODEL_ANDROID_SDK) {
         if (state != STATE_CHARGING && state != STATE_UNKNOWN) {
           /* Record rates. First time fall through.
            * Note: same date or different uuid does not result
@@ -909,7 +911,9 @@ object DynamoAnalysisUtil {
             } else {
 
               /* now prevBatt - batt >= 0 */
-              if (prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED) {
+              /* FIXME: Do we want to allow Android point rates in the analysis? */
+              if ((prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED)
+                  || (prevEvent == TRIGGER_ANDROID_BATTERY_CHANGED && event == TRIGGER_ANDROID_BATTERY_CHANGED)) {
                 /* Point rate */
                 for (k <- features) {
                   val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
@@ -1126,7 +1130,7 @@ object DynamoAnalysisUtil {
       // Fixme: does == comparison of Scala Arrays or sets work properly? (Features, Apps)
       featureTracking.put(uuid, old)
 
-      if (model != MODEL_SIMULATOR) {
+      if (model != MODEL_SIMULATOR && model != MODEL_ANDROID_SDK) {
         if (state != STATE_CHARGING && state != STATE_UNKNOWN) {
           /* Record rates. First time fall through.
            * Note: same date or different uuid does not result
@@ -1142,9 +1146,10 @@ object DynamoAnalysisUtil {
               printf("prevBatt %s batt %s for d1=%s d2=%s uuid=%s\n", prevBatt, batt, prevD, d, uuid)
               allZeroSamples += 1
             } else {
-
               /* now prevBatt - batt >= 0 */
-              if (prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED) {
+              /* FIXME: Do we want to allow Android point rates in the analysis? */
+              if ((prevEvent == TRIGGER_BATTERYLEVELCHANGED && event == TRIGGER_BATTERYLEVELCHANGED)
+                || (prevEvent == TRIGGER_ANDROID_BATTERY_CHANGED && event == TRIGGER_ANDROID_BATTERY_CHANGED)) {
                 /* Point rate */
                 for (k <- features) {
                   val v = prevFeatures.getOrElse(k._1, new ArrayBuffer[(String, Object)])
