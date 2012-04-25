@@ -248,12 +248,17 @@ object CaratAnalysisGeneric {
      * TODO: Multiple thresholds
      */
     val fCountStart = DynamoAnalysisUtil.start
-    val usersWith = filtered.map(_.uuid).toSet.size
+    val appUuids = filtered.map(_.uuid).toSet
+    val usersWith = appUuids.size
+    // FIXME: Temporary: Ignore ENOUGH_USERS for Android
+    val androidApp = appUuids.filter(_.length == 16).size > 0
+    
 
-    if (usersWith >= ENOUGH_USERS) {
+    if (usersWith >= ENOUGH_USERS || androidApp) {
       val usersWithout = filteredNeg.map(_.uuid).toSet.size
       DynamoAnalysisUtil.finish(fCountStart, "clientCount")
-      if (usersWithout >= ENOUGH_USERS) {
+      // FIXME: Temporary: Ignore ENOUGH_USERS for Android
+      if (usersWithout >= ENOUGH_USERS || (androidApp && usersWithout > 0)) {
         if (action("hog", app, null, "Hog " + app + " running", app + " not running", filtered, filteredNeg, aPrioriDistribution, true, filtered, oses, models, totalsByUuid, usersWith, usersWithout, null)) {
           // this is a hog
 
