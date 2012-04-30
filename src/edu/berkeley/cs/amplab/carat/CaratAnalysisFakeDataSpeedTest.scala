@@ -28,8 +28,8 @@ object CaratAnalysisFakeDataSpeedTest {
   // Isolate from the plotting.
   val tmpdir = "/mnt/TimeSeriesSpark-unstable/spark-temp-plots/"
 
-  val fakeRegs = "fake-regs.dat"
-  val fakeSamples = "fake-samples.dat"
+  val fakeRegsDefault = "fake-regs.dat"
+  val fakeSamplesDefault = "fake-samples.dat"
 
   var userLimit = Int.MaxValue
 
@@ -38,13 +38,29 @@ object CaratAnalysisFakeDataSpeedTest {
    */
   def main(args: Array[String]) {
     var master = "local[16]"
+    var fakeRegs = fakeRegsDefault
+    var fakeSamples = fakeSamplesDefault
     if (args != null && args.length >= 1) {
       master = args(0)
     }
-    if (args != null && args.length > 1)
-      userLimit = args(1).toInt
+    
+    if (args != null && args.length >= 2) {
+      fakeRegs = args(1)
+    }
+    
+    if (args != null && args.length >= 3) {
+      fakeSamples = args(2)
+    }
+    
+    if (args != null && args.length > 4)
+      userLimit = args(3).toInt
 
     val start = DynamoAnalysisUtil.start()
+    analyzeFakeData(master, fakeRegs, fakeSamples)
+  }
+  
+  def analyzeFakeData(master:String, fakeRegs:String, fakeSamples:String) = {
+   val start = DynamoAnalysisUtil.start()
 
     // turn off INFO logging for spark:
     System.setProperty("hadoop.root.logger", "WARN,console")
