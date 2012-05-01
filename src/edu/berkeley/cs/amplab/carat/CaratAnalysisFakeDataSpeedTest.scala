@@ -55,7 +55,6 @@ object CaratAnalysisFakeDataSpeedTest {
     if (args != null && args.length > 4)
       userLimit = args(3).toInt
 
-    val start = DynamoAnalysisUtil.start()
     analyzeFakeData(master, fakeRegs, fakeSamples)
   }
   
